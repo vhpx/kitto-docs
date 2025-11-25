@@ -1,0 +1,761 @@
+---
+title: "Hardware Interface Implementation"
+description: "Create custom hardware interface to communicate with ESP32 via serial for motor control"
+---
+
+## Overview
+
+The hardware interface is the bridge between ros2_control and your ESP32. It reads encoder data and sends velocity commands over serial/USB.
+
+<Note>
+  **This is deliverable D4.2:** Hardware interface for real robot control
+</Note>
+
+## Package Structure
+
+Create a new package for hardware interface:
+
+```bash
+cd ~/ros2_ws/src
+
+ros2 pkg create mecanum_hardware --build-type ament_cmake \
+  --dependencies hardware_interface pluginlib rclcpp rclcpp_lifecycle
+
+cd mecanum_hardware
+mkdir -p include/mecanum_hardware src
+```
+
+**Final structure:**
+```
+mecanum_hardware/
+├── include/
+│   └── mecanum_hardware/
+│       └── mecanum_system_hardware.hpp
+├── src/
+│   └── mecanum_system_hardware.cpp
+├── mecanum_hardware.xml  (plugin description)
+├── CMakeLists.txt
+└── package.xml
+```
+
+## Serial Communication Protocol
+
+### ESP32 → ROS2 (Read)
+
+**Format:** Comma-separated encoder positions and velocities
+
+```
+pos_FL,pos_FR,pos_RL,pos_RR,vel_FL,vel_FR,vel_RL,vel_RR\n
+```
+
+**Example:**
+```
+1.234,0.567,-0.890,2.345,1.2,1.3,1.1,1.4\n
+```
+
+- Positions in radians
+- Velocities in rad/s
+- Newline terminated
+
+### ROS2 → ESP32 (Write)
+
+**Format:** Velocity commands for 4 wheels
+
+```
+v,vel_FL,vel_FR,vel_RL,vel_RR\n
+```
+
+**Example:**
+```
+v,1.5,1.5,1.5,1.5\n
+```
+
+- `v` prefix indicates velocity command
+- Velocities in rad/s
+- Newline terminated
+
+<Tip>
+  **Protocol consistency:** This protocol matches the ESP32 motor control code from WP3. Ensure ESP32 firmware implements same format!
+</Tip>
+
+## Header File
+
+**File:** `include/mecanum_hardware/mecanum_system_hardware.hpp`
+
+```cpp
+#ifndef MECANUM_HARDWARE__MECANUM_SYSTEM_HARDWARE_HPP_
+#define MECANUM_HARDWARE__MECANUM_SYSTEM_HARDWARE_HPP_
+
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "hardware_interface/handle.hpp"
+#include "hardware_interface/hardware_info.hpp"
+#include "hardware_interface/system_interface.hpp"
+#include "hardware_interface/types/hardware_interface_return_values.hpp"
+#include "rclcpp/macros.hpp"
+#include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
+#include "rclcpp_lifecycle/state.hpp"
+
+namespace mecanum_hardware
+{
+
+class MecanumSystemHardware : public hardware_interface::SystemInterface
+{
+public:
+  RCLCPP_SHARED_PTR_DEFINITIONS(MecanumSystemHardware)
+
+  // Lifecycle callbacks
+  hardware_interface::CallbackReturn on_init(
+    const hardware_interface::HardwareInfo & info) override;
+
+  hardware_interface::CallbackReturn on_configure(
+    const rclcpp_lifecycle::State & previous_state) override;
+
+  hardware_interface::CallbackReturn on_cleanup(
+    const rclcpp_lifecycle::State & previous_state) override;
+
+  hardware_interface::CallbackReturn on_activate(
+    const rclcpp_lifecycle::State & previous_state) override;
+
+  hardware_interface::CallbackReturn on_deactivate(
+    const rclcpp_lifecycle::State & previous_state) override;
+
+  // Export state interfaces (what we READ from hardware)
+  std::vector<hardware_interface::StateInterface> export_state_interfaces() override;
+
+  // Export command interfaces (what we WRITE to hardware)
+  std::vector<hardware_interface::CommandInterface> export_command_interfaces() override;
+
+  // Read from hardware (encoders)
+  hardware_interface::return_type read(
+    const rclcpp::Time & time, const rclcpp::Duration & period) override;
+
+  // Write to hardware (motor commands)
+  hardware_interface::return_type write(
+    const rclcpp::Time & time, const rclcpp::Duration & period) override;
+
+private:
+  // Serial communication
+  bool open_serial_port();
+  void close_serial_port();
+  bool read_serial_line(std::string & line);
+  bool write_serial_line(const std::string & line);
+
+  std::string serial_port_;
+  int serial_fd_;
+  int baud_rate_;
+
+  // Joint data storage
+  std::vector<double> hw_positions_;
+  std::vector<double> hw_velocities_;
+  std::vector<double> hw_commands_;
+
+  // Joint names (from URDF)
+  std::vector<std::string> joint_names_;
+};
+
+}  // namespace mecanum_hardware
+
+#endif  // MECANUM_HARDWARE__MECANUM_SYSTEM_HARDWARE_HPP_
+```
+
+## Implementation File (Part 1: Lifecycle)
+
+**File:** `src/mecanum_system_hardware.cpp`
+
+```cpp
+#include "mecanum_hardware/mecanum_system_hardware.hpp"
+
+#include <fcntl.h>
+#include <termios.h>
+#include <unistd.h>
+#include <chrono>
+#include <cmath>
+#include <limits>
+#include <memory>
+#include <sstream>
+#include <vector>
+
+#include "hardware_interface/types/hardware_interface_type_values.hpp"
+#include "rclcpp/rclcpp.hpp"
+
+namespace mecanum_hardware
+{
+
+hardware_interface::CallbackReturn MecanumSystemHardware::on_init(
+  const hardware_interface::HardwareInfo & info)
+{
+  // Call base class init
+  if (hardware_interface::SystemInterface::on_init(info) !=
+      hardware_interface::CallbackReturn::SUCCESS)
+  {
+    return hardware_interface::CallbackReturn::ERROR;
+  }
+
+  // Get serial port parameters from URDF
+  serial_port_ = info_.hardware_parameters["serial_port"];
+  baud_rate_ = std::stoi(info_.hardware_parameters["baud_rate"]);
+
+  RCLCPP_INFO(
+    rclcpp::get_logger("MecanumSystemHardware"),
+    "Serial port: %s, Baud rate: %d", serial_port_.c_str(), baud_rate_);
+
+  // Initialize storage for 4 wheels
+  hw_positions_.resize(info_.joints.size(), 0.0);
+  hw_velocities_.resize(info_.joints.size(), 0.0);
+  hw_commands_.resize(info_.joints.size(), 0.0);
+
+  // Store joint names
+  for (const auto & joint : info_.joints) {
+    joint_names_.push_back(joint.name);
+  }
+
+  return hardware_interface::CallbackReturn::SUCCESS;
+}
+
+hardware_interface::CallbackReturn MecanumSystemHardware::on_configure(
+  const rclcpp_lifecycle::State & /*previous_state*/)
+{
+  RCLCPP_INFO(rclcpp::get_logger("MecanumSystemHardware"), "Configuring...");
+
+  // Open serial port
+  if (!open_serial_port()) {
+    RCLCPP_ERROR(rclcpp::get_logger("MecanumSystemHardware"),
+                 "Failed to open serial port: %s", serial_port_.c_str());
+    return hardware_interface::CallbackReturn::ERROR;
+  }
+
+  RCLCPP_INFO(rclcpp::get_logger("MecanumSystemHardware"),
+              "Successfully configured!");
+
+  return hardware_interface::CallbackReturn::SUCCESS;
+}
+
+hardware_interface::CallbackReturn MecanumSystemHardware::on_cleanup(
+  const rclcpp_lifecycle::State & /*previous_state*/)
+{
+  RCLCPP_INFO(rclcpp::get_logger("MecanumSystemHardware"), "Cleaning up...");
+  close_serial_port();
+  return hardware_interface::CallbackReturn::SUCCESS;
+}
+
+hardware_interface::CallbackReturn MecanumSystemHardware::on_activate(
+  const rclcpp_lifecycle::State & /*previous_state*/)
+{
+  RCLCPP_INFO(rclcpp::get_logger("MecanumSystemHardware"), "Activating...");
+
+  // Reset commands to zero
+  std::fill(hw_commands_.begin(), hw_commands_.end(), 0.0);
+
+  return hardware_interface::CallbackReturn::SUCCESS;
+}
+
+hardware_interface::CallbackReturn MecanumSystemHardware::on_deactivate(
+  const rclcpp_lifecycle::State & /*previous_state*/)
+{
+  RCLCPP_INFO(rclcpp::get_logger("MecanumSystemHardware"), "Deactivating...");
+
+  // Send zero velocity to stop robot
+  std::fill(hw_commands_.begin(), hw_commands_.end(), 0.0);
+  write(rclcpp::Clock().now(), rclcpp::Duration::from_seconds(0.0));
+
+  return hardware_interface::CallbackReturn::SUCCESS;
+}
+
+}  // namespace mecanum_hardware
+```
+
+## Implementation File (Part 2: Interfaces)
+
+```cpp
+namespace mecanum_hardware
+{
+
+std::vector<hardware_interface::StateInterface>
+MecanumSystemHardware::export_state_interfaces()
+{
+  std::vector<hardware_interface::StateInterface> state_interfaces;
+
+  // For each joint, export position and velocity state interfaces
+  for (size_t i = 0; i < joint_names_.size(); i++) {
+    state_interfaces.emplace_back(
+      hardware_interface::StateInterface(
+        joint_names_[i], hardware_interface::HW_IF_POSITION, &hw_positions_[i]));
+
+    state_interfaces.emplace_back(
+      hardware_interface::StateInterface(
+        joint_names_[i], hardware_interface::HW_IF_VELOCITY, &hw_velocities_[i]));
+  }
+
+  return state_interfaces;
+}
+
+std::vector<hardware_interface::CommandInterface>
+MecanumSystemHardware::export_command_interfaces()
+{
+  std::vector<hardware_interface::CommandInterface> command_interfaces;
+
+  // For each joint, export velocity command interface
+  for (size_t i = 0; i < joint_names_.size(); i++) {
+    command_interfaces.emplace_back(
+      hardware_interface::CommandInterface(
+        joint_names_[i], hardware_interface::HW_IF_VELOCITY, &hw_commands_[i]));
+  }
+
+  return command_interfaces;
+}
+
+}  // namespace mecanum_hardware
+```
+
+## Implementation File (Part 3: Read/Write)
+
+```cpp
+namespace mecanum_hardware
+{
+
+hardware_interface::return_type MecanumSystemHardware::read(
+  const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
+{
+  // Read from ESP32: pos_FL,pos_FR,pos_RL,pos_RR,vel_FL,vel_FR,vel_RL,vel_RR\n
+
+  std::string line;
+  if (!read_serial_line(line)) {
+    // No data available or error
+    return hardware_interface::return_type::OK;
+  }
+
+  // Parse CSV line
+  std::istringstream iss(line);
+  std::string token;
+  std::vector<double> values;
+
+  while (std::getline(iss, token, ',')) {
+    try {
+      values.push_back(std::stod(token));
+    } catch (const std::exception & e) {
+      RCLCPP_WARN(rclcpp::get_logger("MecanumSystemHardware"),
+                  "Failed to parse: %s", token.c_str());
+      return hardware_interface::return_type::OK;
+    }
+  }
+
+  // Expect 8 values: 4 positions + 4 velocities
+  if (values.size() == 8) {
+    hw_positions_[0] = values[0];  // FL
+    hw_positions_[1] = values[1];  // FR
+    hw_positions_[2] = values[2];  // RL
+    hw_positions_[3] = values[3];  // RR
+
+    hw_velocities_[0] = values[4];  // FL
+    hw_velocities_[1] = values[5];  // FR
+    hw_velocities_[2] = values[6];  // RL
+    hw_velocities_[3] = values[7];  // RR
+  }
+
+  return hardware_interface::return_type::OK;
+}
+
+hardware_interface::return_type MecanumSystemHardware::write(
+  const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
+{
+  // Write to ESP32: v,vel_FL,vel_FR,vel_RL,vel_RR\n
+
+  std::ostringstream oss;
+  oss << "v," << hw_commands_[0] << ","   // FL
+              << hw_commands_[1] << ","   // FR
+              << hw_commands_[2] << ","   // RL
+              << hw_commands_[3] << "\n"; // RR
+
+  if (!write_serial_line(oss.str())) {
+    RCLCPP_ERROR(rclcpp::get_logger("MecanumSystemHardware"),
+                 "Failed to write to serial");
+    return hardware_interface::return_type::ERROR;
+  }
+
+  return hardware_interface::return_type::OK;
+}
+
+}  // namespace mecanum_hardware
+```
+
+## Implementation File (Part 4: Serial Functions)
+
+```cpp
+namespace mecanum_hardware
+{
+
+bool MecanumSystemHardware::open_serial_port()
+{
+  // Open serial port
+  serial_fd_ = open(serial_port_.c_str(), O_RDWR | O_NOCTTY | O_SYNC);
+
+  if (serial_fd_ < 0) {
+    return false;
+  }
+
+  // Configure serial port
+  struct termios tty;
+  if (tcgetattr(serial_fd_, &tty) != 0) {
+    close(serial_fd_);
+    return false;
+  }
+
+  // Set baud rate
+  speed_t speed;
+  switch (baud_rate_) {
+    case 9600: speed = B9600; break;
+    case 19200: speed = B19200; break;
+    case 38400: speed = B38400; break;
+    case 57600: speed = B57600; break;
+    case 115200: speed = B115200; break;
+    default: speed = B115200; break;
+  }
+
+  cfsetospeed(&tty, speed);
+  cfsetispeed(&tty, speed);
+
+  // 8N1 mode (8 data bits, no parity, 1 stop bit)
+  tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;
+  tty.c_iflag &= ~IGNBRK;
+  tty.c_lflag = 0;
+  tty.c_oflag = 0;
+  tty.c_cc[VMIN] = 0;   // Non-blocking read
+  tty.c_cc[VTIME] = 1;  // 0.1s timeout
+
+  tty.c_iflag &= ~(IXON | IXOFF | IXANY);
+  tty.c_cflag |= (CLOCAL | CREAD);
+  tty.c_cflag &= ~(PARENB | PARODD);
+  tty.c_cflag &= ~CSTOPB;
+  tty.c_cflag &= ~CRTSCTS;
+
+  if (tcsetattr(serial_fd_, TCSANOW, &tty) != 0) {
+    close(serial_fd_);
+    return false;
+  }
+
+  // Flush any existing data
+  tcflush(serial_fd_, TCIOFLUSH);
+
+  return true;
+}
+
+void MecanumSystemHardware::close_serial_port()
+{
+  if (serial_fd_ >= 0) {
+    close(serial_fd_);
+    serial_fd_ = -1;
+  }
+}
+
+bool MecanumSystemHardware::read_serial_line(std::string & line)
+{
+  static std::string buffer;
+  char c;
+
+  // Read characters until newline
+  while (::read(serial_fd_, &c, 1) > 0) {
+    if (c == '\n') {
+      line = buffer;
+      buffer.clear();
+      return true;
+    }
+    buffer += c;
+  }
+
+  return false;  // No complete line yet
+}
+
+bool MecanumSystemHardware::write_serial_line(const std::string & line)
+{
+  ssize_t bytes_written = ::write(serial_fd_, line.c_str(), line.length());
+  return bytes_written == static_cast<ssize_t>(line.length());
+}
+
+}  // namespace mecanum_hardware
+
+// Export plugin
+#include "pluginlib/class_list_macros.hpp"
+PLUGINLIB_EXPORT_CLASS(
+  mecanum_hardware::MecanumSystemHardware, hardware_interface::SystemInterface)
+```
+
+## Plugin Description File
+
+**File:** `mecanum_hardware.xml`
+
+```xml
+<library path="mecanum_hardware">
+  <class name="mecanum_hardware/MecanumSystemHardware"
+         type="mecanum_hardware::MecanumSystemHardware"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>
+      Hardware interface for Mecanum wheel robot with ESP32 motor controller
+    </description>
+  </class>
+</library>
+```
+
+## CMakeLists.txt
+
+```cmake
+cmake_minimum_required(VERSION 3.8)
+project(mecanum_hardware)
+
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
+# Find dependencies
+find_package(ament_cmake REQUIRED)
+find_package(hardware_interface REQUIRED)
+find_package(pluginlib REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(rclcpp_lifecycle REQUIRED)
+
+# Add library
+add_library(
+  ${PROJECT_NAME}
+  SHARED
+  src/mecanum_system_hardware.cpp
+)
+
+target_include_directories(
+  ${PROJECT_NAME}
+  PRIVATE
+  include
+)
+
+ament_target_dependencies(
+  ${PROJECT_NAME}
+  hardware_interface
+  pluginlib
+  rclcpp
+  rclcpp_lifecycle
+)
+
+# Export plugin
+pluginlib_export_plugin_description_file(hardware_interface mecanum_hardware.xml)
+
+# Install
+install(
+  TARGETS ${PROJECT_NAME}
+  DESTINATION lib
+)
+
+install(
+  DIRECTORY include/
+  DESTINATION include
+)
+
+ament_export_include_directories(
+  include
+)
+
+ament_export_libraries(
+  ${PROJECT_NAME}
+)
+
+ament_export_dependencies(
+  hardware_interface
+  pluginlib
+  rclcpp
+  rclcpp_lifecycle
+)
+
+ament_package()
+```
+
+## package.xml
+
+```xml
+<?xml version="1.0"?>
+<package format="3">
+  <name>mecanum_hardware</name>
+  <version>1.0.0</version>
+  <description>Hardware interface for Mecanum robot with ESP32</description>
+  <maintainer email="student@example.com">Your Name</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>hardware_interface</depend>
+  <depend>pluginlib</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_lifecycle</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+```
+
+## Build and Test
+
+```bash
+# Build package
+cd ~/ros2_ws
+colcon build --packages-select mecanum_hardware
+source install/setup.bash
+
+# Check plugin registered
+ros2 pkg xml mecanum_hardware
+# Should show plugin description
+```
+
+## ESP32 Firmware Update
+
+Ensure ESP32 sends/receives data in expected format:
+
+```cpp
+// ESP32 side (add to motor control code)
+
+void sendEncoderData() {
+  // Send: pos_FL,pos_FR,pos_RL,pos_RR,vel_FL,vel_FR,vel_RL,vel_RR\n
+  Serial.print(theta_FL); Serial.print(",");
+  Serial.print(theta_FR); Serial.print(",");
+  Serial.print(theta_RL); Serial.print(",");
+  Serial.print(theta_RR); Serial.print(",");
+  Serial.print(omega_FL); Serial.print(",");
+  Serial.print(omega_FR); Serial.print(",");
+  Serial.print(omega_RL); Serial.print(",");
+  Serial.println(omega_RR);
+}
+
+void receiveVelocityCommands() {
+  if (Serial.available()) {
+    String cmd = Serial.readStringUntil('\n');
+
+    if (cmd.startsWith("v,")) {
+      // Parse: v,vel_FL,vel_FR,vel_RL,vel_RR
+      int idx1 = cmd.indexOf(',');
+      int idx2 = cmd.indexOf(',', idx1 + 1);
+      int idx3 = cmd.indexOf(',', idx2 + 1);
+      int idx4 = cmd.indexOf(',', idx3 + 1);
+
+      float target_FL = cmd.substring(idx1 + 1, idx2).toFloat();
+      float target_FR = cmd.substring(idx2 + 1, idx3).toFloat();
+      float target_RL = cmd.substring(idx3 + 1, idx4).toFloat();
+      float target_RR = cmd.substring(idx4 + 1).toFloat();
+
+      // Set PID setpoints
+      setpoint_FL = target_FL;
+      setpoint_FR = target_FR;
+      setpoint_RL = target_RL;
+      setpoint_RR = target_RR;
+    }
+  }
+}
+
+void loop() {
+  receiveVelocityCommands();
+  // ... PID control ...
+  sendEncoderData();
+  delay(20);  // 50Hz update rate
+}
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Serial port permission denied" icon="lock">
+    **Error:** `Failed to open /dev/ttyUSB0: Permission denied`
+
+    **Solution:**
+    ```bash
+    # Add user to dialout group
+    sudo usermod -a -G dialout $USER
+
+    # Logout and login again, or:
+    newgrp dialout
+
+    # Or use udev rule (permanent)
+    echo 'KERNEL=="ttyUSB[0-9]*",MODE="0666"' | sudo tee /etc/udev/rules.d/99-usb-serial.rules
+    sudo udevadm control --reload-rules
+    ```
+  </Accordion>
+
+  <Accordion title="No data received from ESP32" icon="signal">
+    **Debug:**
+    1. Check ESP32 Serial Monitor (separate terminal):
+       ```bash
+       screen /dev/ttyUSB0 115200
+       # Should see encoder data printing
+       ```
+
+    2. Verify baud rate matches (115200)
+
+    3. Add debug prints in `read()`:
+       ```cpp
+       RCLCPP_INFO(rclcpp::get_logger("MecanumSystemHardware"),
+                   "Received: %s", line.c_str());
+       ```
+  </Accordion>
+
+  <Accordion title="Plugin not found" icon="puzzle-piece">
+    **Error:** `Could not load mecanum_hardware/MecanumSystemHardware`
+
+    **Solutions:**
+    - Rebuild: `colcon build --packages-select mecanum_hardware`
+    - Source: `source install/setup.bash`
+    - Check plugin export in CMakeLists.txt
+    - Verify class name matches in XML and C++ (`PLUGINLIB_EXPORT_CLASS`)
+  </Accordion>
+
+  <Accordion title="Commands sent but robot doesn't move" icon="robot">
+    **Debug:**
+    - Add debug print in `write()`:
+      ```cpp
+      RCLCPP_INFO_THROTTLE(rclcpp::get_logger("MecanumSystemHardware"),
+                           clock, 1000, "Sending: %s", oss.str().c_str());
+      ```
+
+    - Check ESP32 receives commands (Serial Monitor)
+    - Verify PID control still working on ESP32
+    - Check motor power supply
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Teleop Control"
+    icon="keyboard"
+    href="/wp4-ros2/control/teleop"
+  >
+    Control robot with keyboard using /cmd_vel topic
+  </Card>
+
+  <Card
+    title="Odometry Publishing"
+    icon="location-arrow"
+    href="/wp4-ros2/localization/odometry"
+  >
+    Publish robot pose from wheel encoders
+  </Card>
+
+  <Card
+    title="System Integration"
+    icon="diagram-project"
+    href="/wp5-integration/system-integration"
+  >
+    Integrate all subsystems for full robot operation
+  </Card>
+
+  <Card
+    title="Troubleshooting"
+    icon="life-ring"
+    href="/troubleshooting/hardware-interface"
+  >
+    Common hardware interface issues
+  </Card>
+</CardGroup>
+
+## References
+
+[1] Writing Hardware Components: https://control.ros.org/jazzy/doc/ros2_control/hardware_interface/doc/writing_new_hardware_component.html
+[2] Serial Communication in Linux: https://blog.mbedded.ninja/programming/operating-systems/linux/linux-serial-ports-using-c-cpp/
+[3] ros2_control Demos: https://control.ros.org/jazzy/doc/ros2_control_demos/doc/index.html

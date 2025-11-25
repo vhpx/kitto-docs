@@ -1,0 +1,657 @@
+---
+title: "Localization Testing"
+description: "Comprehensive testing and validation procedures for robot localization system"
+---
+
+## Overview
+
+Testing localization ensures accurate pose estimation before autonomous navigation. Poor localization leads to navigation failures, collisions, and unpredictable behavior.
+
+<Note>
+  **Testing Goal:** Verify filtered odometry (EKF fusion) is accurate enough for autonomous navigation (&lt;5% error).
+</Note>
+
+## Pre-Test Checklist
+
+Before testing, verify system components:
+
+- [ ] **Hardware:**
+  - Encoders functioning (check `/joint_states`)
+  - IMU publishing data (check `/imu/data`)
+  - Battery charged (>11.5V for 12V system)
+  - All wheels turn freely
+
+- [ ] **Software:**
+  - ros2_control nodes running
+  - EKF node active (`ros2 node list`)
+  - Filtered odometry published (`/odometry/filtered`)
+  - TF tree complete (`ros2 run tf2_tools view_frames`)
+
+- [ ] **Calibration:**
+  - Wheel radius accurate
+  - Wheel separation measured
+  - IMU gyro bias calibrated
+  - Encoder CPR verified
+
+## Test Environment Setup
+
+### Ground Truth Measurement
+
+**Method 1: Tape Measure + Markers**
+- Mark start position on floor (tape)
+- Use measuring tape for straight lines
+- Protractor for angle measurement
+
+**Method 2: Grid Floor**
+- Tape grid on floor (1m × 1m squares)
+- Easy to verify position visually
+
+**Method 3: Motion Capture (Advanced)**
+- OptiTrack, Vicon, or similar
+- Provides sub-mm accuracy
+- Expensive but gold standard
+
+### Testing Surface
+
+<CardGroup cols={2}>
+  <Card title="Ideal Surface" icon="check">
+    - Flat, level ground
+    - Non-slip (carpet, rubber mat)
+    - Low-friction (smooth rolling)
+    - Obstacles cleared (2m radius)
+  </Card>
+
+  <Card title="Avoid" icon="xmark">
+    - Slippery floors (polished tile)
+    - Uneven surfaces (carpet seams)
+    - Slopes or ramps
+    - Outdoor (wind, debris)
+  </Card>
+</CardGroup>
+
+## Testing Procedures
+
+### Test 1: Static Noise
+
+**Objective:** Verify odometry doesn't drift when stationary
+
+<Steps>
+  <Step title="Setup">
+    1. Place robot on flat surface
+    2. Launch robot control + localization
+    3. Wait 60 seconds (stationary)
+  </Step>
+
+  <Step title="Data Collection">
+    Record filtered odometry:
+    ```bash
+    ros2 topic echo /odometry/filtered > static_test.txt
+    ```
+    Let run for 60 seconds, then Ctrl+C.
+  </Step>
+
+  <Step title="Analysis">
+    Check position drift:
+    ```bash
+    # Extract X position
+    grep "x:" static_test.txt
+
+    # Calculate drift
+    # Drift = max(X) - min(X)
+    ```
+
+    **Pass criteria:**
+    - Position drift < 1cm (0.01m)
+    - Orientation drift < 1° (0.017 rad)
+  </Step>
+</Steps>
+
+**If fails:** Check for:
+- Motor noise (commands sent when stationary?)
+- Encoder noise (clean signal?)
+- IMU drift (gyro bias calibration needed?)
+
+### Test 2: Straight Line Motion
+
+**Objective:** Verify position accuracy over distance
+
+<Steps>
+  <Step title="Setup">
+    1. Mark start position (tape cross)
+    2. Measure 2m straight line (tape line)
+    3. Mark end position (tape cross)
+  </Step>
+
+  <Step title="Execution">
+    1. Reset odometry (restart nodes or zero via service)
+    2. Record initial pose:
+       ```bash
+       ros2 topic echo /odometry/filtered --once
+       ```
+    3. Drive robot forward 2m using teleop (slow, steady)
+    4. Stop at 2m mark (visually aligned)
+    5. Record final pose:
+       ```bash
+       ros2 topic echo /odometry/filtered --once
+       ```
+  </Step>
+
+  <Step title="Analysis">
+    Calculate error:
+    ```python
+    # Example data:
+    # Initial: x=0.0, y=0.0, yaw=0.0
+    # Final:   x=2.05, y=0.03, yaw=0.02
+
+    # Distance error
+    distance_traveled = sqrt(x² + y²)
+    distance_error = distance_traveled - 2.0  # meters
+    distance_error_pct = (distance_error / 2.0) * 100
+
+    # Lateral error
+    lateral_error = abs(y)  # meters
+
+    # Heading error
+    heading_error = abs(yaw)  # radians
+    heading_error_deg = heading_error * 180 / pi
+    ```
+
+    **Pass criteria:**
+    - Distance error < 5% (2.0m ± 0.1m)
+    - Lateral error < 10cm
+    - Heading error < 3°
+  </Step>
+</Steps>
+
+**Repeat:**
+- 3 trials, average results
+- Forward and backward
+- Different speeds (slow, medium, fast)
+
+### Test 3: Rotation in Place
+
+**Objective:** Verify orientation accuracy
+
+<Steps>
+  <Step title="Setup">
+    1. Place robot on flat surface
+    2. Mark initial orientation (tape arrow)
+  </Step>
+
+  <Step title="Execution">
+    1. Reset odometry
+    2. Record initial yaw
+    3. Rotate robot 360° clockwise (slow, steady)
+    4. Stop when aligned with initial mark
+    5. Record final yaw
+  </Step>
+
+  <Step title="Analysis">
+    ```python
+    # Expected: yaw_final = yaw_initial + 2π (or -2π for CCW)
+    # Actual:   yaw_final = ?
+
+    rotation_error = abs(yaw_final - yaw_initial - 2*pi)
+    rotation_error_deg = rotation_error * 180 / pi
+    rotation_error_pct = (rotation_error / (2*pi)) * 100
+    ```
+
+    **Pass criteria:**
+    - Rotation error < 5° (0.087 rad)
+    - Error percentage < 1.5%
+  </Step>
+</Steps>
+
+**Test variations:**
+- 90°, 180°, 270°, 360° rotations
+- Clockwise and counterclockwise
+- Multiple speeds
+
+### Test 4: Square Path
+
+**Objective:** Validate complete 2D motion (translation + rotation)
+
+<Steps>
+  <Step title="Setup">
+    1. Mark 1m × 1m square on floor (tape)
+    2. Mark start position (corner)
+  </Step>
+
+  <Step title="Execution">
+    1. Reset odometry
+    2. Drive square path:
+       - Forward 1m
+       - Rotate 90° left
+       - Forward 1m
+       - Rotate 90° left
+       - Forward 1m
+       - Rotate 90° left
+       - Forward 1m
+       - Rotate 90° left (back to start)
+    3. Measure final position relative to start
+  </Step>
+
+  <Step title="Analysis">
+    ```python
+    # Closure error (distance from start)
+    closure_error = sqrt((x_final - x_initial)² + (y_final - y_initial)²)
+
+    # Heading error
+    heading_error = abs(yaw_final - yaw_initial)
+    ```
+
+    **Pass criteria:**
+    - Closure error < 20cm (0.2m)
+    - Heading error < 10° (0.175 rad)
+  </Step>
+</Steps>
+
+**Expected:** Some error accumulation over 4 legs + 4 rotations. Closure error indicates total drift.
+
+### Test 5: Mecanum Strafing
+
+**Objective:** Test lateral motion accuracy (Mecanum-specific)
+
+<Steps>
+  <Step title="Setup">
+    1. Mark start position
+    2. Measure 1m lateral line (perpendicular to robot)
+    3. Mark end position
+  </Step>
+
+  <Step title="Execution">
+    1. Reset odometry
+    2. Strafe left 1m (no rotation)
+    3. Record final pose
+  </Step>
+
+  <Step title="Analysis">
+    ```python
+    # Expected: x=0, y=1.0, yaw=0
+    # Actual: x=?, y=?, yaw=?
+
+    lateral_distance = abs(y_final - y_initial)
+    lateral_error = abs(lateral_distance - 1.0)
+
+    forward_drift = abs(x_final - x_initial)  # Should be ~0
+    rotation_drift = abs(yaw_final - yaw_initial)  # Should be ~0
+    ```
+
+    **Pass criteria:**
+    - Lateral error < 10% (1.0m ± 0.1m)
+    - Forward drift < 5cm
+    - Rotation drift < 3°
+  </Step>
+</Steps>
+
+<Warning>
+  **Mecanum strafing:** Higher slip expected compared to forward motion. 10% error is acceptable.
+</Warning>
+
+### Test 6: Figure-8 Path
+
+**Objective:** Test continuous curved motion
+
+<Steps>
+  <Step title="Setup">
+    1. Mark figure-8 path (two 1m diameter circles)
+  </Step>
+
+  <Step title="Execution">
+    1. Reset odometry
+    2. Drive figure-8 pattern (smooth, continuous)
+    3. Complete 2 full loops
+    4. Return to start
+  </Step>
+
+  <Step title="Analysis">
+    ```bash
+    # Record entire path
+    ros2 bag record /odometry/filtered /cmd_vel -o figure8_test
+
+    # Analyze with PlotJuggler or Python script
+    ```
+
+    **Pass criteria:**
+    - Path shape recognizable as figure-8
+    - Closure error < 30cm after 2 loops
+    - Smooth path (no jumps or discontinuities)
+  </Step>
+</Steps>
+
+### Test 7: Long-Distance Drift
+
+**Objective:** Measure drift over extended operation
+
+<Steps>
+  <Step title="Setup">
+    1. Mark start position
+    2. Clear 10m+ path
+  </Step>
+
+  <Step title="Execution">
+    1. Reset odometry
+    2. Drive robot for 10 minutes (mixed motions)
+    3. Return to start position (visually aligned)
+    4. Measure final odometry position
+  </Step>
+
+  <Step title="Analysis">
+    ```python
+    # Drift after returning to start
+    drift_distance = sqrt(x_final² + y_final²)
+    drift_heading = abs(yaw_final)
+    ```
+
+    **Acceptable drift:**
+    - Position drift: <1m (after 10min operation)
+    - Heading drift: <15°
+  </Step>
+</Steps>
+
+**Note:** Some drift is expected. SLAM will correct this periodically.
+
+### Test 8: IMU Contribution
+
+**Objective:** Verify IMU improves localization
+
+<Steps>
+  <Step title="Execution">
+    1. Disable IMU in EKF config:
+       ```yaml
+       # Comment out IMU sensor
+       # imu0: /imu/data
+       ```
+    2. Restart EKF node
+    3. Run Test 3 (rotation) - record error
+    4. Re-enable IMU
+    5. Restart EKF node
+    6. Run Test 3 again - record error
+  </Step>
+
+  <Step title="Analysis">
+    Compare rotation error:
+    ```
+    Without IMU: rotation_error_no_imu = ?
+    With IMU:    rotation_error_with_imu = ?
+
+    Improvement = rotation_error_no_imu - rotation_error_with_imu
+    ```
+
+    **Expected:** 50%+ error reduction with IMU
+  </Step>
+</Steps>
+
+## Data Collection Tools
+
+### Rosbag Recording
+
+```bash
+# Record all localization topics
+ros2 bag record \
+  /mecanum_drive_controller/odom \
+  /imu/data \
+  /odometry/filtered \
+  /joint_states \
+  /cmd_vel \
+  -o localization_test_$(date +%Y%m%d_%H%M%S)
+```
+
+**Playback for analysis:**
+```bash
+ros2 bag play localization_test_20240315_143000
+```
+
+### PlotJuggler Visualization
+
+```bash
+# Launch PlotJuggler
+ros2 run plotjuggler plotjuggler
+```
+
+**Plot comparisons:**
+- Raw odom X vs Filtered odom X
+- Raw odom Yaw vs IMU Yaw vs Filtered Yaw
+- Odometry covariance over time
+
+### Python Analysis Script
+
+```python
+#!/usr/bin/env python3
+import rclpy
+from nav_msgs.msg import Odometry
+import numpy as np
+
+class OdometryAnalyzer:
+    def __init__(self):
+        self.positions = []
+
+    def odom_callback(self, msg):
+        self.positions.append((
+            msg.pose.pose.position.x,
+            msg.pose.pose.position.y
+        ))
+
+    def analyze(self):
+        positions = np.array(self.positions)
+
+        # Distance traveled
+        distances = np.sqrt(np.sum(np.diff(positions, axis=0)**2, axis=1))
+        total_distance = np.sum(distances)
+
+        # Displacement
+        displacement = np.linalg.norm(positions[-1] - positions[0])
+
+        # Drift ratio
+        drift_ratio = displacement / total_distance
+
+        print(f"Total distance: {total_distance:.2f} m")
+        print(f"Displacement: {displacement:.2f} m")
+        print(f"Drift ratio: {drift_ratio*100:.2f}%")
+
+# Use with rosbag playback
+```
+
+## Diagnostic Metrics
+
+### Drift Rate
+
+```
+Drift Rate = (Closure Error) / (Distance Traveled) × 100%
+```
+
+**Example:**
+- Drive 10m, return to start, 0.5m from origin
+- Drift Rate = (0.5m / 10m) × 100% = 5%
+
+**Acceptable:** <5% for odometry only, <3% with IMU fusion
+
+### Repeatability
+
+Run same test 5 times, calculate standard deviation:
+
+```python
+errors = [error1, error2, error3, error4, error5]
+std_dev = np.std(errors)
+mean_error = np.mean(errors)
+coefficient_of_variation = std_dev / mean_error * 100
+```
+
+**Good repeatability:** CV < 20%
+
+### Covariance Consistency
+
+**Check if covariance matches actual error:**
+
+```python
+# From rosbag data
+estimated_covariance = sqrt(P[0,0])  # X variance from EKF
+actual_error = abs(x_odom - x_ground_truth)
+
+# Consistency check
+if actual_error < 2 * estimated_covariance:
+    print("Covariance consistent (68% confidence)")
+elif actual_error < 3 * estimated_covariance:
+    print("Covariance acceptable (95% confidence)")
+else:
+    print("Covariance underestimated - increase sensor covariance")
+```
+
+## Troubleshooting Common Issues
+
+<AccordionGroup>
+  <Accordion title="Static noise (robot stationary but odometry drifts)" icon="wind">
+    **Causes:**
+    - Zero command not sent to motors
+    - Encoder noise (electrical interference)
+    - IMU bias drift
+
+    **Solutions:**
+    1. Check `/cmd_vel` is truly zero when stopped
+    2. Add capacitors to encoder lines (0.1µF)
+    3. Recalibrate IMU gyro bias
+    4. Increase process noise covariance (EKF trusts sensors less)
+  </Accordion>
+
+  <Accordion title="Straight line curves" icon="arrow-turn-right">
+    **Causes:**
+    - Wheel diameter mismatch (left vs right)
+    - Motor PID gains different
+    - Floor not level
+
+    **Solutions:**
+    - Measure all wheel diameters (should match within 1mm)
+    - Tune all motor PIDs identically
+    - Test on different surface
+    - Calibrate odometry with per-wheel scaling
+  </Accordion>
+
+  <Accordion title="Rotation over/under-shoots" icon="rotate">
+    **Causes:**
+    - Wheel separation (distance between wheels) incorrect
+    - IMU not fused or gyro bias wrong
+
+    **Solutions:**
+    - Remeasure wheel separation (use calipers)
+    - Verify IMU data fused (check `imu0_config`)
+    - Recalibrate IMU
+  </Accordion>
+
+  <Accordion title="Closure error grows with distance" icon="chart-line">
+    **Expected behavior!** Odometry drifts over time.
+
+    **Solutions:**
+    - Verify error rate acceptable (<5%)
+    - Use SLAM for global correction
+    - Add more sensors (GPS, visual markers)
+  </Accordion>
+
+  <Accordion title="Strafing error very high (>20%)" icon="arrows-left-right">
+    **Mecanum wheels slip during strafing.**
+
+    **Solutions:**
+    - Test on higher-friction surface
+    - Reduce strafing speed
+    - Consider "odometry scaling" calibration for lateral motion
+    - Fuse with visual odometry (camera)
+  </Accordion>
+</AccordionGroup>
+
+## Test Report Template
+
+Document test results:
+
+```markdown
+# Localization Test Report
+
+**Date:** 2024-03-15
+**Robot:** Alpha
+**Software Version:** ROS2 Jazzy, v1.0
+
+## Configuration
+- Wheel radius: 0.051m
+- Wheel separation: 0.30m × 0.35m
+- Control rate: 50Hz
+- EKF frequency: 50Hz
+- Sensors: Odometry + IMU (ICM-20948)
+
+## Test Results
+
+### Test 1: Static Noise (60s)
+- Position drift: 0.008m ✓
+- Heading drift: 0.5° ✓
+- **PASS**
+
+### Test 2: Straight Line (2m)
+- Trial 1: Distance 2.03m, Lateral 0.02m, Heading 1.2°
+- Trial 2: Distance 1.97m, Lateral 0.04m, Heading 0.8°
+- Trial 3: Distance 2.01m, Lateral 0.01m, Heading 1.5°
+- **Average:** 2.00m ± 0.03m (1.5% error) ✓
+- **PASS**
+
+### Test 3: Rotation (360°)
+- Error: 3.2° (0.9%) ✓
+- **PASS**
+
+### Test 4: Square Path
+- Closure error: 0.15m ✓
+- Heading error: 8° ✓
+- **PASS**
+
+### Test 5: Strafing (1m)
+- Lateral: 0.92m (8% error) ✓
+- Forward drift: 0.03m ✓
+- **PASS**
+
+## Conclusion
+Localization system meets requirements. Ready for navigation testing.
+
+**Issues:**
+- Minor heading drift on long distances → Plan to add SLAM
+
+**Next Steps:**
+- Test with SLAM mapping
+- Validate in navigation scenarios
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="SLAM Mapping"
+    icon="map"
+    href="/wp4-ros2/mapping/slam-toolbox"
+  >
+    Create maps and correct long-term drift
+  </Card>
+
+  <Card
+    title="LiDAR Setup"
+    icon="radar"
+    href="/wp4-ros2/sensors/lidar-setup"
+  >
+    Configure RPLIDAR for SLAM
+  </Card>
+
+  <Card
+    title="Navigation Testing"
+    icon="route"
+    href="/wp4-ros2/navigation/testing"
+  >
+    Test autonomous navigation with localization
+  </Card>
+
+  <Card
+    title="System Integration"
+    icon="diagram-project"
+    href="/wp5-integration/system-integration"
+  >
+    Integrate all subsystems for full autonomy
+  </Card>
+</CardGroup>
+
+## References
+
+[1] Odometry Calibration: https://github.com/MobileRobots/AMRISim/blob/master/docs/calibration.md
+[2] robot_localization Tutorials: http://docs.ros.org/en/noetic/api/robot_localization/html/index.html
+[3] Statistical Testing: https://www.itl.nist.gov/div898/handbook/eda/section3/eda35.htm

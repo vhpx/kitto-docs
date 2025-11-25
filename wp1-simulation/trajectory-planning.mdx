@@ -1,0 +1,610 @@
+---
+title: "Trajectory Planning & Simulation"
+description: "Plan and simulate robot trajectories in MATLAB for the Mecanum wheel robot"
+---
+
+## Overview
+
+Now that you understand kinematics, it's time to make the robot move! Trajectory planning involves:
+
+1. **Path Definition** - Specify where the robot should go
+2. **Trajectory Generation** - Convert path to time-stamped positions
+3. **Velocity Computation** - Calculate required velocities
+4. **Wheel Command Calculation** - Use inverse kinematics
+5. **Simulation** - Integrate motion and visualize results
+
+<Note>
+  **Deliverable D1.2:** Simulate at least 3 different trajectories and analyze robot performance
+</Note>
+
+## Trajectory Types
+
+### Required Trajectories
+
+You must implement at least these three trajectories:
+
+<AccordionGroup>
+  <Accordion title="1. Square Path (1m × 1m) - Constant Orientation" icon="square">
+    **Requirements:**
+    - Robot moves in a 1m × 1m square
+    - Robot orientation remains constant (e.g., always facing "North")
+    - Uses combination of forward and sideways motion
+
+    **Skills Demonstrated:**
+    - Omnidirectional motion
+    - Sharp corners or smooth transitions
+    - Coordinated Vx and Vy control
+  </Accordion>
+
+  <Accordion title="2. Circle (1m diameter) - Constant Orientation" icon="circle">
+    **Requirements:**
+    - Robot follows circular path (0.5m radius)
+    - Robot orientation fixed (e.g., always facing North)
+    - Smooth continuous motion
+
+    **Skills Demonstrated:**
+    - Simultaneous Vx and Vy
+    - Circular motion without rotation
+    - Smooth velocity transitions
+  </Accordion>
+
+  <Accordion title="3. Circle - Tangent Orientation" icon="compass">
+    **Requirements:**
+    - Robot follows circular path
+    - Robot always faces tangent to circle (like a car)
+    - Combines translation and rotation
+
+    **Skills Demonstrated:**
+    - Coordinated angular velocity
+    - Smooth ω with translation
+    - Realistic motion pattern
+  </Accordion>
+</AccordionGroup>
+
+### Bonus Trajectories (Optional)
+
+Impress with additional trajectories:
+
+- **Figure-8 path** - Tests reverse motion and smooth transitions
+- **Parallel parking** - Sideways motion utility
+- **Spiral** - Variable radius circular motion
+- **Custom logo/shape** - Get creative!
+
+## Implementation Approach
+
+### Method 1: Velocity-Based (Recommended)
+
+Generate velocity commands at each time step:
+
+```matlab
+% Pseudo-code
+for t = 0:dt:T_final
+    % 1. Compute desired robot velocity at time t
+    [Vx, Vy, omega] = trajectory_velocity(t);
+
+    % 2. Calculate wheel velocities
+    wheel_vel = inverse_kinematics([Vx; Vy; omega], params);
+
+    % 3. Integrate to update robot pose
+    robot_pose = robot_pose + [Vx; Vy; omega] * dt;
+
+    % 4. Store for plotting
+    history(i,:) = robot_pose;
+end
+```
+
+**Pros:** Simple, intuitive, matches real robot control
+**Cons:** Integration drift over time
+
+### Method 2: Position-Based
+
+Define exact position trajectory, then differentiate:
+
+```matlab
+% Pseudo-code
+for i = 1:length(t)
+    % 1. Compute desired position
+    [x, y, theta] = trajectory_position(t(i));
+
+    % 2. Differentiate to get velocity
+    if i > 1
+        Vx = (x - x_prev) / dt;
+        Vy = (y - y_prev) / dt;
+        omega = (theta - theta_prev) / dt;
+    end
+
+    % 3. Calculate wheel velocities
+    wheel_vel = inverse_kinematics([Vx; Vy; omega], params);
+end
+```
+
+**Pros:** Exact path following, no drift
+**Cons:** Requires smooth, differentiable paths
+
+## Example: Square Trajectory
+
+### Approach: Piecewise Linear Segments
+
+```matlab
+function [Vx, Vy, omega] = square_trajectory_velocity(t, params)
+    % SQUARE_TRAJECTORY_VELOCITY Generate velocity for square path
+    %
+    % Square: 1m x 1m, constant orientation, constant speed
+
+    side_length = 1.0;  % meters
+    speed = 0.2;        % m/s
+    segment_time = side_length / speed;  % time per side
+    total_time = 4 * segment_time;
+
+    % Wrap time to repeat trajectory
+    t_mod = mod(t, total_time);
+
+    % Determine which side we're on
+    segment = floor(t_mod / segment_time);
+
+    % Default: no rotation
+    omega = 0;
+
+    switch segment
+        case 0  % Side 1: Move right (positive Y)
+            Vx = 0;
+            Vy = speed;
+
+        case 1  % Side 2: Move forward (positive X)
+            Vx = speed;
+            Vy = 0;
+
+        case 2  % Side 3: Move left (negative Y)
+            Vx = 0;
+            Vy = -speed;
+
+        case 3  % Side 4: Move backward (negative X)
+            Vx = -speed;
+            Vy = 0;
+
+        otherwise
+            Vx = 0;
+            Vy = 0;
+    end
+end
+```
+
+### Smooth Corners (Advanced)
+
+Use ramp functions to smooth velocity transitions:
+
+```matlab
+function [Vx, Vy, omega] = square_trajectory_smooth(t, params)
+    % Smooth square using sinusoidal blending at corners
+
+    side_length = 1.0;
+    speed = 0.2;
+    corner_time = 0.5;  % Time to transition at corners
+
+    % ... (implementation with smooth transitions)
+end
+```
+
+## Example: Circular Trajectory
+
+### Constant Orientation Circle
+
+```matlab
+function [Vx, Vy, omega] = circle_trajectory_constant_heading(t, params)
+    % CIRCLE_TRAJECTORY_CONSTANT_HEADING Circle with fixed orientation
+    %
+    % Circle: radius = 0.5m, period = 10s, orientation = 0
+
+    radius = 0.5;       % meters
+    period = 10;        % seconds for one revolution
+    angular_freq = 2*pi / period;  % rad/s
+
+    % Parametric circle: x = r*cos(wt), y = r*sin(wt)
+    % Velocity: dx/dt = -r*w*sin(wt), dy/dt = r*w*cos(wt)
+
+    Vx = -radius * angular_freq * sin(angular_freq * t);
+    Vy = radius * angular_freq * cos(angular_freq * t);
+    omega = 0;  % No rotation - stay facing same direction
+end
+```
+
+### Tangent Orientation Circle
+
+Robot faces direction of motion (like a car turning):
+
+```matlab
+function [Vx, Vy, omega] = circle_trajectory_tangent(t, params)
+    % CIRCLE_TRAJECTORY_TANGENT Circle facing tangent direction
+
+    radius = 0.5;
+    period = 10;
+    angular_freq = 2*pi / period;
+
+    % Linear velocity (same as before)
+    Vx = -radius * angular_freq * sin(angular_freq * t);
+    Vy = radius * angular_freq * cos(angular_freq * t);
+
+    % Angular velocity to track tangent
+    % Robot orientation should match: theta = atan2(Vy, Vx)
+    % So omega = d(theta)/dt = angular_freq
+    omega = angular_freq;
+end
+```
+
+### Alternative: Inward-Facing Circle
+
+Robot always faces center of circle:
+
+```matlab
+function [Vx, Vy, omega] = circle_trajectory_inward(t, params)
+    % Robot faces inward (toward circle center)
+
+    radius = 0.5;
+    period = 10;
+    angular_freq = 2*pi / period;
+
+    Vx = -radius * angular_freq * sin(angular_freq * t);
+    Vy = radius * angular_freq * cos(angular_freq * t);
+
+    % Orientation points to center: theta = atan2(-y, -x) = angle + pi
+    % omega = d(theta)/dt = angular_freq
+    omega = angular_freq;
+end
+```
+
+## Complete Simulation Script
+
+```matlab
+%% Mecanum Robot Trajectory Simulation
+% Complete simulation of multiple trajectories
+
+clear; clc; close all;
+
+% Load robot parameters
+params = robot_params();
+
+%% Simulation Parameters
+dt = 0.01;          % Time step (seconds)
+T_final = 20;       % Simulation duration
+time = 0:dt:T_final;
+N = length(time);
+
+%% Choose Trajectory
+trajectory_type = 'circle_tangent';  % Options: 'square', 'circle_constant', 'circle_tangent'
+
+%% Initialize Storage
+robot_pose = zeros(3, N);     % [x; y; theta] at each time
+robot_vel = zeros(3, N);      % [Vx; Vy; omega]
+wheel_vel = zeros(4, N);      % [w1; w2; w3; w4]
+
+% Initial pose: start at origin, facing East (0 degrees)
+robot_pose(:,1) = [0; 0; 0];
+
+%% Simulation Loop
+for i = 1:N-1
+    t = time(i);
+
+    % 1. Get desired velocity from trajectory
+    switch trajectory_type
+        case 'square'
+            [Vx, Vy, omega] = square_trajectory_velocity(t, params);
+        case 'circle_constant'
+            [Vx, Vy, omega] = circle_trajectory_constant_heading(t, params);
+        case 'circle_tangent'
+            [Vx, Vy, omega] = circle_trajectory_tangent(t, params);
+        otherwise
+            error('Unknown trajectory type');
+    end
+
+    robot_vel(:,i) = [Vx; Vy; omega];
+
+    % 2. Calculate required wheel velocities
+    wheel_vel(:,i) = inverse_kinematics([Vx; Vy; omega], params);
+
+    % 3. Integrate to update robot pose
+    % For body-frame velocities, need to rotate to global frame
+    theta = robot_pose(3,i);
+    R = [cos(theta), -sin(theta);
+         sin(theta),  cos(theta)];
+
+    % Global velocity
+    global_vel_xy = R * [Vx; Vy];
+
+    % Update pose
+    robot_pose(1,i+1) = robot_pose(1,i) + global_vel_xy(1) * dt;  % x
+    robot_pose(2,i+1) = robot_pose(2,i) + global_vel_xy(2) * dt;  % y
+    robot_pose(3,i+1) = robot_pose(3,i) + omega * dt;             % theta
+
+    % Wrap theta to [-pi, pi]
+    robot_pose(3,i+1) = atan2(sin(robot_pose(3,i+1)), cos(robot_pose(3,i+1)));
+end
+
+%% Visualization
+figure('Position', [100, 100, 1200, 800]);
+
+% Plot 1: 2D Trajectory Path
+subplot(2,3,1);
+plot(robot_pose(2,:), robot_pose(1,:), 'b-', 'LineWidth', 2);
+hold on;
+plot(robot_pose(2,1), robot_pose(1,1), 'go', 'MarkerSize', 10, 'LineWidth', 2);
+plot(robot_pose(2,end), robot_pose(1,end), 'r^', 'MarkerSize', 10, 'LineWidth', 2);
+axis equal;
+grid on;
+xlabel('Y Position (m)');
+ylabel('X Position (m)');
+title('Robot Path (Top View)');
+legend('Path', 'Start', 'End');
+
+% Plot 2: X Position vs Time
+subplot(2,3,2);
+plot(time, robot_pose(1,:), 'LineWidth', 2);
+grid on;
+xlabel('Time (s)');
+ylabel('X Position (m)');
+title('X Position over Time');
+
+% Plot 3: Y Position vs Time
+subplot(2,3,3);
+plot(time, robot_pose(2,:), 'LineWidth', 2);
+grid on;
+xlabel('Time (s)');
+ylabel('Y Position (m)');
+title('Y Position over Time');
+
+% Plot 4: Orientation vs Time
+subplot(2,3,4);
+plot(time, rad2deg(robot_pose(3,:)), 'LineWidth', 2);
+grid on;
+xlabel('Time (s)');
+ylabel('Orientation (degrees)');
+title('Robot Heading');
+
+% Plot 5: Robot Velocities
+subplot(2,3,5);
+plot(time(1:end-1), robot_vel(1,1:end-1), 'LineWidth', 2); hold on;
+plot(time(1:end-1), robot_vel(2,1:end-1), 'LineWidth', 2);
+plot(time(1:end-1), robot_vel(3,1:end-1), 'LineWidth', 2);
+grid on;
+xlabel('Time (s)');
+ylabel('Velocity');
+title('Robot Velocities');
+legend('Vx (m/s)', 'Vy (m/s)', 'omega (rad/s)');
+
+% Plot 6: Wheel Velocities
+subplot(2,3,6);
+plot(time(1:end-1), wheel_vel(1,1:end-1), 'LineWidth', 1.5); hold on;
+plot(time(1:end-1), wheel_vel(2,1:end-1), 'LineWidth', 1.5);
+plot(time(1:end-1), wheel_vel(3,1:end-1), 'LineWidth', 1.5);
+plot(time(1:end-1), wheel_vel(4,1:end-1), 'LineWidth', 1.5);
+grid on;
+xlabel('Time (s)');
+ylabel('Wheel Angular Velocity (rad/s)');
+title('Individual Wheel Velocities');
+legend('FL', 'FR', 'RL', 'RR', 'Location', 'best');
+
+sgtitle(sprintf('Mecanum Robot Simulation: %s', strrep(trajectory_type, '_', ' ')));
+
+%% Animation (Optional)
+% Uncomment to see animated robot motion
+% animate_robot_motion(robot_pose, params, dt);
+```
+
+## Visualization Functions
+
+### Animated Robot Visualization
+
+```matlab
+function animate_robot_motion(robot_pose, params, dt)
+    % ANIMATE_ROBOT_MOTION Display animated robot following path
+
+    figure('Position', [200, 200, 800, 800]);
+
+    % Robot dimensions for drawing
+    L = params.wheelbase;
+    W = params.track_width;
+
+    for i = 1:10:size(robot_pose, 2)  % Every 10th frame for speed
+        clf;
+
+        % Draw path history
+        plot(robot_pose(2,1:i), robot_pose(1,1:i), 'b-', 'LineWidth', 1);
+        hold on;
+
+        % Current pose
+        x = robot_pose(1,i);
+        y = robot_pose(2,i);
+        theta = robot_pose(3,i);
+
+        % Robot body corners (rectangle)
+        corners = [
+            -L/2, -W/2;
+            L/2, -W/2;
+            L/2, W/2;
+            -L/2, W/2;
+            -L/2, -W/2;
+        ]';
+
+        % Rotation matrix
+        R = [cos(theta), -sin(theta);
+             sin(theta), cos(theta)];
+
+        % Rotate and translate
+        rotated_corners = R * corners;
+        robot_x = rotated_corners(1,:) + x;
+        robot_y = rotated_corners(2,:) + y;
+
+        % Draw robot body
+        fill(robot_y, robot_x, 'r', 'FaceAlpha', 0.5);
+
+        % Draw orientation arrow
+        arrow_length = 0.15;
+        arrow_x = [x, x + arrow_length * cos(theta)];
+        arrow_y = [y, y + arrow_length * sin(theta)];
+        plot(arrow_y, arrow_x, 'k-', 'LineWidth', 3);
+
+        % Formatting
+        axis equal;
+        grid on;
+        xlabel('Y (m)');
+        ylabel('X (m)');
+        title(sprintf('Time: %.2f s', (i-1)*dt));
+        xlim([min(robot_pose(2,:))-0.5, max(robot_pose(2,:))+0.5]);
+        ylim([min(robot_pose(1,:))-0.5, max(robot_pose(1,:))+0.5]);
+
+        drawnow;
+        pause(dt * 10);  % Slow down for visibility
+    end
+end
+```
+
+## Analysis and Reporting
+
+### What to Include in Your Report
+
+1. **Trajectory Definitions:**
+   - Mathematical equations or description
+   - Velocity profiles
+   - Total path length and duration
+
+2. **Simulation Results:**
+   - Path plots showing robot successfully followed trajectory
+   - Position vs. time graphs
+   - Velocity command profiles
+   - Wheel velocity profiles
+
+3. **Parameter Analysis:**
+   Create a study showing effects of:
+   - **Wheel radius:** Smaller wheels → higher wheel speeds for same robot speed
+   - **Wheelbase/Track width:** Affects rotation speed requirements
+   - **Speed:** Higher speeds → higher wheel velocities (check motor limits!)
+
+4. **Validation:**
+   - Does circular path actually form a circle? (Check using x² + y² = r²)
+   - Do wheel velocities stay within motor limits?
+   - Are velocity commands smooth (no discontinuities)?
+
+### Sample Analysis Code
+
+```matlab
+%% Parameter Sensitivity Analysis
+wheel_radii = [0.03, 0.05, 0.07, 0.10];  % Test different radii
+
+figure;
+for i = 1:length(wheel_radii)
+    params_test = params;
+    params_test.wheel_radius = wheel_radii(i);
+
+    % Test case: robot moving forward at 0.3 m/s
+    test_vel = [0.3; 0; 0];
+    wheel_vel_test = inverse_kinematics(test_vel, params_test);
+
+    subplot(2, 2, i);
+    bar(wheel_vel_test);
+    title(sprintf('Wheel Radius = %.0f mm', wheel_radii(i)*1000));
+    xlabel('Wheel');
+    ylabel('Angular Velocity (rad/s)');
+    xticklabels({'FL', 'FR', 'RL', 'RR'});
+    ylim([0, 20]);
+    grid on;
+end
+sgtitle('Effect of Wheel Radius on Wheel Velocities');
+```
+
+## Common Issues and Solutions
+
+<AccordionGroup>
+  <Accordion title="Path doesn't close (circle not circular)" icon="circle-xmark">
+    **Cause:** Integration error accumulates over time
+
+    **Solutions:**
+    - Use smaller time step (dt)
+    - Use higher-order integration (ode45 instead of Euler)
+    - Switch to position-based trajectory
+  </Accordion>
+
+  <Accordion title="Discontinuous wheel velocities" icon="wave-square">
+    **Cause:** Abrupt changes in desired velocity (e.g., sharp corners)
+
+    **Solutions:**
+    - Add smooth transitions between segments
+    - Use sinusoidal or polynomial blending
+    - Plan trajectories with continuous derivatives
+  </Accordion>
+
+  <Accordion title="Wheel velocities exceed motor limits" icon="gauge-high">
+    **Cause:** Commanded robot velocity too high for robot parameters
+
+    **Solutions:**
+    - Reduce desired speed
+    - Increase wheel radius (if possible in design)
+    - Add velocity saturation in inverse kinematics
+  </Accordion>
+
+  <Accordion title="Robot drifts from path" icon="compass">
+    **Cause:** Integration error, incorrect coordinate frame transformations
+
+    **Solutions:**
+    - Check rotation matrix from body to global frame
+    - Verify initial conditions
+    - Use smaller dt
+  </Accordion>
+</AccordionGroup>
+
+## Tips for Success
+
+<CardGroup cols={2}>
+  <Card title="Start Simple" icon="seedling">
+    Begin with straight line, then add complexity. Debug each motion type separately.
+  </Card>
+
+  <Card title="Validate Numerically" icon="check">
+    For circle: verify x² + y² ≈ r². For square: check distances match 1m.
+  </Card>
+
+  <Card title="Professional Plots" icon="chart-line">
+    Use labels, titles, legends, grid. Export high-res images for report.
+  </Card>
+
+  <Card title="Save Your Data" icon="floppy-disk">
+    Save simulation results to .mat files for later analysis without re-running.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Hardware Specs"
+    icon="microchip"
+    href="/reference/hardware/motors-encoders"
+  >
+    Use real motor specs for realistic simulation
+  </Card>
+  <Card
+    title="WP2: CAD Design"
+    icon="cube"
+    href="/wp2-prototyping/introduction"
+  >
+    Start designing the physical robot
+  </Card>
+  <Card
+    title="WP3: Motor Control"
+    icon="gears"
+    href="/wp3-embedded/introduction"
+  >
+    Implement control on ESP32 hardware
+  </Card>
+  <Card
+    title="Code Examples"
+    icon="code"
+    href="/reference/code-examples/pid-controller"
+  >
+    See PID implementation for real hardware
+  </Card>
+</CardGroup>
+
+## References
+
+[1] S. M. LaValle, "Planning Algorithms," Cambridge University Press, 2006. Available: http://planning.cs.uiuc.edu/
+
+[2] M. T. Watson et al., "Collinear Mecanum Drive: Modeling, Analysis, Partial Feedback Linearization, and Nonlinear Control," IEEE Trans. Robot., vol. 37, no. 2, pp. 642–658, 2021.

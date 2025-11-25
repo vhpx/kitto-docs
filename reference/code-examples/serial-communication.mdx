@@ -1,0 +1,504 @@
+---
+title: 'Serial Communication'
+description: 'ESP32-ROS2 serial communication for command and telemetry exchange'
+icon: 'usb'
+---
+
+## Overview
+
+Serial communication connects the ESP32 microcontroller to the Raspberry Pi running ROS2. The ESP32 receives velocity commands and sends back encoder data, IMU readings, and status information.
+
+---
+
+## Protocol Design
+
+### CSV-Based Protocol
+
+Simple, human-readable format using comma-separated values:
+
+```
+Format: TYPE,data1,data2,data3,...\n
+
+Commands (ROS2 → ESP32):
+CMD,vx,vy,omega          # Velocity command (m/s, m/s, rad/s)
+RESET                     # Reset odometry
+PID,kp,ki,kd             # Update PID gains
+
+Telemetry (ESP32 → ROS2):
+ODOM,x,y,theta,vx,vy,omega    # Odometry data
+ENC,w1,w2,w3,w4               # Wheel velocities (rad/s)
+IMU,ax,ay,az,gx,gy,gz         # IMU data
+STATUS,battery,temp            # System status
+```
+
+---
+
+## ESP32 Implementation
+
+```cpp title="serial_protocol.h"
+#ifndef SERIAL_PROTOCOL_H
+#define SERIAL_PROTOCOL_H
+
+#include <Arduino.h>
+
+class SerialProtocol {
+private:
+    char rx_buffer[256];
+    int rx_index;
+
+public:
+    SerialProtocol();
+    void begin(unsigned long baud_rate);
+
+    // Receiving
+    bool readLine(String& line);
+    bool parseCommand(const String& line, String& cmd, float* values, int& num_values);
+
+    // Sending
+    void sendOdometry(float x, float y, float theta, float vx, float vy, float omega);
+    void sendEncoders(float w1, float w2, float w3, float w4);
+    void sendIMU(float ax, float ay, float az, float gx, float gy, float gz);
+    void sendStatus(float battery, float temperature);
+};
+
+#endif
+```
+
+```cpp title="serial_protocol.cpp"
+#include "serial_protocol.h"
+
+SerialProtocol::SerialProtocol() {
+    rx_index = 0;
+    memset(rx_buffer, 0, sizeof(rx_buffer));
+}
+
+void SerialProtocol::begin(unsigned long baud_rate) {
+    Serial.begin(baud_rate);
+    Serial.setTimeout(10);  // 10ms timeout
+}
+
+bool SerialProtocol::readLine(String& line) {
+    while (Serial.available()) {
+        char c = Serial.read();
+
+        if (c == '\n' || c == '\r') {
+            if (rx_index > 0) {
+                rx_buffer[rx_index] = '\0';
+                line = String(rx_buffer);
+                rx_index = 0;
+                return true;
+            }
+        } else if (rx_index < sizeof(rx_buffer) - 1) {
+            rx_buffer[rx_index++] = c;
+        }
+    }
+    return false;
+}
+
+bool SerialProtocol::parseCommand(const String& line, String& cmd, float* values, int& num_values) {
+    int start = 0;
+    int comma_pos = line.indexOf(',');
+
+    if (comma_pos == -1) {
+        // Command with no parameters
+        cmd = line;
+        num_values = 0;
+        return true;
+    }
+
+    cmd = line.substring(0, comma_pos);
+    num_values = 0;
+
+    start = comma_pos + 1;
+    while (start < line.length() && num_values < 10) {
+        comma_pos = line.indexOf(',', start);
+
+        String value_str;
+        if (comma_pos == -1) {
+            value_str = line.substring(start);
+        } else {
+            value_str = line.substring(start, comma_pos);
+        }
+
+        values[num_values++] = value_str.toFloat();
+
+        if (comma_pos == -1) break;
+        start = comma_pos + 1;
+    }
+
+    return true;
+}
+
+void SerialProtocol::sendOdometry(float x, float y, float theta, float vx, float vy, float omega) {
+    Serial.printf("ODOM,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\n", x, y, theta, vx, vy, omega);
+}
+
+void SerialProtocol::sendEncoders(float w1, float w2, float w3, float w4) {
+    Serial.printf("ENC,%.3f,%.3f,%.3f,%.3f\n", w1, w2, w3, w4);
+}
+
+void SerialProtocol::sendIMU(float ax, float ay, float az, float gx, float gy, float gz) {
+    Serial.printf("IMU,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\n", ax, ay, az, gx, gy, gz);
+}
+
+void SerialProtocol::sendStatus(float battery, float temperature) {
+    Serial.printf("STATUS,%.2f,%.1f\n", battery, temperature);
+}
+```
+
+---
+
+## ESP32 Main Application
+
+```cpp title="main.cpp"
+#include <Arduino.h>
+#include "serial_protocol.h"
+#include "encoder_reader.h"
+#include "pid_controller.h"
+
+SerialProtocol serial_proto;
+
+// Motor control objects (simplified)
+extern EncoderReader enc_fl, enc_fr, enc_rl, enc_rr;
+extern PIDController pid_fl, pid_fr, pid_rl, pid_rr;
+
+// Target velocities
+float target_vx = 0.0;
+float target_vy = 0.0;
+float target_omega = 0.0;
+
+// Odometry
+float odom_x = 0.0;
+float odom_y = 0.0;
+float odom_theta = 0.0;
+
+void setup() {
+    serial_proto.begin(115200);
+    // Initialize encoders, motors, IMU...
+}
+
+void loop() {
+    // Process incoming commands
+    String line;
+    if (serial_proto.readLine(line)) {
+        String cmd;
+        float values[10];
+        int num_values;
+
+        if (serial_proto.parseCommand(line, cmd, values, num_values)) {
+            if (cmd == "CMD" && num_values == 3) {
+                // Velocity command
+                target_vx = values[0];
+                target_vy = values[1];
+                target_omega = values[2];
+            }
+            else if (cmd == "RESET") {
+                // Reset odometry
+                odom_x = 0.0;
+                odom_y = 0.0;
+                odom_theta = 0.0;
+            }
+            else if (cmd == "PID" && num_values == 3) {
+                // Update PID gains
+                float kp = values[0];
+                float ki = values[1];
+                float kd = values[2];
+
+                pid_fl.setGains(kp, ki, kd);
+                pid_fr.setGains(kp, ki, kd);
+                pid_rl.setGains(kp, ki, kd);
+                pid_rr.setGains(kp, ki, kd);
+            }
+        }
+    }
+
+    // Send telemetry at 20 Hz
+    static unsigned long last_telemetry = 0;
+    if (millis() - last_telemetry >= 50) {
+        last_telemetry = millis();
+
+        // Update encoders
+        enc_fl.updateVelocity();
+        enc_fr.updateVelocity();
+        enc_rl.updateVelocity();
+        enc_rr.updateVelocity();
+
+        // Get velocities
+        float w_fl = enc_fl.getVelocity();
+        float w_fr = enc_fr.getVelocity();
+        float w_rl = enc_rl.getVelocity();
+        float w_rr = enc_rr.getVelocity();
+
+        // Calculate robot velocity (forward kinematics)
+        float vx = 0.0, vy = 0.0, omega = 0.0;
+        // (calculation omitted for brevity)
+
+        // Update odometry
+        float dt = 0.05;
+        odom_x += vx * dt;
+        odom_y += vy * dt;
+        odom_theta += omega * dt;
+
+        // Send telemetry
+        serial_proto.sendOdometry(odom_x, odom_y, odom_theta, vx, vy, omega);
+        serial_proto.sendEncoders(w_fl, w_fr, w_rl, w_rr);
+        // serial_proto.sendIMU(...);  // If IMU available
+    }
+}
+```
+
+---
+
+## ROS2 Python Bridge Node
+
+```python title="esp32_bridge_node.py"
+#!/usr/bin/env python3
+import rclpy
+from rclpy.node import Node
+from geometry_msgs.msg import Twist
+from nav_msgs.msg import Odometry
+from std_msgs.msg import Float32MultiArray
+import serial
+import threading
+
+class ESP32BridgeNode(Node):
+    def __init__(self):
+        super().__init__('esp32_bridge')
+
+        # Parameters
+        self.declare_parameter('serial_port', '/dev/ttyUSB0')
+        self.declare_parameter('baud_rate', 115200)
+
+        port = self.get_parameter('serial_port').value
+        baud = self.get_parameter('baud_rate').value
+
+        # Serial connection
+        try:
+            self.ser = serial.Serial(port, baud, timeout=0.1)
+            self.get_logger().info(f'Connected to {port} at {baud} baud')
+        except serial.SerialException as e:
+            self.get_logger().error(f'Failed to open serial port: {e}')
+            return
+
+        # Publishers
+        self.odom_pub = self.create_publisher(Odometry, '/odom', 10)
+        self.encoder_pub = self.create_publisher(Float32MultiArray, '/encoders', 10)
+
+        # Subscribers
+        self.cmd_vel_sub = self.create_subscription(
+            Twist, '/cmd_vel', self.cmd_vel_callback, 10
+        )
+
+        # Serial read thread
+        self.running = True
+        self.read_thread = threading.Thread(target=self.read_serial)
+        self.read_thread.start()
+
+        self.get_logger().info('ESP32 Bridge Node started')
+
+    def cmd_vel_callback(self, msg):
+        # Send velocity command to ESP32
+        cmd = f"CMD,{msg.linear.x:.4f},{msg.linear.y:.4f},{msg.angular.z:.4f}\n"
+        try:
+            self.ser.write(cmd.encode('utf-8'))
+        except serial.SerialException as e:
+            self.get_logger().error(f'Serial write error: {e}')
+
+    def read_serial(self):
+        while self.running and rclpy.ok():
+            try:
+                if self.ser.in_waiting > 0:
+                    line = self.ser.readline().decode('utf-8').strip()
+                    self.parse_line(line)
+            except serial.SerialException as e:
+                self.get_logger().error(f'Serial read error: {e}')
+            except UnicodeDecodeError:
+                pass  # Ignore decode errors
+
+    def parse_line(self, line):
+        parts = line.split(',')
+        if len(parts) == 0:
+            return
+
+        msg_type = parts[0]
+
+        try:
+            if msg_type == 'ODOM' and len(parts) == 7:
+                # Odometry message
+                odom = Odometry()
+                odom.header.stamp = self.get_clock().now().to_msg()
+                odom.header.frame_id = 'odom'
+                odom.child_frame_id = 'base_link'
+
+                odom.pose.pose.position.x = float(parts[1])
+                odom.pose.pose.position.y = float(parts[2])
+                # Convert theta to quaternion (simplified, use tf_transformations in practice)
+                odom.pose.pose.orientation.w = 1.0
+
+                odom.twist.twist.linear.x = float(parts[4])
+                odom.twist.twist.linear.y = float(parts[5])
+                odom.twist.twist.angular.z = float(parts[6])
+
+                self.odom_pub.publish(odom)
+
+            elif msg_type == 'ENC' and len(parts) == 5:
+                # Encoder message
+                encoders = Float32MultiArray()
+                encoders.data = [float(parts[1]), float(parts[2]),
+                                 float(parts[3]), float(parts[4])]
+                self.encoder_pub.publish(encoders)
+
+            elif msg_type == 'IMU' and len(parts) == 7:
+                # IMU message (implement if needed)
+                pass
+
+            elif msg_type == 'STATUS' and len(parts) == 3:
+                # Status message
+                battery = float(parts[1])
+                temp = float(parts[2])
+                self.get_logger().info(f'Battery: {battery}V, Temp: {temp}°C')
+
+        except ValueError as e:
+            self.get_logger().warn(f'Parse error: {e}')
+
+    def destroy_node(self):
+        self.running = False
+        if hasattr(self, 'read_thread'):
+            self.read_thread.join()
+        if hasattr(self, 'ser') and self.ser.is_open:
+            self.ser.close()
+        super().destroy_node()
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = ESP32BridgeNode()
+
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+```
+
+---
+
+## Testing
+
+### Manual Testing
+
+```bash
+# Terminal 1: Monitor ESP32 serial output
+screen /dev/ttyUSB0 115200
+
+# Terminal 2: Send commands manually
+echo "CMD,0.5,0.0,0.0" > /dev/ttyUSB0  # Forward 0.5 m/s
+echo "CMD,0.0,0.0,1.0" > /dev/ttyUSB0  # Rotate 1 rad/s
+echo "RESET" > /dev/ttyUSB0             # Reset odometry
+```
+
+### ROS2 Testing
+
+```bash
+# Launch bridge node
+ros2 run mecanum_control esp32_bridge_node
+
+# Send velocity command
+ros2 topic pub /cmd_vel geometry_msgs/Twist \
+  '{linear: {x: 0.5}, angular: {z: 0.0}}' -r 10
+
+# Monitor odometry
+ros2 topic echo /odom
+
+# Monitor encoders
+ros2 topic echo /encoders
+```
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="No serial connection">
+    **Solutions:**
+    1. Check USB cable (data, not charge-only)
+    2. Verify port name:
+       ```bash
+       ls /dev/ttyUSB*  # Linux
+       ls /dev/cu.*     # macOS
+       ```
+    3. Add user to dialout group (Linux):
+       ```bash
+       sudo usermod -a -G dialout $USER
+       # Logout and login
+       ```
+    4. Check permissions:
+       ```bash
+       sudo chmod 666 /dev/ttyUSB0
+       ```
+  </Accordion>
+
+  <Accordion title="Garbage characters received">
+    **Cause:** Baud rate mismatch
+
+    **Solutions:**
+    1. Verify both sides use 115200 baud
+    2. Check ESP32 code: `Serial.begin(115200)`
+    3. Check ROS2 parameter: `baud_rate: 115200`
+    4. Try standard rates: 9600, 57600, 115200
+  </Accordion>
+
+  <Accordion title="Commands not received by ESP32">
+    **Solutions:**
+    1. Verify line endings (\n)
+    2. Check buffer overflow (increase buffer size)
+    3. Add debug prints in ESP32:
+       ```cpp
+       Serial.print("Received: ");
+       Serial.println(line);
+       ```
+    4. Monitor with serial plotter
+  </Accordion>
+
+  <Accordion title="Telemetry data choppy / missing">
+    **Solutions:**
+    1. Reduce telemetry rate (20 Hz → 10 Hz)
+    2. Increase serial baud rate (115200 → 230400)
+    3. Send only essential data
+    4. Use binary protocol instead of CSV (advanced)
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="ROS2 Publisher" icon="broadcast-tower" href="/reference/code-examples/ros2-publisher">
+    Create ROS2 publisher nodes
+  </Card>
+
+  <Card title="ROS2 Subscriber" icon="inbox" href="/reference/code-examples/ros2-subscriber">
+    Create ROS2 subscriber nodes
+  </Card>
+
+  <Card title="Hardware Interface" icon="plug" href="/wp4-ros2/control/hardware-interface">
+    Integrate with ros2_control
+  </Card>
+
+  <Card title="ESP32 Basics" icon="microchip" href="/wp3-embedded/esp32-basics">
+    ESP32 serial configuration
+  </Card>
+</CardGroup>
+
+---
+
+## References
+
+- [PySerial Documentation](https://pyserial.readthedocs.io/)
+- [ESP32 UART](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/uart.html)
+- [ROS2 Serial Example](https://github.com/joshnewans/serial_motor_demo)

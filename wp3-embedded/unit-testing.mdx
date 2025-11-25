@@ -1,0 +1,542 @@
+---
+title: "Unit Testing Guide"
+description: "Systematic testing procedure for all embedded system components"
+---
+
+## Overview
+
+Before integrating everything, test each component individually. This **unit testing** approach helps you:
+- Identify problems early
+- Debug systematically
+- Build confidence in your system
+- Create documentation
+
+## Testing Philosophy
+
+<CardGroup cols={2}>
+  <Card title="Bottom-Up Testing" icon="arrow-up">
+    Start with simplest components (LED blink) and build up to complex systems (PID control).
+  </Card>
+
+  <Card title="One Thing at a Time" icon="1">
+    Test ONE component per session. Don't add multiple unknowns simultaneously.
+  </Card>
+
+  <Card title="Document Results" icon="file-lines">
+    Keep a testing log with date, test, result, and any issues found.
+  </Card>
+
+  <Card title="Known-Good Baseline" icon="check">
+    Once something works, save that code as a reference for future debugging.
+  </Card>
+</CardGroup>
+
+## Complete Testing Sequence
+
+<Steps>
+  <Step title="Test 1: ESP32 Basic I/O">
+    **Goal:** Verify ESP32 programming works
+
+    **Test Code:**
+    ```cpp
+    void setup() {
+      pinMode(2, OUTPUT);  // Built-in LED
+    }
+
+    void loop() {
+      digitalWrite(2, HIGH);
+      delay(1000);
+      digitalWrite(2, LOW);
+      delay(1000);
+    }
+    ```
+
+    **Success Criteria:**
+    - [ ] Code uploads without errors
+    - [ ] LED blinks at 1Hz
+    - [ ] Can modify blink rate and see change
+
+    **Common Issues:**
+    - Upload fails → Check drivers, USB cable, COM port
+    - LED doesn't blink → Try different GPIO pin
+  </Step>
+
+  <Step title="Test 2: Serial Communication">
+    **Goal:** Verify Serial Monitor works
+
+    **Test Code:**
+    ```cpp
+    void setup() {
+      Serial.begin(115200);
+      Serial.println("ESP32 Serial Test");
+    }
+
+    void loop() {
+      Serial.print("Millis: ");
+      Serial.println(millis());
+      delay(1000);
+    }
+    ```
+
+    **Success Criteria:**
+    - [ ] Serial Monitor opens (baud: 115200)
+    - [ ] Messages print correctly
+    - [ ] Counter increments by ~1000 each second
+
+    **Common Issues:**
+    - Garbage characters → Check baud rate matches
+    - No output → Press ESP32 RESET button
+  </Step>
+
+  <Step title="Test 3: PWM Output">
+    **Goal:** Verify PWM generation
+
+    **Test Code:**
+    ```cpp
+    #define PWM_PIN 4
+    #define PWM_CHANNEL 0
+
+    void setup() {
+      ledcSetup(PWM_CHANNEL, 5000, 8);  // 5kHz, 8-bit
+      ledcAttachPin(PWM_PIN, PWM_CHANNEL);
+    }
+
+    void loop() {
+      for (int duty = 0; duty <= 255; duty += 5) {
+        ledcWrite(PWM_CHANNEL, duty);
+        delay(50);
+      }
+    }
+    ```
+
+    **Success Criteria:**
+    - [ ] LED fades smoothly from off to full bright
+    - [ ] Can measure with oscilloscope (optional)
+    - [ ] Frequency ~5kHz (if measured)
+
+    **Test with Motor Driver:**
+    - Connect PWM_PIN to motor driver RPWM
+    - Motor should spin, speed varying
+  </Step>
+
+  <Step title="Test 4: Motor Driver (Open-Loop)">
+    **Goal:** Verify motor spins
+
+    **Hardware:**
+    - ESP32 → IBT-2 driver (RPWM, LPWM, GND, VCC, EN)
+    - IBT-2 → Motor (M+, M-)
+    - 12V power → IBT-2 (B+, B-)
+
+    **Test Code:**
+    ```cpp
+    #define RPWM_PIN 4
+    #define LPWM_PIN 16
+
+    void setup() {
+      Serial.begin(115200);
+      ledcSetup(0, 5000, 8);
+      ledcSetup(1, 5000, 8);
+      ledcAttachPin(RPWM_PIN, 0);
+      ledcAttachPin(LPWM_PIN, 1);
+      
+      Serial.println("Motor test starting...");
+    }
+
+    void loop() {
+      Serial.println("Forward 50%");
+      ledcWrite(0, 128);  // RPWM: 50%
+      ledcWrite(1, 0);    // LPWM: 0%
+      delay(3000);
+      
+      Serial.println("Stop");
+      ledcWrite(0, 0);
+      ledcWrite(1, 0);
+      delay(2000);
+      
+      Serial.println("Reverse 50%");
+      ledcWrite(0, 0);
+      ledcWrite(1, 128);
+      delay(3000);
+      
+      Serial.println("Stop");
+      ledcWrite(0, 0);
+      ledcWrite(1, 0);
+      delay(2000);
+    }
+    ```
+
+    **Success Criteria:**
+    - [ ] Motor spins forward for 3 sec
+    - [ ] Motor stops for 2 sec
+    - [ ] Motor spins reverse for 3 sec
+    - [ ] Direction is correct
+
+    **If motor spins wrong direction:**
+    - Swap M+ and M- wires on motor
+
+    **Safety:**
+    - Start at low duty cycle (50-100)
+    - Secure robot (won't roll off table)
+    - Emergency stop ready (unplug battery)
+  </Step>
+
+  <Step title="Test 5: Encoder Reading">
+    **Goal:** Verify encoder pulses are detected
+
+    **Hardware:**
+    - Encoder A → GPIO 22
+    - Encoder B → GPIO 23
+    - Encoder GND → ESP32 GND
+    - Encoder VCC → ESP32 5V
+
+    **Test Code:**
+    ```cpp
+    #define ENC_A 22
+    #define ENC_B 23
+
+    volatile long count = 0;
+
+    void IRAM_ATTR encoderISR() {
+      if (digitalRead(ENC_A) == digitalRead(ENC_B)) {
+        count++;
+      } else {
+        count--;
+      }
+    }
+
+    void setup() {
+      Serial.begin(115200);
+      pinMode(ENC_A, INPUT_PULLUP);
+      pinMode(ENC_B, INPUT_PULLUP);
+      attachInterrupt(digitalPinToInterrupt(ENC_A), encoderISR, CHANGE);
+      attachInterrupt(digitalPinToInterrupt(ENC_B), encoderISR, CHANGE);
+    }
+
+    void loop() {
+      Serial.print("Count: ");
+      Serial.println(count);
+      delay(100);
+    }
+    ```
+
+    **Success Criteria:**
+    - [ ] Count changes when wheel rotated manually
+    - [ ] Count increases when rotated one direction
+    - [ ] Count decreases when rotated opposite direction
+    - [ ] ~330 counts per output shaft revolution
+
+    **Test:**
+    - Mark wheel position
+    - Rotate exactly 1 revolution
+    - Count should change by ~330 (±10)
+
+    **Common Issues:**
+    - Count doesn't change → Check encoder power and wiring
+    - Counts randomly → Noise on wires, add capacitor
+    - Wrong direction → Swap A and B pins in code
+  </Step>
+
+  <Step title="Test 6: Velocity Estimation">
+    **Goal:** Calculate motor speed from encoder
+
+    **Test Code:** (Add to encoder test)
+    ```cpp
+    long lastCount = 0;
+    unsigned long lastTime = 0;
+
+    void loop() {
+      static unsigned long printTime = 0;
+      
+      if (millis() - printTime >= 100) {
+        printTime = millis();
+        
+        // Calculate velocity
+        unsigned long now = millis();
+        long currentCount = count;
+        
+        float dt = (now - lastTime) / 1000.0;
+        float deltaCount = currentCount - lastCount;
+        float velocity = (deltaCount / 330.0) * 2 * PI / dt;  // rad/s
+        
+        Serial.print("Velocity: ");
+        Serial.print(velocity);
+        Serial.println(" rad/s");
+        
+        lastCount = currentCount;
+        lastTime = now;
+      }
+    }
+    ```
+
+    **Test Method:**
+    - Run motor at constant PWM (e.g., 128/255)
+    - Observe velocity readings
+    - Should stabilize after a few seconds
+
+    **Success Criteria:**
+    - [ ] Velocity reading is stable (±10%)
+    - [ ] Higher PWM → higher velocity
+    - [ ] Velocity ~5-15 rad/s range
+  </Step>
+
+  <Step title="Test 7: Closed-Loop Control (PID)">
+    **Goal:** Control motor speed precisely
+
+    **Use complete motor control code from D3.1**
+
+    **Test Procedure:**
+    1. Upload PID control code
+    2. Open Serial Monitor
+    3. Send command: `q5` (target 5 rad/s)
+    4. Observe response:
+       - Motor accelerates
+       - Settles to ~5 rad/s
+       - Minimal oscillation
+
+    **Success Criteria:**
+    - [ ] Motor reaches setpoint within 1 second
+    - [ ] Steady-state error < 5%
+    - [ ] Overshoot < 20%
+    - [ ] No continuous oscillation
+
+    **Tuning:**
+    - If oscillates: Reduce Kp
+    - If too slow: Increase Kp
+    - If steady-state error: Increase Ki
+    - If overshoots: Add/increase Kd
+  </Step>
+
+  <Step title="Test 8: I2C Communication">
+    **Goal:** Verify I2C bus works
+
+    **Test Code: I2C Scanner**
+    ```cpp
+    #include <Wire.h>
+
+    void setup() {
+      Serial.begin(115200);
+      Wire.begin(21, 22);  // SDA, SCL
+      Serial.println("I2C Scanner");
+    }
+
+    void loop() {
+      Serial.println("Scanning...");
+      
+      for (byte addr = 1; addr < 127; addr++) {
+        Wire.beginTransmission(addr);
+        byte error = Wire.endTransmission();
+        
+        if (error == 0) {
+          Serial.print("Device at 0x");
+          if (addr < 16) Serial.print("0");
+          Serial.println(addr, HEX);
+        }
+      }
+      
+      delay(5000);
+    }
+    ```
+
+    **Success Criteria:**
+    - [ ] Scan completes without crash
+    - [ ] IMU detected at 0x68 or 0x69
+    - [ ] Any other I2C devices show up
+
+    **Common Issues:**
+    - No devices found → Check SDA/SCL wiring
+    - Scanner hangs → Short circuit or power issue
+  </Step>
+
+  <Step title="Test 9: IMU Data Reading">
+    **Goal:** Read accelerometer and gyroscope
+
+    **Use IMU integration code from D3.2**
+
+    **Success Criteria:**
+    - [ ] IMU initializes successfully
+    - [ ] Accelerometer reads ~9.8 m/s² on Z axis (when flat)
+    - [ ] Gyroscope reads near zero when stationary
+    - [ ] Values change when IMU moved/rotated
+  </Step>
+
+  <Step title="Test 10: Multi-Motor Control">
+    **Goal:** Control all 4 motors simultaneously
+
+    **Expand single motor code to 4 motors**
+
+    **Success Criteria:**
+    - [ ] All 4 motors can be commanded independently
+    - [ ] No interference between motors
+    - [ ] Encoder readings from all 4 motors
+    - [ ] PID control works on all motors
+
+    **Test Pattern:**
+    - All forward at same speed → robot goes straight
+    - Diagonal pairs opposite → robot strafes
+    - Left/right opposite → robot rotates
+  </Step>
+</Steps>
+
+## Testing Log Template
+
+Keep a record of your tests:
+
+```
+Date: 2024-XX-XX
+Test: Motor Driver Open-Loop
+Hardware: ESP32 + IBT-2 + Motor 1
+Result: ✅ Pass / ❌ Fail
+Notes: Motor spins correctly in both directions at 50% PWM.
+      Direction was reversed initially - swapped M+ and M-.
+Next: Test encoder with this motor.
+
+Date: 2024-XX-XX
+Test: Encoder Reading
+Result: ❌ Fail
+Notes: Encoder count not changing. Checked:
+      - Power: 5V present ✅
+      - Wiring: A→GPIO22, B→GPIO23 ✅
+      - Code: Interrupts attached ✅
+      Issue: Found encoder cable damaged. Replaced.
+Next: Retest encoder tomorrow.
+```
+
+## Debugging Techniques
+
+<AccordionGroup>
+  <Accordion title="Serial Print Debugging" icon="terminal">
+    **Most basic and effective:**
+
+    ```cpp
+    Serial.print("Variable value: ");
+    Serial.println(myVariable);
+    ```
+
+    **Tips:**
+    - Print before and after suspect code
+    - Print multiple variables to trace logic
+    - Use descriptive labels
+  </Accordion>
+
+  <Accordion title="LED Indicators" icon="lightbulb">
+    **When Serial not available:**
+
+    ```cpp
+    digitalWrite(LED_PIN, HIGH);  // Mark this code reached
+    ```
+
+    **Blink patterns:**
+    - 1 blink = Stage 1 reached
+    - 2 blinks = Stage 2 reached
+    - Fast blinking = Error condition
+  </Accordion>
+
+  <Accordion title="Multimeter Measurements" icon="bolt">
+    **Essential for hardware issues:**
+
+    - Verify voltages (12V, 5V, 3.3V)
+    - Check continuity (wires connected)
+    - Measure current draw
+    - Check PWM signal (DC voltage mode shows average)
+  </Accordion>
+
+  <Accordion title="Oscilloscope (If Available)" icon="wave-square">
+    **For advanced debugging:**
+
+    - View PWM waveforms
+    - Check encoder pulses
+    - Measure timing (interrupt latency)
+    - Detect noise/glitches
+  </Accordion>
+
+  <Accordion title="Incremental Changes" icon="stairs">
+    **When something breaks:**
+
+    1. Go back to last working version
+    2. Add ONE small change
+    3. Test
+    4. If works, add next change
+    5. If fails, undo and try different approach
+  </Accordion>
+</AccordionGroup>
+
+## Common Problems & Solutions
+
+| Symptom | Likely Cause | Solution |
+|---------|--------------|----------|
+| Code won't upload | USB driver, wrong port | Install drivers, check COM port |
+| ESP32 keeps resetting | Power issue, infinite loop | Check power supply, add delays |
+| Motor doesn't spin | Wiring, power, enable pins | Check connections, verify 12V |
+| Encoder count zero | Power, wiring, ISR not attached | Verify 5V to encoder, check code |
+| Velocity very noisy | Electrical noise, low resolution | Add filtering, increase counts |
+| PID oscillates | Gains too high | Reduce Kp, Ki, Kd |
+| IMU not detected | I2C wiring, address wrong | I2C scanner, check SDA/SCL |
+| Everything works alone, fails together | Power/ground issues | Check common ground, power capacity |
+
+## Performance Benchmarks
+
+**Expected Results:**
+
+| Component | Metric | Expected | Notes |
+|-----------|--------|----------|-------|
+| **Encoder** | Resolution | 330 CPR | ±2% acceptable |
+| **Velocity** | Accuracy | ±5% | At steady state |
+| **PID Rise Time** | Time to 90% | &lt;0.5 sec | Depends on tuning |
+| **PID Overshoot** | % over target | &lt;15% | Lower is better |
+| **IMU Update Rate** | Frequency | >50 Hz | 100+ Hz ideal |
+| **Control Loop** | Frequency | 100 Hz | Critical for smooth control |
+
+## Pre-Integration Checklist
+
+Before combining all systems:
+
+- [ ] Each motor tested individually
+- [ ] Each encoder verified (count and direction)
+- [ ] PID tuned for at least one motor
+- [ ] IMU reads sensible data
+- [ ] Serial communication stable
+- [ ] Power system adequate (no brownouts)
+- [ ] All wiring labeled and secure
+- [ ] Safety stop procedure defined
+- [ ] Testing log documented
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="WP4: ROS2 Setup"
+    icon="robot"
+    href="/wp4-ros2/setup/computer-preparation"
+  >
+    Set up ROS2 environment for autonomous navigation
+  </Card>
+
+  <Card
+    title="Integration Testing"
+    icon="diagram-project"
+    href="/wp5-integration/system-integration"
+  >
+    Combine all subsystems
+  </Card>
+
+  <Card
+    title="Troubleshooting Guide"
+    icon="life-ring"
+    href="/troubleshooting/common-errors"
+  >
+    Solutions to common problems
+  </Card>
+
+  <Card
+    title="Code Examples"
+    icon="code"
+    href="/reference/code-examples/encoder-reading"
+  >
+    Reference implementations
+  </Card>
+</CardGroup>
+
+## References
+
+[1] Unit Testing Embedded Systems: https://interrupt.memfault.com/blog/unit-testing-basics
+[2] Debugging Embedded Systems: https://betterembsw.blogspot.com/

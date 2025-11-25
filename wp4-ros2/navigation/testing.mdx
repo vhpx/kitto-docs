@@ -1,0 +1,606 @@
+---
+title: "Navigation Testing"
+description: "Comprehensive testing procedures for autonomous navigation system"
+---
+
+## Overview
+
+Navigation testing validates that your robot can reliably navigate from any point A to point B while avoiding obstacles. This is the final integration test before deployment.
+
+<Note>
+  **Testing Goal:** Achieve >90% success rate for navigation tasks in target environment.
+</Note>
+
+## Pre-Test Checklist
+
+- [ ] **Map Quality:**
+  - Map complete (no large unknown areas)
+  - Walls continuous, no gaps
+  - Resolution appropriate (5cm for indoor)
+
+- [ ] **Localization:**
+  - AMCL or EKF working
+  - Robot correctly localized in map
+  - Localization error <10cm
+
+- [ ] **Hardware:**
+  - LiDAR clean, functioning
+  - Motors respond to `/cmd_vel`
+  - Battery charged (>80%)
+  - All wheels turning freely
+
+- [ ] **Software:**
+  - All Nav2 nodes running
+  - Costmaps publishing
+  - No errors in logs
+
+## Test Levels
+
+### Level 1: Static Environment
+
+**Controlled testing** with no dynamic obstacles.
+
+<Steps>
+  <Step title="Point-to-Point Navigation">
+    **Test: Navigate to nearby goal (2-3m)**
+
+    1. Set 2D Pose Estimate (localize robot)
+    2. Set 2D Nav Goal 2m away
+    3. Observe robot navigate
+
+    **Success criteria:**
+    - Robot reaches goal (<10cm error)
+    - No collisions
+    - Smooth motion (no jerking/oscillation)
+    - Time: <30 seconds
+
+    **Repeat:** 10 trials, different goals
+  </Step>
+
+  <Step title="Long-Distance Navigation">
+    **Test: Navigate across room/building (10-20m)**
+
+    1. Choose goal at opposite end of map
+    2. Send navigation goal
+    3. Monitor progress
+
+    **Success criteria:**
+    - Reaches goal within 10% distance error
+    - Follows reasonable path (not excessive detours)
+    - No stuck situations
+    - Time: <2 minutes for 10m
+
+    **Repeat:** 5 trials
+  </Step>
+
+  <Step title="Narrow Passage">
+    **Test: Navigate through doorway/corridor**
+
+    1. Goal on opposite side of narrow passage
+    2. Send goal
+    3. Watch clearance
+
+    **Success criteria:**
+    - Passes through without collision
+    - Doesn't get stuck (oscillating)
+    - Maintains safe distance from walls (>5cm)
+
+    **Repeat:** 3 trials
+  </Step>
+
+  <Step title="Cluttered Area">
+    **Test: Navigate through furniture/obstacles**
+
+    1. Goal in area with many obstacles
+    2. Send goal
+    3. Monitor path planning
+
+    **Success criteria:**
+    - Finds valid path
+    - Avoids all obstacles
+    - Doesn't take excessively long route (< 2x straight-line distance)
+
+    **Repeat:** 5 trials
+  </Step>
+
+  <Step title="Dead-End Recovery">
+    **Test: Goal in corner/dead-end**
+
+    1. Send goal to corner
+    2. Let robot navigate
+    3. Observe final approach
+
+    **Success criteria:**
+    - Reaches goal despite limited maneuvering space
+    - Uses recovery behaviors if needed
+    - Doesn't give up prematurely
+
+    **Repeat:** 3 trials
+  </Step>
+</Steps>
+
+### Level 2: Dynamic Environment
+
+**Real-world testing** with moving obstacles (people, other robots).
+
+<Steps>
+  <Step title="Moving Obstacle Avoidance">
+    **Test: Person crosses robot's path**
+
+    1. Start navigation to goal
+    2. Have person walk across path
+    3. Observe avoidance behavior
+
+    **Success criteria:**
+    - Slows down or stops when person approaches
+    - Waits or re-routes around person
+    - Resumes navigation after clearance
+    - No collisions
+
+    **Repeat:** 5 trials, different crossing angles
+  </Step>
+
+  <Step title="Crowded Area">
+    **Test: Navigate through group of people**
+
+    1. Goal requires passing through crowded area
+    2. Send goal
+    3. Monitor navigation
+
+    **Success criteria:**
+    - Navigates slowly through crowd
+    - Maintains safe distance (>30cm)
+    - Doesn't get indefinitely stuck
+    - Reaches goal or requests help
+
+    **Repeat:** 3 trials
+  </Step>
+
+  <Step title="Unexpected Blockage">
+    **Test: Path blocked after planning**
+
+    1. Start navigation
+    2. Physically block path (place box mid-route)
+    3. Observe recovery
+
+    **Success criteria:**
+    - Detects blockage
+    - Re-plans around obstacle
+    - Finds alternative path
+    - Reaches goal
+
+    **Repeat:** 3 trials
+  </Step>
+</Steps>
+
+### Level 3: Waypoint Navigation
+
+**Multi-goal testing.**
+
+<Steps>
+  <Step title="Sequential Waypoints">
+    **Test: Visit 5 waypoints in order**
+
+    1. Define waypoint sequence
+    2. Start waypoint follower
+    3. Monitor completion
+
+    **Success criteria:**
+    - Visits all waypoints
+    - Correct order
+    - &lt;20cm error at each waypoint
+    - No failures requiring manual intervention
+
+    **Test waypoints:**
+    ```python
+    waypoints = [
+        (2.0, 1.0, 0.0),    # x, y, yaw
+        (4.0, 1.0, 1.57),
+        (4.0, 3.0, 3.14),
+        (2.0, 3.0, -1.57),
+        (0.0, 0.0, 0.0)     # Return to start
+    ]
+    ```
+  </Step>
+
+  <Step title="Patrol Route">
+    **Test: Continuous patrol loop**
+
+    1. Define patrol route (3-4 points)
+    2. Start infinite patrol
+    3. Run for 30 minutes
+
+    **Success criteria:**
+    - Completes at least 10 loops
+    - No stuck situations
+    - Average loop time consistent (±20%)
+    - <1 failure per hour
+
+    **Monitor:**
+    - Battery consumption
+    - Localization drift
+    - Recovery behavior frequency
+  </Step>
+</Steps>
+
+## Performance Metrics
+
+### Success Rate
+
+```
+Success Rate = (Successful Navigations / Total Attempts) × 100%
+```
+
+**Targets:**
+- **Static environment:** >95%
+- **Dynamic environment:** >85%
+- **Waypoint navigation:** >90%
+
+### Time Efficiency
+
+```
+Efficiency = (Straight-line Distance / Actual Path Length) × 100%
+```
+
+**Good:** >70% (path not more than 40% longer than direct)
+
+### Robustness
+
+**Recovery behavior frequency:**
+```bash
+# Count recovery behaviors in 1 hour
+ros2 topic echo /behavior_tree_log | grep -c "Recovery"
+```
+
+**Target:** <5 recoveries per hour in normal operation
+
+## Automated Testing Script
+
+```python
+#!/usr/bin/env python3
+import rclpy
+from rclpy.node import Node
+from geometry_msgs.msg import PoseStamped
+from nav2_msgs.action import NavigateToPose
+from rclpy.action import ActionClient
+import time
+
+class NavTester(Node):
+    def __init__(self):
+        super().__init__('nav_tester')
+        self.nav_to_pose_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
+
+    def send_goal(self, x, y, yaw):
+        goal_msg = NavigateToPose.Goal()
+        goal_msg.pose.header.frame_id = 'map'
+        goal_msg.pose.pose.position.x = x
+        goal_msg.pose.pose.position.y = y
+        goal_msg.pose.pose.orientation.z = np.sin(yaw / 2.0)
+        goal_msg.pose.pose.orientation.w = np.cos(yaw / 2.0)
+
+        self.nav_to_pose_client.wait_for_server()
+        send_goal_future = self.nav_to_pose_client.send_goal_async(goal_msg)
+        rclpy.spin_until_future_complete(self, send_goal_future)
+
+        goal_handle = send_goal_future.result()
+        if not goal_handle.accepted:
+            self.get_logger().error('Goal rejected')
+            return False
+
+        result_future = goal_handle.get_result_async()
+        rclpy.spin_until_future_complete(self, result_future)
+
+        return result_future.result().status == 4  # SUCCEEDED
+
+    def run_test_suite(self, test_goals):
+        results = []
+        for i, (x, y, yaw) in enumerate(test_goals):
+            self.get_logger().info(f'Test {i+1}/{len(test_goals)}: Goal ({x}, {y}, {yaw})')
+            start_time = time.time()
+
+            success = self.send_goal(x, y, yaw)
+            elapsed = time.time() - start_time
+
+            results.append({
+                'goal': (x, y, yaw),
+                'success': success,
+                'time': elapsed
+            })
+
+            self.get_logger().info(f'Result: {"SUCCESS" if success else "FAILURE"}, Time: {elapsed:.1f}s')
+            time.sleep(2)  # Pause between tests
+
+        # Summary
+        successes = sum(1 for r in results if r['success'])
+        success_rate = (successes / len(results)) * 100
+        avg_time = np.mean([r['time'] for r in results if r['success']])
+
+        self.get_logger().info(f'\n=== Test Summary ===')
+        self.get_logger().info(f'Success Rate: {success_rate:.1f}%')
+        self.get_logger().info(f'Average Time: {avg_time:.1f}s')
+
+        return results
+
+def main():
+    rclpy.init()
+    tester = NavTester()
+
+    # Define test goals
+    test_goals = [
+        (2.0, 1.0, 0.0),
+        (4.0, 2.0, 1.57),
+        (3.0, 3.0, 3.14),
+        (1.0, 2.5, -1.57),
+        (0.0, 0.0, 0.0)
+    ]
+
+    tester.run_test_suite(test_goals)
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+```
+
+**Usage:**
+```bash
+python3 nav_test_suite.py
+```
+
+## Data Collection
+
+### Record Test Data
+
+```bash
+# Record navigation session
+ros2 bag record \
+  /plan \
+  /local_plan \
+  /cmd_vel \
+  /odometry/filtered \
+  /scan \
+  /global_costmap/costmap \
+  /local_costmap/costmap \
+  /behavior_tree_log \
+  -o nav_test_$(date +%Y%m%d_%H%M%S)
+```
+
+### Analysis
+
+**Plot path taken:**
+```python
+import rosbag2_py
+import matplotlib.pyplot as plt
+
+# Read odometry from bag
+odom_path = []
+# ... (extract from bag)
+
+plt.figure()
+plt.plot([p.x for p in odom_path], [p.y for p in odom_path], 'b-', label='Actual Path')
+plt.plot([goal.x], [goal.y], 'r*', markersize=15, label='Goal')
+plt.legend()
+plt.xlabel('X (m)')
+plt.ylabel('Y (m)')
+plt.title('Navigation Path')
+plt.axis('equal')
+plt.grid()
+plt.savefig('nav_path.png')
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Low success rate (<80%)" icon="chart-line">
+    **Investigate:**
+    1. Check which tests fail most
+    2. Review logs for common errors
+    3. Watch RViz during failures
+
+    **Common causes:**
+    - Localization drift
+    - Costmap inflation too large
+    - Planner timeout too short
+    - Recovery behaviors not helping
+
+    **Solutions:**
+    - Improve localization (add AMCL, tune EKF)
+    - Reduce `inflation_radius`
+    - Increase `max_planning_time`
+    - Tune recovery behaviors
+  </Accordion>
+
+  <Accordion title="Slow navigation (>2 min for 10m)" icon="clock">
+    **Causes:**
+    - Conservative velocity limits
+    - Excessive replanning
+    - Poor path quality (too long)
+    - CPU overload
+
+    **Solutions:**
+    ```yaml
+    # Increase velocity limits
+    max_vel_x: 0.7  # Increase from 0.5
+
+    # Reduce replanning frequency
+    planner_server:
+      ros__parameters:
+        expected_planner_frequency: 0.5  # Decrease from 1.0
+
+    # Optimize CPU
+    - Reduce costmap update frequency
+    - Decrease controller samples
+    ```
+  </Accordion>
+
+  <Accordion title="Frequent collisions" icon="triangle-exclamation">
+    **Unacceptable!** Collisions indicate serious issues.
+
+    **Debug:**
+    1. Check robot footprint accurate
+    2. Verify obstacle_layer sees obstacles
+    3. Increase inflation
+
+    **Solutions:**
+    ```yaml
+    # Increase robot size (conservative)
+    robot_radius: 0.25  # Increase from 0.22
+
+    # Increase inflation
+    inflation_radius: 0.7  # Increase from 0.55
+
+    # Reduce velocity near obstacles
+    BaseObstacle.scale: 0.05  # Increase from 0.02
+    ```
+  </Accordion>
+
+  <Accordion title="Gets stuck often" icon="circle-stop">
+    **Causes:**
+    - Recovery behaviors failing
+    - Costmap clearing not helping
+    - Goals in tight spaces
+
+    **Solutions:**
+    - Tune recovery behaviors (spin distance, backup distance)
+    - Clear larger costmap area
+    - Add more recovery options to BT
+    - Avoid goals near obstacles
+  </Accordion>
+</AccordionGroup>
+
+## Benchmark Tests
+
+### Standard Test Suite
+
+**Test 1: Open Space (Easy)**
+- 10m straight line
+- No obstacles
+- Target time: <20s
+- Expected success: 100%
+
+**Test 2: Doorway (Medium)**
+- Navigate through 0.8m doorway
+- 5m total distance
+- Target time: <30s
+- Expected success: >95%
+
+**Test 3: Cluttered (Hard)**
+- 10m through furniture
+- >10 obstacles to avoid
+- Target time: <60s
+- Expected success: >85%
+
+**Test 4: Waypoint Circuit (Integration)**
+- 5 waypoints, 30m total
+- Mix of open/cluttered
+- Target time: <120s
+- Expected success: >90%
+
+### Performance Baselines
+
+| Metric | Good | Acceptable | Poor |
+|--------|------|------------|------|
+| Success Rate | >95% | 80-95% | <80% |
+| Avg. Speed | >0.4 m/s | 0.2-0.4 m/s | <0.2 m/s |
+| Path Efficiency | >75% | 60-75% | <60% |
+| Recovery Freq. | <3/hour | 3-10/hour | >10/hour |
+| Collision Rate | 0% | <1% | >1% |
+
+## Test Report Template
+
+```markdown
+# Navigation Test Report
+
+**Date:** 2024-03-20
+**Environment:** Lab Floor 2
+**Map:** lab_floor2_v1.2
+**Software:** Nav2 Jazzy, Mecanum v1.0
+
+## Configuration
+- Planner: NavFn
+- Controller: DWB
+- Max Velocity: 0.5 m/s
+- Inflation Radius: 0.55m
+
+## Test Results
+
+### Level 1: Static Environment
+| Test | Trials | Successes | Success Rate | Avg Time |
+|------|--------|-----------|--------------|----------|
+| Point-to-Point | 10 | 10 | 100% | 12.3s |
+| Long Distance | 5 | 5 | 100% | 45.2s |
+| Narrow Passage | 3 | 3 | 100% | 28.1s |
+| Cluttered | 5 | 4 | 80% | 62.5s |
+| Dead-End | 3 | 3 | 100% | 35.8s |
+
+**Overall Static: 25/26 (96.2%)**
+
+### Level 2: Dynamic Environment
+| Test | Trials | Successes | Success Rate |
+|------|--------|-----------|--------------|
+| Moving Obstacle | 5 | 5 | 100% |
+| Crowded Area | 3 | 2 | 67% |
+| Unexpected Block | 3 | 3 | 100% |
+
+**Overall Dynamic: 10/11 (90.9%)**
+
+### Level 3: Waypoints
+- Sequential (5 waypoints): 5/5 (100%)
+- Patrol (30 min, 12 loops): 12/12 (100%)
+
+## Issues Found
+1. **Cluttered area failure:** Robot got stuck between chair and table. Recovery behaviors insufficient.
+   - **Solution:** Increase spin distance in recovery BT
+
+2. **Crowded area failure:** Robot gave up after 2 minutes of waiting for people to clear.
+   - **Solution:** Increase timeout, add "request assistance" behavior
+
+## Recommendations
+- Deploy in production ✓
+- Monitor first week closely
+- Consider increasing max velocity to 0.6 m/s after validation period
+
+## Conclusion
+Navigation system ready for deployment. Success rate exceeds 90% target in all test levels.
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="System Integration"
+    icon="diagram-project"
+    href="/wp5-integration/system-integration"
+  >
+    Integrate all subsystems for complete robot
+  </Card>
+
+  <Card
+    title="Deployment"
+    icon="rocket"
+    href="/wp5-integration/deployment"
+  >
+    Deploy robot in production environment
+  </Card>
+
+  <Card
+    title="LiDAR Setup"
+    icon="radar"
+    href="/wp4-ros2/sensors/lidar-setup"
+  >
+    Optimize LiDAR for navigation
+  </Card>
+
+  <Card
+    title="Troubleshooting"
+    icon="life-ring"
+    href="/troubleshooting/navigation"
+  >
+    Common navigation issues and solutions
+  </Card>
+</CardGroup>
+
+## References
+
+[1] Nav2 Testing: https://docs.nav2.org/development_guides/writing_new_tests.html
+[2] Metrics for Autonomous Systems: https://arxiv.org/abs/1905.04861
+[3] ROS2 Bag: https://docs.ros.org/en/jazzy/Tutorials/Beginner-CLI-Tools/Recording-And-Playing-Back-Data/Recording-And-Playing-Back-Data.html

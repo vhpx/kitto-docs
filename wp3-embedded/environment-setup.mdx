@@ -1,0 +1,382 @@
+---
+title: "Development Environment Setup"
+description: "Install and configure VSCode, PlatformIO, and ESP32 toolchain for embedded development"
+---
+
+## Overview
+
+Setting up a proper development environment is crucial for productive embedded programming. We'll use VSCode with PlatformIO, which provides excellent support for ESP32 development.
+
+## Why VSCode + PlatformIO?
+
+<CardGroup cols={2}>
+  <Card title="Better than Arduino IDE" icon="code">
+    - IntelliSense (code completion)
+    - Advanced debugging
+    - Git integration
+    - Professional IDE features
+  </Card>
+
+  <Card title="Library Management" icon="box">
+    - Easy library installation
+    - Dependency management
+    - Multiple boards/platforms
+    - Built-in examples
+  </Card>
+</CardGroup>
+
+## Installation Steps
+
+### Step 1: Install VSCode
+
+<Tabs>
+  <Tab title="Windows">
+    1. Download from https://code.visualstudio.com/
+    2. Run installer (VSCodeUserSetup-x64-X.XX.X.exe)
+    3. **Important:** Check "Add to PATH" during installation
+    4. Complete installation
+  </Tab>
+
+  <Tab title="macOS">
+    1. Download from https://code.visualstudio.com/
+    2. Open the .zip file
+    3. Drag Visual Studio Code.app to Applications folder
+    4. Launch VSCode from Applications
+  </Tab>
+
+  <Tab title="Linux (Ubuntu)">
+    ```bash
+    # Download .deb package or use snap:
+    sudo snap install --classic code
+    
+    # Or via apt:
+    sudo apt update
+    sudo apt install software-properties-common apt-transport-https wget
+    wget -q https://packages.microsoft.com/keys/microsoft.asc -O- | sudo apt-key add -
+    sudo add-apt-repository "deb [arch=amd64] https://packages.microsoft.com/repos/vscode stable main"
+    sudo apt update
+    sudo apt install code
+    ```
+  </Tab>
+</Tabs>
+
+### Step 2: Install PlatformIO Extension
+
+1. Open VSCode
+2. Click Extensions icon (or Ctrl+Shift+X)
+3. Search for "PlatformIO IDE"
+4. Click "Install"
+5. Wait for installation (may take 5-10 minutes)
+6. Restart VSCode when prompted
+
+<img
+  src="/images/platformio-install.png"
+  alt="PlatformIO extension in VSCode marketplace"
+  caption="Install PlatformIO IDE extension from VSCode marketplace"
+/>
+
+### Step 3: Install USB Drivers (Windows only)
+
+ESP32 uses CP2102 or CH340 USB-to-Serial chips:
+
+**CP2102 Driver:**
+- Download from: https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers
+- Run installer
+- Restart computer
+
+**CH340 Driver:**
+- Download from: http://www.wch.cn/downloads/CH341SER_ZIP.html
+- Run installer
+- Restart computer
+
+**Mac/Linux:** Usually works out of the box! No drivers needed.
+
+### Step 4: Verify Installation
+
+1. Open VSCode
+2. Click PlatformIO icon in left sidebar (alien head)
+3. Should see PlatformIO Home screen
+4. If not, check for error messages in Output panel
+
+## Create First Project
+
+<Steps>
+  <Step title="New Project">
+    1. Click "New Project" in PlatformIO Home
+    2. **Name:** "ESP32_Blink_Test"
+    3. **Board:** "Espressif ESP32 Dev Module"
+    4. **Framework:** "Arduino"
+    5. **Location:** Choose folder
+    6. Click "Finish"
+  </Step>
+
+  <Step title="Project Structure">
+    ```
+    ESP32_Blink_Test/
+    ├── .pio/              # Build files (auto-generated)
+    ├── include/           # Header files
+    ├── lib/               # Project-specific libraries
+    ├── src/
+    │   └── main.cpp       # Your code goes here
+    ├── test/              # Unit tests
+    └── platformio.ini     # Project configuration
+    ```
+  </Step>
+
+  <Step title="Write Blink Code">
+    Open `src/main.cpp` and replace with:
+
+    ```cpp
+    #include <Arduino.h>
+
+    #define LED_PIN 2  // Built-in LED on most ESP32 boards
+
+    void setup() {
+      pinMode(LED_PIN, OUTPUT);
+      Serial.begin(115200);
+      Serial.println("ESP32 Blink Test Starting...");
+    }
+
+    void loop() {
+      digitalWrite(LED_PIN, HIGH);
+      Serial.println("LED ON");
+      delay(1000);
+      
+      digitalWrite(LED_PIN, LOW);
+      Serial.println("LED OFF");
+      delay(1000);
+    }
+    ```
+  </Step>
+
+  <Step title="Connect ESP32">
+    - Plug ESP32 into computer via USB
+    - Check COM port in Device Manager (Windows) or `ls /dev/tty*` (Mac/Linux)
+  </Step>
+
+  <Step title="Upload Code">
+    1. Click checkmark icon (Build) - should compile successfully
+    2. Click arrow icon (Upload) - uploads to ESP32
+    3. Watch for "Success" message
+    4. LED should blink!
+  </Step>
+
+  <Step title="Open Serial Monitor">
+    - Click plug icon (Serial Monitor)
+    - Set baud rate to 115200
+    - Should see "LED ON" / "LED OFF" messages
+  </Step>
+</Steps>
+
+<Tip>
+  **Upload Issues?** Try holding BOOT button on ESP32 while clicking Upload. Some boards require this.
+</Tip>
+
+## PlatformIO Configuration
+
+### platformio.ini Explained
+
+```ini
+[env:esp32dev]
+platform = espressif32        # ESP32 platform
+board = esp32dev              # Board type
+framework = arduino           # Use Arduino framework
+monitor_speed = 115200        # Serial baud rate
+upload_port = COM3            # Specify port (optional)
+monitor_port = COM3           # Specify monitor port (optional)
+
+# Optional: Library dependencies
+lib_deps =
+    br3ttb/PID@^1.2.1        # PID library
+    adafruit/Adafruit BusIO@^1.14.1  # I2C/SPI library
+
+# Optional: Build flags
+build_flags =
+    -D DEBUG=1               # Enable debug output
+    -D ENCODER_CPR=330       # Counts per revolution
+```
+
+### Useful PlatformIO Commands
+
+<CardGroup cols={2}>
+  <Card title="Build">
+    - Icon: Checkmark ✓
+    - Shortcut: Ctrl+Alt+B
+    - Compiles code without uploading
+  </Card>
+
+  <Card title="Upload">
+    - Icon: Right arrow →
+    - Shortcut: Ctrl+Alt+U
+    - Builds and uploads to board
+  </Card>
+
+  <Card title="Serial Monitor">
+    - Icon: Plug icon
+    - Shortcut: Ctrl+Alt+S
+    - View serial output
+  </Card>
+
+  <Card title="Clean">
+    - Via PlatformIO menu
+    - Removes build artifacts
+    - Use if strange compile errors
+  </Card>
+</CardGroup>
+
+## Installing Libraries
+
+### Method 1: PlatformIO Library Manager (Recommended)
+
+1. Click PlatformIO icon → Libraries
+2. Search for library (e.g., "PID")
+3. Click desired library
+4. Click "Add to Project"
+5. Select your project
+6. Library added to `platformio.ini`
+
+### Method 2: Manual in platformio.ini
+
+Add to `[env:esp32dev]` section:
+
+```ini
+lib_deps =
+    br3ttb/PID@^1.2.1
+    adafruit/Adafruit ICM20X@^2.0.5
+    sparkfun/SparkFun ICM-20948 Arduino Library@^1.2.12
+```
+
+Save file, PlatformIO auto-downloads libraries.
+
+### Method 3: Local Library
+
+1. Create folder in `lib/` directory
+2. Add `.h` and `.cpp` files
+3. Include in code: `#include "MyLibrary.h"`
+
+## Recommended Extensions
+
+Enhance VSCode with these extensions:
+
+- **C/C++** (Microsoft) - IntelliSense, debugging
+- **Serial Monitor** (Microsoft) - Alternative serial viewer
+- **GitLens** - Git visualization
+- **Bracket Pair Colorizer** - Easier to read nested code
+- **Teleplot** - Real-time data plotting from serial
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="PlatformIO won't install" icon="download">
+    **Solutions:**
+    - Check internet connection
+    - Disable antivirus temporarily
+    - Manually install Python 3.6+ first
+    - Try VSCode Insiders build
+  </Accordion>
+
+  <Accordion title="ESP32 not detected (Windows)" icon="usb">
+    **Solutions:**
+    - Install CP2102 or CH340 drivers
+    - Try different USB cable (some are power-only!)
+    - Try different USB port
+    - Check Device Manager for unknown devices
+  </Accordion>
+
+  <Accordion title="Upload fails at 'Connecting...'" icon="rotate">
+    **Solutions:**
+    - Hold BOOT button while clicking Upload
+    - Check correct COM port selected
+    - Close Serial Monitor before uploading
+    - Press RESET button after upload starts
+  </Accordion>
+
+  <Accordion title="Compilation errors" icon="code">
+    **Solutions:**
+    - Check for typos in code
+    - Verify all `#include` statements
+    - Clean project (PlatformIO → Clean)
+    - Delete `.pio` folder and rebuild
+  </Accordion>
+
+  <Accordion title="Serial Monitor shows garbage" icon="font">
+    **Solutions:**
+    - Check baud rate matches code (115200)
+    - Verify correct COM port
+    - Press ESP32 RESET button
+    - Check USB cable quality
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Version Control" icon="code-branch">
+    - Initialize Git in project folder
+    - Add `.pio/` to `.gitignore`
+    - Commit regularly
+    - Push to GitHub
+  </Card>
+
+  <Card title="Code Organization" icon="folder-tree">
+    - Separate concerns (motor.cpp, encoder.cpp)
+    - Use header files (.h)
+    - Modular functions
+    - Comments and documentation
+  </Card>
+
+  <Card title="Testing" icon="flask">
+    - Test incrementally
+    - Unit test each component
+    - Use Serial.println() for debugging
+    - Log important values
+  </Card>
+
+  <Card title="Power Management" icon="plug">
+    - Use external power for motors
+    - Don't power motors from USB!
+    - Common ground between ESP32 and motor supply
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="ESP32 Basics"
+    icon="microchip"
+    href="/wp3-embedded/esp32-basics"
+  >
+    Learn ESP32 pinout and features
+  </Card>
+
+  <Card
+    title="Motor Driver"
+    icon="gears"
+    href="/wp3-embedded/motor-driver"
+  >
+    Understand IBT-2 H-bridge
+  </Card>
+
+  <Card
+    title="DC Motor Control"
+    icon="rotate"
+    href="/wp3-embedded/dc-motor-control"
+  >
+    Start implementing motor control
+  </Card>
+
+  <Card
+    title="Code Examples"
+    icon="code"
+    href="/reference/code-examples/encoder-reading"
+  >
+    See working code examples
+  </Card>
+</CardGroup>
+
+## References
+
+[1] PlatformIO Documentation: https://docs.platformio.org/
+[2] ESP32 Arduino Core: https://github.com/espressif/arduino-esp32
+[3] VSCode Tips: https://code.visualstudio.com/docs/getstarted/tips-and-tricks

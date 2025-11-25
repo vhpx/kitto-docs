@@ -1,0 +1,365 @@
+---
+title: "WP1: MATLAB Simulation - Introduction"
+description: "Introduction to simulating Mecanum robot kinematics and motion planning in MATLAB"
+---
+
+## Overview
+
+Work Package 1 focuses on understanding and simulating the Mecanum robot's motion using MATLAB. Before building physical hardware, it's essential to model the robot mathematically to:
+
+- Understand how wheel velocities translate to robot motion
+- Predict robot behavior for different control inputs
+- Validate designs before committing to hardware
+- Develop control algorithms in a safe, virtual environment
+
+<Note>
+  **Duration:** Suggested 4 weeks (can overlap with WP2)
+  **Prerequisites:** MATLAB basics, linear algebra, trigonometry
+</Note>
+
+## Learning Objectives
+
+By the end of WP1, you will be able to:
+
+- ✅ Derive forward and inverse kinematics for Mecanum wheel robots
+- ✅ Implement kinematics equations in MATLAB
+- ✅ Simulate robot trajectories (linear, rotational, combined)
+- ✅ Visualize robot motion and wheel velocities
+- ✅ Analyze how robot parameters affect performance
+
+## Deliverables
+
+### D1.1: Kinematics of the Mecanum Robot
+**Suggested Time:** 1 week
+
+**What to deliver:**
+- Mathematical derivation of kinematics equations
+- MATLAB functions for forward and inverse kinematics
+- Validation tests showing correctness
+- Documentation explaining your approach
+
+**Success Criteria:**
+- Equations correctly relate wheel velocities to robot velocity
+- MATLAB code produces expected results for test cases
+- Clear explanation of coordinate frames and assumptions
+
+### D1.2: Trajectory Planning and Visualization
+**Suggested Time:** 3 weeks
+
+**What to deliver:**
+- MATLAB simulation of robot following trajectories:
+  - Square path (1m × 1m) with constant orientation
+  - Circular path (1m diameter) with constant orientation
+  - Circular path with robot facing inward
+  - Custom trajectories (your choice - be creative!)
+- Visualization showing:
+  - Robot position and orientation over time
+  - Individual wheel velocities
+  - Path tracking error
+- Analysis of how wheel size and robot dimensions affect motion
+
+**Success Criteria:**
+- Robot successfully follows planned trajectories in simulation
+- Smooth wheel velocity commands (no discontinuities)
+- Professional plots with labels, legends, and titles
+- Analysis shows understanding of parameter effects
+
+## Why Simulation Matters
+
+<AccordionGroup>
+  <Accordion title="Design Validation" icon="check">
+    Simulation lets you test different robot dimensions (wheel size, wheelbase, track width) before building hardware. You can optimize for speed, maneuverability, or payload capacity.
+  </Accordion>
+
+  <Accordion title="Control Algorithm Development" icon="gears">
+    Develop and test control algorithms (PID, trajectory following) in MATLAB before implementing on ESP32. Debugging in MATLAB is much faster than on hardware.
+  </Accordion>
+
+  <Accordion title="Understanding Mecanum Kinematics" icon="graduation-cap">
+    Mecanum wheels create unique motion coupling. Simulation helps visualize how each wheel contributes to overall robot motion, building intuition.
+  </Accordion>
+
+  <Accordion title="Error Analysis" icon="chart-line">
+    Simulate effects of wheel slippage, encoder errors, or manufacturing tolerances. Understand limitations before real-world testing.
+  </Accordion>
+</AccordionGroup>
+
+## Mecanum Wheel Basics
+
+### How Mecanum Wheels Work
+
+A **Mecanum wheel** consists of rollers mounted at 45° to the wheel axis. When multiple Mecanum wheels work together, they enable:
+
+- **Forward/Backward:** All wheels rotate in same direction
+- **Strafing (Sideways):** Diagonal wheel pairs rotate in opposite directions
+- **Rotation:** Left and right wheels rotate in opposite directions
+- **Diagonal Motion:** Combination of the above
+
+<img
+  src="/images/mecanum-wheel-diagram.png"
+  alt="Mecanum Wheel Roller Configuration"
+  caption="Mecanum wheel with rollers at 45° angle enabling omnidirectional motion"
+/>
+
+### Coordinate Frames
+
+Understanding coordinate frames is crucial for kinematics:
+
+**Robot Frame (Body-Fixed):**
+- Origin: Center of robot
+- X-axis: Forward direction
+- Y-axis: Left direction (perpendicular to X)
+- Z-axis: Upward (right-hand rule)
+
+**Global Frame (World-Fixed):**
+- Fixed reference frame
+- Robot moves through this frame
+- Used for trajectory planning
+
+**Wheel Frame:**
+- Each wheel has its own frame
+- Rotation axis and roller contact direction
+
+### Robot Configuration
+
+For this project, we use a **4-wheel Mecanum configuration**:
+
+```
+    Front
+  ┌───────┐
+  │ ①   ② │
+  │       │   ① Front-left wheel
+  │ ③   ④ │   ② Front-right wheel
+  └───────┘   ③ Rear-left wheel
+    Rear      ④ Rear-right wheel
+```
+
+**Key Parameters:**
+- `L`: Wheelbase (front-rear distance)
+- `W`: Track width (left-right distance)
+- `r`: Wheel radius
+- `α`: Roller angle (typically 45°)
+
+## Tools and Resources
+
+### Required Software
+
+- **MATLAB R2020a or later** (university license)
+- **Toolboxes:** None strictly required, but helpful:
+  - Robotics System Toolbox (optional)
+  - Symbolic Math Toolbox (optional for derivations)
+
+**Alternative:** Octave (free, but some syntax differences)
+
+### MATLAB Skills Needed
+
+<CardGroup cols={2}>
+  <Card title="Programming Basics" icon="code">
+    - Functions and scripts
+    - Loops and conditionals
+    - Arrays and matrices
+    - Plotting (plot, subplot, xlabel, ylabel)
+  </Card>
+
+  <Card title="Mathematical Operations" icon="calculator">
+    - Matrix multiplication
+    - Trigonometric functions (sin, cos, atan2)
+    - Numerical integration (ode45 or simple Euler)
+    - Linear algebra (matrix inverse, transpose)
+  </Card>
+</CardGroup>
+
+### Learning Resources
+
+If you need to brush up on MATLAB:
+
+- **MathWorks MATLAB Onramp** (free 2-hour course)
+- **University MATLAB tutorials** (check your course portal)
+- **MATLAB Documentation** (excellent built-in help)
+
+<Tip>
+  **Pro Tip:** Use MATLAB's built-in documentation! Type `doc functionname` to get detailed help and examples.
+</Tip>
+
+## Project Structure
+
+Organize your MATLAB code in a clear folder structure:
+
+```
+wp1-matlab/
+├── README.md                      # Project overview
+├── kinematics/
+│   ├── forward_kinematics.m       # Wheel vel → Robot vel
+│   ├── inverse_kinematics.m       # Robot vel → Wheel vel
+│   └── test_kinematics.m          # Validation tests
+├── simulation/
+│   ├── simulate_trajectory.m      # Main simulation function
+│   ├── trajectories/
+│   │   ├── square_traj.m          # Square path
+│   │   ├── circle_traj.m          # Circular path
+│   │   └── custom_traj.m          # Your creative trajectory
+│   └── visualize_motion.m         # Plotting functions
+├── parameters/
+│   └── robot_params.m             # Robot dimensions, wheel size
+└── results/
+    ├── figures/                   # Save plots here
+    └── data/                      # Save simulation data
+```
+
+## Getting Started Steps
+
+<Steps>
+  <Step title="Review Kinematics Theory">
+    Read the [Kinematics](/wp1-simulation/kinematics) page to understand the mathematical foundation
+  </Step>
+
+  <Step title="Set Up MATLAB Project">
+    Create folder structure and parameter file with your robot dimensions
+  </Step>
+
+  <Step title="Implement Forward Kinematics">
+    Write function to convert wheel velocities to robot velocity
+  </Step>
+
+  <Step title="Implement Inverse Kinematics">
+    Write function to convert desired robot velocity to wheel velocities
+  </Step>
+
+  <Step title="Test and Validate">
+    Verify kinematics with simple test cases (forward only, strafe only, etc.)
+  </Step>
+
+  <Step title="Plan Trajectories">
+    Generate time-series of desired robot positions for different paths
+  </Step>
+
+  <Step title="Simulate Motion">
+    Integrate robot motion over time using kinematics and trajectory commands
+  </Step>
+
+  <Step title="Visualize and Analyze">
+    Create plots showing robot path, wheel velocities, and tracking performance
+  </Step>
+</Steps>
+
+## Common Approaches
+
+### Approach 1: Velocity-Level Kinematics (Recommended)
+
+Model robot as velocity-controlled system:
+- Input: Desired robot velocities (Vₓ, Vᵧ, ω)
+- Kinematics: Calculate required wheel velocities
+- Integration: Update robot pose numerically
+
+**Pros:** Simple, matches hardware control
+**Cons:** Accumulates integration error in simulation
+
+### Approach 2: Position-Level Control
+
+Plan exact trajectory, then compute velocities:
+- Input: Desired position vs time
+- Differentiation: Calculate velocity from position
+- Kinematics: Convert to wheel velocities
+
+**Pros:** Exact path following
+**Cons:** Requires smooth, differentiable trajectories
+
+### Approach 3: Hybrid
+
+Combine both approaches for realistic simulation:
+- High-level: Position trajectory planning
+- Low-level: Velocity control with feedback
+
+**Pros:** Most realistic, shows controller effects
+**Cons:** More complex to implement
+
+## Tips for Success
+
+<AccordionGroup>
+  <Accordion title="Start Simple" icon="seedling">
+    Begin with stationary robot, then forward motion, then add complexity. Don't try to simulate everything at once!
+  </Accordion>
+
+  <Accordion title="Validate Each Step" icon="check-double">
+    Test kinematics with hand-calculated examples. If forward motion gives wrong velocity, fix before adding rotation.
+  </Accordion>
+
+  <Accordion title="Use Meaningful Variables" icon="code">
+    Name variables clearly: `wheel_radius` not `r`, `robot_pose` not `x`. Your future self will thank you.
+  </Accordion>
+
+  <Accordion title="Plot Everything" icon="chart-line">
+    Visualize intermediate results. Plot wheel velocities, robot velocity, trajectory error. Helps debugging and understanding.
+  </Accordion>
+
+  <Accordion title="Comment Your Code" icon="comment">
+    Explain what each section does. Include units in comments (e.g., `% velocity in m/s`).
+  </Accordion>
+</AccordionGroup>
+
+## What to Include in Report
+
+For your project proposal and final report, include:
+
+1. **Kinematics Derivation:**
+   - Coordinate frame definitions
+   - Roller geometry and force analysis
+   - Matrix equations for forward and inverse kinematics
+   - Assumptions and limitations
+
+2. **MATLAB Implementation:**
+   - Code structure overview (don't paste all code, just key functions)
+   - Parameter values used (wheel size, robot dimensions)
+   - Validation test results
+
+3. **Simulation Results:**
+   - Trajectory plots (position vs time, 2D path)
+   - Wheel velocity profiles
+   - Analysis of results (does it match expectations?)
+   - Effects of parameter changes
+
+4. **Figures:**
+   - Professional quality plots with labels
+   - Multiple trajectories in one figure for comparison
+   - All figures numbered and referenced in text
+
+## Next Steps
+
+Ready to dive in? Continue with the technical pages:
+
+<CardGroup cols={2}>
+  <Card
+    title="Kinematics Derivation"
+    icon="calculator"
+    href="/wp1-simulation/kinematics"
+  >
+    Learn the math behind Mecanum motion
+  </Card>
+  <Card
+    title="Trajectory Planning"
+    icon="route"
+    href="/wp1-simulation/trajectory-planning"
+  >
+    Plan and simulate robot paths in MATLAB
+  </Card>
+  <Card
+    title="Hardware Reference"
+    icon="microchip"
+    href="/reference/hardware/motors-encoders"
+  >
+    Check motor specs for realistic parameters
+  </Card>
+  <Card
+    title="Project Proposal"
+    icon="file-pen"
+    href="/getting-started/project-proposal"
+  >
+    Include WP1 results in your proposal
+  </Card>
+</CardGroup>
+
+## References
+
+[1] K. Kanjanawanishkul, "Omnidirectional wheeled mobile robots: Wheel types and practical applications," International Journal of Advanced Mechatronic Systems, vol. 6, no. 6, pp. 289–302, Feb. 2015.
+
+[2] M. T. Watson, D. T. Gladwin, and T. J. Prescott, "Collinear Mecanum Drive: Modeling, Analysis, Partial Feedback Linearization, and Nonlinear Control," IEEE Transactions on Robotics, vol. 37, no. 2, pp. 642–658, Apr. 2021.

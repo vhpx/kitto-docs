@@ -1,0 +1,644 @@
+---
+title: "Performance Optimization"
+description: "Tune robot parameters for optimal speed, accuracy, and efficiency"
+---
+
+## Overview
+
+**Performance optimization** involves tuning system parameters to achieve the best balance between speed, accuracy, reliability, and battery life for your specific application.
+
+<Note>
+  **Goal:** Maximize navigation performance while maintaining safety and reliability. Trade-offs exist between speed, smoothness, and computational load.
+</Note>
+
+## Optimization Objectives
+
+<CardGroup cols={2}>
+  <Card title="Speed" icon="gauge-high">
+    **Max velocity, fast acceleration**
+    - Reduces mission time
+    - May sacrifice smoothness
+    - Higher battery drain
+  </Card>
+
+  <Card title="Accuracy" icon="crosshairs">
+    **Precise positioning, tight tolerances**
+    - Reaches goals exactly
+    - May be slower
+    - Better for manipulation tasks
+  </Card>
+
+  <Card title="Efficiency" icon="leaf">
+    **Low CPU/battery usage**
+    - Longer operation time
+    - May limit features
+    - Essential for long missions
+  </Card>
+
+  <Card title="Robustness" icon="shield">
+    **Handles errors, recovers well**
+    - Fewer failures
+    - May be conservative
+    - Critical for unattended operation
+  </Card>
+</CardGroup>
+
+## Navigation Performance
+
+### Velocity Limits
+
+**Balance speed vs. safety:**
+
+```yaml
+# config/nav2_params.yaml
+
+controller_server:
+  ros__parameters:
+    FollowPath:
+      plugin: "dwb_core::DWBLocalPlanner"
+
+      # Linear velocity (forward/back, strafe)
+      min_vel_x: -0.5       # Backward speed
+      max_vel_x: 0.7        # ↑ Increase for speed (from 0.5)
+      min_vel_y: -0.5       # Strafe left
+      max_vel_y: 0.5        # Strafe right
+      max_speed_xy: 0.75    # ↑ Max combined XY speed
+
+      # Angular velocity (rotation)
+      max_vel_theta: 1.2    # ↑ Increase for faster turns (from 1.0)
+      min_speed_theta: 0.0
+
+      # Acceleration limits
+      acc_lim_x: 3.0        # ↑ Faster acceleration (from 2.5)
+      acc_lim_y: 3.0
+      acc_lim_theta: 3.5    # ↑ Faster rotation accel
+      decel_lim_x: -3.0
+      decel_lim_y: -3.0
+      decel_lim_theta: -3.5
+```
+
+**Tuning guidelines:**
+
+| Priority | max_vel_x | max_speed_xy | acc_lim_x | Notes |
+|----------|-----------|--------------|-----------|-------|
+| **Speed** | 0.7-1.0 | 0.8-1.0 | 3.0-4.0 | Fast but jerky |
+| **Balanced** | 0.4-0.6 | 0.5-0.7 | 2.0-2.5 | Good compromise |
+| **Smooth** | 0.2-0.4 | 0.3-0.5 | 1.0-2.0 | Slow but smooth |
+| **Safety** | 0.2-0.3 | 0.3-0.4 | 1.0-1.5 | Very conservative |
+
+<Warning>
+  **Safety First:** Always test velocity increases in open area. Higher speeds reduce reaction time to obstacles.
+</Warning>
+
+### Path Planning Optimization
+
+**Faster path computation:**
+
+```yaml
+planner_server:
+  ros__parameters:
+    expected_planner_frequency: 0.5  # ↓ Reduce from 1.0 Hz
+                                     # Less frequent replanning
+
+    GridBased:
+      plugin: "nav2_navfn_planner/NavfnPlanner"
+      tolerance: 0.75          # ↑ Increase tolerance (from 0.5)
+                              # Allows reaching "close enough"
+      use_astar: true          # ↑ Enable A* (faster than Dijkstra)
+      allow_unknown: true
+```
+
+**Path smoothness vs. speed:**
+
+```yaml
+# If using Smac Planner
+SmacPlanner:
+  plugin: "nav2_smac_planner/SmacPlanner2D"
+  max_iterations: 500000     # ↓ Reduce (from 1000000)
+  max_planning_time: 3.0     # ↓ Reduce timeout (from 5.0)
+
+  smooth_path: true          # Keep enabled for smooth paths
+  smoother:
+    max_iterations: 500      # ↓ Reduce smoothing iterations
+    w_smooth: 0.3
+    w_data: 0.2
+```
+
+### Controller Optimization
+
+**Trajectory sampling:**
+
+```yaml
+controller_server:
+  ros__parameters:
+    FollowPath:
+      # Velocity sampling (trajectory rollout)
+      vx_samples: 15         # ↓ Reduce from 20 (faster compute)
+      vy_samples: 15         # ↓ Reduce from 20
+      vtheta_samples: 30     # ↓ Reduce from 40
+
+      sim_time: 1.5          # ↓ Reduce lookahead (from 1.7)
+
+      # Controller frequency
+      controller_frequency: 25.0  # ↓ Reduce from 20 Hz if CPU limited
+                                 # ↑ Increase to 30 Hz for smoother control
+```
+
+**Trajectory scoring (critics):**
+
+```yaml
+      # Emphasize path following vs. obstacle avoidance
+      critics: ["RotateToGoal", "Oscillation", "BaseObstacle",
+                "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
+
+      # Adjust weights for behavior
+      PathAlign.scale: 40.0      # ↑ Stick closer to path (from 32)
+      GoalDist.scale: 30.0       # ↑ Prioritize reaching goal (from 24)
+      BaseObstacle.scale: 0.01   # ↓ Less conservative around obstacles (from 0.02)
+```
+
+**Effect of weights:**
+- ↑ `PathAlign.scale`: Follows global path more strictly
+- ↑ `GoalDist.scale`: Prioritizes reaching goal quickly
+- ↓ `BaseObstacle.scale`: Less conservative, may get closer to obstacles
+- ↑ `BaseObstacle.scale`: More cautious, larger clearance
+
+### Costmap Optimization
+
+**Reduce computational load:**
+
+```yaml
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      # Update rates
+      update_frequency: 4.0      # ↓ Reduce from 5.0 Hz
+      publish_frequency: 2.0     # Keep at 2.0 Hz
+
+      # Costmap size (smaller = faster)
+      width: 3                   # Keep small for local
+      height: 3
+      resolution: 0.05           # Or increase to 0.10 for faster
+
+      # Plugin configuration
+      plugins: ["voxel_layer", "inflation_layer"]
+
+      voxel_layer:
+        enabled: true
+        mark_threshold: 0
+        observation_sources: scan
+
+        scan:
+          obstacle_max_range: 2.5   # ↓ Reduce from 3.0 (less data)
+          raytrace_max_range: 3.0   # Keep for clearing
+```
+
+```yaml
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      update_frequency: 0.5      # ↓ Reduce from 1.0 Hz
+      publish_frequency: 0.5
+
+      # Static + obstacle + inflation
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+
+      obstacle_layer:
+        enabled: true
+        observation_sources: scan
+        scan:
+          obstacle_max_range: 11.0  # ↓ Slightly reduce from 11.5
+```
+
+**Inflation tuning:**
+
+```yaml
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        inflation_radius: 0.50     # ↓ Reduce for less conservative (from 0.55)
+        cost_scaling_factor: 3.0   # Adjust for obstacle cost decay
+```
+
+**Trade-off:**
+- Smaller `inflation_radius`: Faster planning, tighter spaces, higher collision risk
+- Larger `inflation_radius`: Safer, slower planning, may not fit through gaps
+
+## Computational Optimization
+
+### CPU Usage
+
+**Identify bottlenecks:**
+
+```bash
+# Monitor CPU per process
+top -p $(pgrep -d',' -f ros2)
+
+# Watch for processes using >50% CPU:
+# - /controller_server (trajectory rollout)
+# - /planner_server (path planning)
+# - /slam_toolbox (if mapping)
+# - /camera_node (if using camera)
+```
+
+**Optimization strategies:**
+
+1. **Reduce controller samples:**
+   ```yaml
+   vx_samples: 10  # Reduce from 15-20
+   vy_samples: 10
+   vtheta_samples: 20  # Reduce from 30-40
+   ```
+
+2. **Lower costmap resolution:**
+   ```yaml
+   resolution: 0.10  # Increase from 0.05 (4x faster)
+   ```
+
+3. **Reduce update frequencies:**
+   ```yaml
+   local_costmap:
+     update_frequency: 3.0  # Reduce from 4-5 Hz
+   controller_frequency: 20.0  # Reduce from 25 Hz
+   ```
+
+4. **Disable unused features:**
+   ```yaml
+   # Remove voxel layer if not needed (use obstacle layer)
+   plugins: ["obstacle_layer", "inflation_layer"]
+   ```
+
+5. **Use hardware acceleration (if available):**
+   ```bash
+   # Enable GPU acceleration for image processing
+   export CUDA_VISIBLE_DEVICES=0
+   ```
+
+### Memory Usage
+
+**Monitor memory:**
+
+```bash
+free -h
+
+# Watch specific processes
+watch -n 1 'ps aux --sort=-%mem | head -n 10'
+```
+
+**Reduce memory footprint:**
+
+1. **Smaller maps:**
+   ```yaml
+   # Reduce map size or increase resolution
+   resolution: 0.10  # From 0.05
+   ```
+
+2. **Limit costmap size:**
+   ```yaml
+   local_costmap:
+     width: 3  # Keep small
+     height: 3
+   ```
+
+3. **Reduce bag recording:**
+   ```bash
+   # Record only essential topics
+   ros2 bag record /scan /odom /cmd_vel
+   # (not -a for all topics)
+   ```
+
+### Network Optimization
+
+**Reduce WiFi bandwidth:**
+
+1. **Use compressed image transport:**
+   ```bash
+   # For camera
+   ros2 run image_transport republish raw compressed \
+     --ros-args -r in:=/camera/image_raw -r out:=/camera/compressed \
+     -p compressed.jpeg_quality:=80
+   ```
+
+2. **Reduce topic rates:**
+   ```yaml
+   # Lower camera framerate
+   framerate: 15.0  # From 30.0
+
+   # Publish costmaps less frequently
+   publish_frequency: 1.0  # From 2.0
+   ```
+
+3. **Use wired connection if possible:**
+   ```bash
+   # Raspberry Pi Ethernet to router
+   # Development PC to same network
+   # (eliminates WiFi latency/drops)
+   ```
+
+## Odometry Accuracy
+
+### Wheel Calibration
+
+**Precise wheel radius:**
+
+```bash
+# Test procedure:
+# 1. Mark starting position
+# 2. Command robot to move exactly 5.0m forward
+# 3. Measure actual distance traveled
+
+# Calculate correction:
+new_radius = old_radius * (measured_dist / commanded_dist)
+```
+
+**Example:**
+- Commanded: 5.0m
+- Measured: 5.2m
+- Error: +4%
+- Old radius: 0.050m
+- New radius: 0.050 * (5.2 / 5.0) = 0.052m
+
+**Update config:**
+```yaml
+mecanum_drive_controller:
+  ros__parameters:
+    wheel_radius: 0.052  # Adjusted value
+```
+
+### EKF Tuning
+
+**Sensor trust (process noise):**
+
+```yaml
+ekf_filter_node:
+  ros__parameters:
+    # Process noise covariance (how much to trust motion model)
+    process_noise_covariance: [
+      0.05, 0,    0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+      0,    0.05, 0,    0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+      0,    0,    0.06, 0,    0,    0,    0,     0,     0,    0,    0,    0,    0,    0,    0,
+      # ... (increase values if motion is unpredictable)
+    ]
+
+    # Odometry sensor variance (measurement noise)
+    odom0_config: [true, true, false, ...]
+    odom0_differential: false
+    odom0_relative: false
+
+    odom0_queue_size: 2
+
+    # IMU sensor variance
+    imu0_config: [false, false, false,
+                  false, false, true,  # Use yaw
+                  false, false, false,
+                  false, false, true,  # Use yaw_dot
+                  false, false, false]
+    imu0_differential: false
+    imu0_relative: true
+    imu0_queue_size: 5
+    imu0_remove_gravitational_acceleration: true
+```
+
+**Tuning guidelines:**
+- Odometry jumps/drifts → Increase IMU weight (reduce IMU variance)
+- Rotation inaccurate → Check IMU calibration first
+- Position drifts over time → Normal for wheel odometry, use SLAM/AMCL correction
+
+## Battery Life
+
+### Power Consumption Breakdown
+
+**Typical current draw (12V system):**
+
+| Component | Current | Power | Notes |
+|-----------|---------|-------|-------|
+| Raspberry Pi 5 | 1.5-2.5A | 18-30W | Higher during computation |
+| LiDAR (RPLIDAR A1M8) | 0.5A | 6W | Constant |
+| 4× Motors (idle) | 0.2A | 2.4W | Low when stationary |
+| 4× Motors (moving) | 2-4A | 24-48W | Higher during acceleration |
+| **Total** | **4-7A** | **50-86W** | Varies with operation |
+
+**Battery capacity example:**
+- Battery: 3S 5000mAh (12V, 60Wh)
+- Average power: 60W
+- **Runtime: ~60 minutes**
+
+### Improve Battery Life
+
+**1. Reduce motor power:**
+```yaml
+# Lower velocity limits
+max_vel_x: 0.4        # From 0.5-0.7
+max_vel_theta: 0.8    # From 1.0-1.2
+
+# Lower acceleration (smoother = less current spikes)
+acc_lim_x: 2.0        # From 3.0
+acc_lim_theta: 2.5    # From 3.5
+```
+
+**2. Optimize CPU usage:**
+```yaml
+# Reduce computational load (see CPU optimization above)
+# Lower CPU = lower Pi power draw
+```
+
+**3. Reduce sensor usage:**
+```bash
+# Disable camera if not needed (saves ~5W)
+# Lower LiDAR scan rate (if firmware supports)
+```
+
+**4. Use larger battery:**
+- 5000mAh → 10000mAh (double runtime)
+- Ensure weight distribution balanced
+
+**5. Voltage monitoring:**
+
+```cpp
+// ESP32: Monitor battery voltage
+float battery_voltage = analogRead(BATTERY_PIN) * (12.6 / 4095.0) * 3.0;
+
+if (battery_voltage < 10.5) {  // 3.5V per cell (low)
+  Serial.println("WARNING: Low battery!");
+  // Reduce max velocity or return to charging station
+}
+```
+
+## Localization Performance
+
+### AMCL Tuning
+
+**Particle count vs. accuracy:**
+
+```yaml
+amcl:
+  ros__parameters:
+    # Particle filter
+    min_particles: 500       # ↓ Reduce for speed (from 500)
+    max_particles: 2000      # ↓ Reduce for speed (from 5000)
+
+    # Recovery (if localization lost)
+    recovery_alpha_slow: 0.001  # Increase for faster recovery
+    recovery_alpha_fast: 0.1
+
+    # Update thresholds (when to resample)
+    update_min_d: 0.25       # ↑ Less frequent updates (from 0.2)
+    update_min_a: 0.2        # ↑ Less frequent (from 0.5)
+
+    # Laser model
+    laser_max_range: 12.0
+    laser_min_range: 0.2
+    laser_max_beams: 60      # ↓ Use subset of scan (from 100)
+```
+
+**Effect:**
+- ↓ Particles: Faster but less robust localization
+- ↑ `laser_max_beams`: More accurate but slower
+
+### SLAM Toolbox Performance
+
+**If using SLAM for localization:**
+
+```yaml
+slam_toolbox:
+  ros__parameters:
+    # Solver plugin
+    solver_plugin: solver_plugins::CeresSolver
+
+    # Performance
+    minimum_travel_distance: 0.25  # ↑ Map less frequently (from 0.2)
+    minimum_travel_heading: 0.3    # ↑ Map less frequently (from 0.2)
+    map_update_interval: 2.0       # ↑ Update map less often (from 1.0)
+
+    # Loop closure
+    do_loop_closing: true
+    loop_search_maximum_distance: 3.0  # ↓ Search closer loops (from 5.0)
+```
+
+## Benchmark Testing
+
+### Performance Metrics
+
+**Measure and track:**
+
+| Metric | Target | How to Measure |
+|--------|--------|----------------|
+| **Max Speed** | 0.5-0.7 m/s | Time to traverse 10m straight |
+| **Nav Success** | >90% | 10 goals, count successes |
+| **CPU Usage** | &lt;70% | `top` during navigation |
+| **Memory** | &lt;2GB | `free -h` |
+| **Battery Life** | >45 min | Continuous operation test |
+| **Localization Error** | &lt;0.1m | Compare `map` TF to ground truth |
+
+### Benchmarking Script
+
+```python
+#!/usr/bin/env python3
+import time
+import subprocess
+
+def measure_cpu():
+    result = subprocess.run(['top', '-bn1'], capture_output=True, text=True)
+    # Parse CPU usage from result.stdout
+    return cpu_percent
+
+def measure_battery_voltage():
+    # Read from ESP32 or voltage sensor
+    return voltage
+
+def benchmark_navigation(goals):
+    results = {
+        'successes': 0,
+        'failures': 0,
+        'avg_time': 0,
+        'cpu_avg': 0,
+        'battery_start': measure_battery_voltage(),
+        'battery_end': 0
+    }
+
+    start_time = time.time()
+
+    for goal in goals:
+        cpu_before = measure_cpu()
+
+        # Send navigation goal
+        success = navigate_to_pose(goal)
+
+        cpu_after = measure_cpu()
+        results['cpu_avg'] += (cpu_after + cpu_before) / 2
+
+        if success:
+            results['successes'] += 1
+        else:
+            results['failures'] += 1
+
+    results['avg_time'] = (time.time() - start_time) / len(goals)
+    results['cpu_avg'] /= len(goals)
+    results['battery_end'] = measure_battery_voltage()
+
+    print_results(results)
+    return results
+```
+
+## Optimization Checklist
+
+### Before vs. After Comparison
+
+**Baseline (conservative defaults):**
+- Max velocity: 0.3 m/s
+- Success rate: 95%
+- CPU: 60%
+- Battery: 60 minutes
+
+**Optimized (speed-focused):**
+- Max velocity: 0.6 m/s (2× faster)
+- Success rate: 92% (acceptable drop)
+- CPU: 70% (acceptable)
+- Battery: 50 minutes (trade-off)
+
+**Optimized (efficiency-focused):**
+- Max velocity: 0.3 m/s (same)
+- Success rate: 95% (same)
+- CPU: 45% (↓25% reduction)
+- Battery: 80 minutes (↑33% improvement)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Maintenance Guide"
+    icon="wrench"
+    href="/wp5-integration/maintenance"
+  >
+    Keep robot running reliably long-term
+  </Card>
+
+  <Card
+    title="Final Demo Prep"
+    icon="video"
+    href="/wp5-integration/final-demo"
+  >
+    Perfect your demonstration
+  </Card>
+
+  <Card
+    title="Navigation Testing"
+    icon="flask"
+    href="/wp4-ros2/navigation/testing"
+  >
+    Systematic performance validation
+  </Card>
+
+  <Card
+    title="Troubleshooting"
+    icon="life-ring"
+    href="/troubleshooting/performance"
+  >
+    Solve performance issues
+  </Card>
+</CardGroup>
+
+## References
+
+[1] Nav2 Tuning Guide: https://docs.nav2.org/tuning/index.html
+[2] DWB Controller Tuning: https://docs.nav2.org/configuration/packages/dwb-params/index.html
+[3] robot_localization Tuning: http://docs.ros.org/en/noetic/api/robot_localization/html/tuning.html

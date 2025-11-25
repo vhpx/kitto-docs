@@ -1,0 +1,453 @@
+---
+title: "PCB & Wiring Design"
+description: "Complete guide to electrical wiring diagrams and PCB design for the Mecanum robot"
+---
+
+## Overview
+
+Proper electrical design is crucial for robot safety and functionality. Even if you don't fabricate a custom PCB, a clear wiring diagram ensures correct connections and helps troubleshoot issues.
+
+<Note>
+  **Deliverable:** Wiring diagram showing all electrical connections
+  **Optional:** Custom PCB design for cleaner, more reliable connections
+</Note>
+
+## Wiring vs PCB
+
+<CardGroup cols={2}>
+  <Card title="Wiring Diagram (Minimum Required)" icon="diagram-project">
+    - Shows all connections between components
+    - Can use breadboard, terminal blocks, or hand-soldered wires
+    - Faster to prototype
+    - Easier to modify during development
+    - **Recommended for first iteration**
+  </Card>
+
+  <Card title="Custom PCB (Advanced, Optional)" icon="microchip">
+    - Professional, compact solution
+    - Reduces wiring errors
+    - More reliable connections
+    - Takes time to design and fabricate
+    - **Consider for final version**
+  </Card>
+</CardGroup>
+
+## Electrical System Architecture
+
+### Power Distribution
+
+```
+Battery (12V, 5000mAh LiPo)
+  ├─→ Main Switch / Fuse (10A)
+  ├─→ 12V Bus
+  │    ├─→ Motor Driver 1 (IBT-2)
+  │    ├─→ Motor Driver 2 (IBT-2)
+  │    ├─→ Motor Driver 3 (IBT-2)
+  │    ├─→ Motor Driver 4 (IBT-2)
+  │    └─→ Buck Converter (12V → 5V, 5A)
+  └─→ 5V Bus
+       ├─→ ESP32
+       ├─→ Raspberry Pi
+       ├─→ IMU (ICM-20948)
+       └─→ LiDAR (USB powered via RPi)
+```
+
+### Signal Connections
+
+```
+ESP32 Microcontroller
+  ├─→ Motor Drivers (PWM + Enable signals)
+  │    ├─→ Driver 1: GPIO 4 (RPWM), GPIO 16 (LPWM)
+  │    ├─→ Driver 2: GPIO 17, GPIO 18
+  │    ├─→ Driver 3: GPIO 19, GPIO 21
+  │    └─→ Driver 4: GPIO 22, GPIO 23
+  ├─→ Encoders (Quadrature signals)
+  │    ├─→ Encoder 1: GPIO 32 (A), GPIO 33 (B)
+  │    ├─→ Encoder 2: GPIO 25, GPIO 26
+  │    ├─→ Encoder 3: GPIO 27, GPIO 14
+  │    └─→ Encoder 4: GPIO 12, GPIO 13
+  ├─→ IMU: I2C (SDA: GPIO 21, SCL: GPIO 22)
+  └─→ Raspberry Pi: USB Serial (optional)
+
+Raspberry Pi
+  ├─→ LiDAR: USB
+  ├─→ Camera: CSI ribbon cable
+  └─→ ESP32: USB or UART (GPIO 14/15)
+```
+
+## Component Specifications
+
+### Power Requirements
+
+| Component | Voltage | Current (Typ) | Current (Peak) | Notes |
+|-----------|---------|--------------|----------------|-------|
+| DC Motor (each) | 12V | 0.5A | 3A | Peak at stall/startup |
+| ESP32 | 5V | 0.5A | 0.8A | Via USB or VIN |
+| Raspberry Pi 4/5 | 5V | 1.5A | 3A | Higher if using USB devices |
+| IBT-2 Driver (each) | 12V logic | 50mA | - | Logic only, motor power separate |
+| IMU ICM-20948 | 3.3V | 15mA | - | ESP32 provides 3.3V |
+| LiDAR A1M8 | 5V | 400mA | 500mA | Via USB from RPi |
+
+**Total Power Budget:**
+- Motors: 4 × 0.5A = 2A typical, 12A peak (brief)
+- ESP32: 0.5A
+- Raspberry Pi: 2A
+- LiDAR: 0.5A
+- **Total @ 5V:** ~3A typical
+- **Total @ 12V:** ~2A typical, ~12A peak
+
+<Warning>
+  **Safety:** Use appropriate fuses! 10A fuse on main 12V line, 5A fuse on 5V buck converter output.
+</Warning>
+
+## Wiring Diagram Design
+
+### Tool Options
+
+<AccordionGroup>
+  <Accordion title="EasyEDA (Recommended for Beginners)" icon="diagram-project">
+    **Pros:**
+    - Free, web-based
+    - Integrated with JLCPCB for PCB fabrication
+    - Large component library
+    - Easy to learn
+
+    **Access:** https://easyeda.com/
+  </Accordion>
+
+  <Accordion title="KiCad (Open Source)" icon="microchip">
+    **Pros:**
+    - Free, powerful
+    - Professional-grade
+    - Active community
+    - Cross-platform
+
+    **Cons:**
+    - Steeper learning curve
+
+    **Download:** https://kicad.org/
+  </Accordion>
+
+  <Accordion title="Fritzing (Visual, Beginner-Friendly)" icon="diagram-venn">
+    **Pros:**
+    - Visual breadboard view
+    - Easy for documentation
+    - Good for prototyping diagrams
+
+    **Cons:**
+    - Less professional
+    - Limited for complex designs
+
+    **Download:** https://fritzing.org/
+  </Accordion>
+
+  <Accordion title="Cadence OrCAD (Professional)" icon="industry">
+    **Pros:**
+    - Industry standard
+    - Powerful simulation
+    - University license available
+
+    **Cons:**
+    - Complex for beginners
+    - Windows only
+
+    **Access:** Check university software portal
+  </Accordion>
+</AccordionGroup>
+
+### Creating the Wiring Diagram
+
+**Step-by-step in EasyEDA:**
+
+1. **Create New Project**
+   - Sign in to EasyEDA
+   - New Project → "Mecanum Robot"
+   - New Schematic
+
+2. **Add Components**
+   - Search library for: ESP32, IBT-2, etc.
+   - If not found, create custom symbol or use generic blocks
+   - Place all components on canvas
+
+3. **Draw Connections**
+   - Power connections (red for +, black for GND)
+   - Signal wires (different colors for clarity)
+   - Label all nets (e.g., "MOTOR1_PWM", "ENC1_A")
+
+4. **Add Annotations**
+   - Component values (resistor values, capacitor values)
+   - Voltage levels
+   - Pin numbers
+   - Wire gauge recommendations
+
+5. **Design Rules Check**
+   - Verify no floating pins
+   - Check all grounds connected
+   - Confirm polarities (power supplies)
+
+## Wire Gauge Selection
+
+Choose appropriate wire gauge (AWG) for current:
+
+| Current | Minimum AWG | Recommended AWG | Notes |
+|---------|-------------|-----------------|-------|
+| < 0.5A | 24 AWG | 22 AWG | Signal wires, logic |
+| 0.5-2A | 22 AWG | 20 AWG | 5V power distribution |
+| 2-5A | 20 AWG | 18 AWG | Motor power, 12V bus |
+| 5-10A | 18 AWG | 16 AWG | Main battery leads |
+
+<Tip>
+  **Color Coding:** Use consistent colors:
+  - Red: Positive power
+  - Black: Ground
+  - Yellow: PWM signals
+  - Green/Blue: Encoder signals
+  - White: Serial communication
+</Tip>
+
+## Connectors and Terminals
+
+### Recommended Connectors
+
+**Power:**
+- XT60 or XT30 for battery (anti-spark, high current)
+- Screw terminals for power distribution
+- Fuse holders inline
+
+**Signal:**
+- Dupont connectors (2.54mm pitch) for breadboard-style
+- JST connectors for permanent connections
+- Pin headers for modular connections
+
+**Motors:**
+- Bullet connectors or solder direct
+- Consider quick-disconnect for easy removal
+
+### Terminal Block Layout
+
+For wire management without PCB:
+
+```
+12V Distribution Block:
+  [12V IN] [Motor1+] [Motor2+] [Motor3+] [Motor4+] [Buck+]
+
+GND Distribution Block:
+  [GND IN] [Motor1-] [Motor2-] [Motor3-] [Motor4-] [Buck-] [Logic GND]
+
+5V Distribution Block:
+  [5V Buck] [ESP32] [RPi] [Sensors]
+```
+
+## PCB Design (Advanced)
+
+If you choose to design a custom PCB:
+
+### PCB Design Steps
+
+<Steps>
+  <Step title="Schematic Capture">
+    Create complete schematic with all components and connections in EasyEDA or KiCad
+  </Step>
+
+  <Step title="Footprint Assignment">
+    Assign physical footprints to each component (THT vs SMD, package size)
+  </Step>
+
+  <Step title="PCB Layout">
+    Arrange components on board, considering:
+    - Power distribution first
+    - Signal routing
+    - Thermal management (motor drivers)
+    - Mechanical constraints (mounting holes, size)
+  </Step>
+
+  <Step title="Routing">
+    Connect all traces:
+    - Power traces wide (2-3mm for high current)
+    - Signal traces thin (0.3-0.5mm)
+    - Ground plane (pour copper on bottom layer)
+  </Step>
+
+  <Step title="Design Rule Check (DRC)">
+    Verify no errors, proper clearances, manufacturability
+  </Step>
+
+  <Step title="Generate Gerber Files">
+    Export manufacturing files for PCB fabrication house
+  </Step>
+
+  <Step title="Order PCBs">
+    Upload to JLCPCB, PCBWay, or other service (~$5 for 5 boards, 1-2 week delivery)
+  </Step>
+</Steps>
+
+### PCB Design Guidelines
+
+**Trace Width:**
+```
+Signal traces: 0.3mm minimum
+5V power: 1mm (up to 2A)
+12V motor power: 2-3mm (up to 5A)
+Ground plane: Fill remaining area
+```
+
+**Layer Stack:**
+```
+2-layer PCB (sufficient):
+  Top: Components + signal routing
+  Bottom: Ground plane + power routing
+
+4-layer PCB (professional, expensive):
+  Layer 1: Signal
+  Layer 2: Ground plane
+  Layer 3: Power plane
+  Layer 4: Signal
+```
+
+**Mounting:**
+- Add 3-4mm mounting holes at corners
+- M3 size (3.2mm holes)
+- Keep components >5mm from board edge
+
+## Safety Considerations
+
+<Warning>
+  **Critical Safety Items:**
+</Warning>
+
+<AccordionGroup>
+  <Accordion title="Fusing and Protection" icon="bolt">
+    - Main battery fuse: 10A
+    - 5V regulator fuse: 5A
+    - Fuse should blow before wires melt
+    - Use automotive blade fuses (easy to replace)
+  </Accordion>
+
+  <Accordion title="Battery Safety" icon="battery-bolt">
+    - LiPo batteries can catch fire if damaged
+    - Use LiPo safety bag for storage
+    - Don't over-discharge (&lt;3.0V per cell)
+    - Balance charging required
+    - Emergency disconnect switch mandatory
+  </Accordion>
+
+  <Accordion title="Short Circuit Prevention" icon="triangle-exclamation">
+    - Double-check polarity before powering on
+    - Insulate all exposed connections (heat shrink, electrical tape)
+    - Secure wires with zip ties (prevent movement into fan blades)
+    - Test with multimeter before connecting battery
+  </Accordion>
+
+  <Accordion title="Thermal Management" icon="temperature-high">
+    - Motor drivers can get HOT (60-80°C)
+    - Ensure airflow or add heatsinks
+    - Don't enclose drivers in sealed box
+    - Monitor temperature during initial testing
+  </Accordion>
+</AccordionGroup>
+
+## Testing Procedure
+
+Before full power-on:
+
+<Steps>
+  <Step title="Visual Inspection">
+    - Check all connections match diagram
+    - Verify no loose wires
+    - Confirm polarity of all power connections
+  </Step>
+
+  <Step title="Continuity Testing">
+    - Use multimeter in continuity mode
+    - Verify GND connections (should beep)
+    - Check NO shorts between power rails
+  </Step>
+
+  <Step title="Power Supply Test">
+    - Connect power supply (not battery yet)
+    - Measure voltages at each component
+    - Verify 12V and 5V rails correct
+  </Step>
+
+  <Step title="Low-Power Test">
+    - Power ESP32 only via USB
+    - Test all GPIO outputs with LED
+    - Verify signal levels
+  </Step>
+
+  <Step title="Motor Test (One at a Time)">
+    - Connect ONE motor driver + motor
+    - Test with limited PWM duty cycle (20%)
+    - Verify rotation and encoder signals
+    - Repeat for all motors
+  </Step>
+
+  <Step title="Full System Test">
+    - Connect all components
+    - Power from battery
+    - Monitor current draw
+    - Test all functions
+  </Step>
+</Steps>
+
+## Documentation Requirements
+
+Your wiring diagram should include:
+
+- [ ] All components labeled with designators (U1, M1, etc.)
+- [ ] All connections shown clearly
+- [ ] Wire colors indicated
+- [ ] Pin numbers labeled
+- [ ] Voltage levels marked
+- [ ] Current ratings noted
+- [ ] Component values (resistors, capacitors)
+- [ ] Connector types specified
+- [ ] Legend/notes explaining symbols
+- [ ] Revisions/version number
+
+## Example Projects
+
+Study these open-source robot electrical designs:
+
+- ROS2 Turtlebot: Simple diff-drive wiring
+- Arduino Robot Car: Similar motor driver setup
+- DIY Roomba: Power distribution examples
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Mechanical Assembly"
+    icon="screwdriver-wrench"
+    href="/wp2-prototyping/mechanical-assembly"
+  >
+    Integrate electrical and mechanical systems
+  </Card>
+  <Card
+    title="ESP32 Basics"
+    icon="microchip"
+    href="/wp3-embedded/esp32-basics"
+  >
+    Learn ESP32 GPIO and programming
+  </Card>
+  <Card
+    title="Motor Driver Guide"
+    icon="gears"
+    href="/wp3-embedded/motor-driver"
+  >
+    Understand IBT-2 motor driver
+  </Card>
+  <Card
+    title="Hardware Reference"
+    icon="book"
+    href="/reference/hardware/esp32"
+  >
+    Complete component specifications
+  </Card>
+</CardGroup>
+
+## References
+
+[1] EasyEDA Tutorial: https://easyeda.com/page/tutorial
+[2] Wire Gauge Chart: https://www.powerstream.com/Wire_Size.htm
+[3] LiPo Battery Safety: https://www.robotshop.com/community/tutorials/show/lipo-battery-guide

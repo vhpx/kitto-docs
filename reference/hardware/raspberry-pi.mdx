@@ -1,0 +1,563 @@
+---
+title: "Raspberry Pi Specifications"
+description: "Complete Raspberry Pi 4/5 specifications for ROS2 navigation"
+---
+
+## Overview
+
+The **Raspberry Pi 5** (or Pi 4) serves as the main computer for ROS2 navigation, running Ubuntu 24.04 and the Nav2 stack. It handles high-level planning, localization, and coordination of all subsystems.
+
+<Note>
+  **Role:** High-level autonomy brain. Runs ROS2, Nav2, SLAM, and sensor fusion. Communicates with ESP32 for motor control.
+</Note>
+
+## Model Comparison
+
+### Raspberry Pi 5 vs. 4
+
+| Feature | Pi 4 (4GB) | Pi 5 (4GB) | Pi 5 (8GB) | Recommended |
+|---------|------------|------------|------------|-------------|
+| **CPU** | Cortex-A72 1.5GHz (4-core) | Cortex-A76 2.4GHz (4-core) | Cortex-A76 2.4GHz (4-core) | **Pi 5 8GB** |
+| **RAM** | 4GB LPDDR4-3200 | 4GB LPDDR4X-4267 | 8GB LPDDR4X-4267 | 8GB for Nav2 |
+| **GPU** | VideoCore VI | VideoCore VII | VideoCore VII | Better graphics |
+| **USB 3.0** | 2 ports | 2 ports | 2 ports | For LiDAR |
+| **USB 2.0** | 2 ports | 2 ports | 2 ports | For ESP32 |
+| **PCIe** | No | Yes (M.2 HAT support) | Yes | SSD support |
+| **Power** | 5V 3A (15W) | 5V 5A (25W) recommended | 5V 5A (25W) recommended | Higher power |
+| **Price** | $55 (discontinued) | $60 | $80 | Best value: 8GB |
+
+**Verdict:**
+- **Best:** Raspberry Pi 5 (8GB) - $80, excellent Nav2 performance
+- **Good:** Raspberry Pi 5 (4GB) - $60, adequate for most tasks
+- **OK:** Raspberry Pi 4 (4GB) - $55, slower but functional
+
+<Tip>
+  **Recommendation:** Raspberry Pi 5 8GB for best experience. The extra RAM helps with Nav2, RViz, and multitasking.
+</Tip>
+
+## Raspberry Pi 5 Specifications
+
+### Processor
+
+| Feature | Specification |
+|---------|--------------|
+| **SoC** | Broadcom BCM2712 |
+| **CPU** | Quad-core Cortex-A76 @ 2.4GHz |
+| **Architecture** | ARM v8.2 64-bit |
+| **L1 Cache** | 64KB I-cache + 64KB D-cache (per core) |
+| **L2 Cache** | 512KB (per core) |
+| **L3 Cache** | 2MB (shared) |
+
+**Performance:**
+- 2-3× faster than Pi 4
+- ~500 GFLOPS (single precision)
+- Good for Nav2 path planning and costmap computation
+
+### Memory
+
+| Model | RAM | Type | Bandwidth |
+|-------|-----|------|-----------|
+| **Pi 5 4GB** | 4GB | LPDDR4X-4267 | 17 GB/s |
+| **Pi 5 8GB** | 8GB | LPDDR4X-4267 | 17 GB/s |
+
+**RAM usage (typical):**
+- Ubuntu 24.04: 800MB - 1.2GB
+- ROS2 base: 200-400MB
+- Nav2 stack: 400-800MB
+- SLAM (slam_toolbox): 200-500MB
+- **Total:** 1.6-2.9GB (4GB sufficient, 8GB comfortable)
+
+### GPU (VideoCore VII)
+
+| Feature | Specification |
+|---------|--------------|
+| **Architecture** | VideoCore VII |
+| **Clock Speed** | 800 MHz (1 GHz capable) |
+| **OpenGL** | ES 3.1 |
+| **H.264 Decode** | 4Kp60 |
+| **H.265 Decode** | 4Kp60 HEVC |
+| **Display Output** | 2× 4Kp60 or 1× 4Kp120 |
+
+**For robotics:** Useful for RViz visualization if using HDMI display.
+
+### Storage
+
+| Interface | Type | Speed | Use |
+|-----------|------|-------|-----|
+| **microSD** | UHS-I | Up to 104 MB/s | Boot + OS |
+| **PCIe 2.0** | M.2 (via HAT) | Up to 500 MB/s | Optional fast storage |
+
+**Recommended microSD:**
+- **Size:** 64GB minimum (128GB for extensive logging)
+- **Class:** UHS-I U3, A2 (for app performance)
+- **Brand:** SanDisk Extreme, Samsung EVO Select
+
+### Connectivity
+
+**USB:**
+- 2× USB 3.0 ports (5 Gbps)
+- 2× USB 2.0 ports (480 Mbps)
+- **Allocation:**
+  - USB 3.0 #1: RPLIDAR A1M8 (LiDAR)
+  - USB 2.0 #1: ESP32 (serial communication)
+  - USB 2.0 #2: Camera (optional)
+  - USB 3.0 #2: Reserved (WiFi dongle, storage, etc.)
+
+**Ethernet:**
+- Gigabit Ethernet (1000 Mbps)
+- Realtek RTL8211F PHY
+- **Use:** Wired connection to development PC (lower latency than WiFi)
+
+**WiFi:**
+- 802.11ac (WiFi 5), dual-band 2.4/5 GHz
+- Cypress CYW43455 chip
+- **Use:** Wireless SSH access, ROS2 communication
+
+**Bluetooth:**
+- Bluetooth 5.0 / BLE
+- **Use:** Optional (joystick control, debugging)
+
+### GPIO (40-pin header)
+
+**Same pinout as Pi 4:**
+
+```
+                        3.3V ●  1  ● 2   5V
+           (SDA) GPIO  2 / I2C1 ●  3  ● 4   5V
+           (SCL) GPIO  3 / I2C1 ●  5  ● 6   GND
+                 GPIO  4        ●  7  ● 8   GPIO 14 (TXD0)
+                       GND      ●  9  ● 10  GPIO 15 (RXD0)
+                 GPIO 17        ● 11  ● 12  GPIO 18 (PWM0)
+                 GPIO 27        ● 13  ● 14  GND
+                 GPIO 22        ● 15  ● 16  GPIO 23
+                       3.3V     ● 17  ● 18  GPIO 24
+   (MOSI) GPIO 10 / SPI0        ● 19  ● 20  GND
+   (MISO) GPIO  9 / SPI0        ● 21  ● 22  GPIO 25
+   (SCLK) GPIO 11 / SPI0        ● 23  ● 24  GPIO  8 (CE0) / SPI0
+                       GND      ● 25  ● 26  GPIO  7 (CE1) / SPI0
+           (SDA) GPIO  0 / I2C0 ● 27  ● 28  GPIO  1 (SCL) / I2C0
+                 GPIO  5        ● 29  ● 30  GND
+                 GPIO  6        ● 31  ● 32  GPIO 12 (PWM0)
+                 GPIO 13 / PWM1 ● 33  ● 34  GND
+                 GPIO 19 / PWM1 ● 35  ● 36  GPIO 16
+                 GPIO 26        ● 37  ● 38  GPIO 20
+                       GND      ● 39  ● 40  GPIO 21
+```
+
+**Not typically used for robot project** (ESP32 handles GPIO), but available for:
+- Additional sensors
+- Status LEDs
+- Debugging signals
+- Hardware shutdown button
+
+### Power
+
+| Parameter | Pi 4 | Pi 5 |
+|-----------|------|------|
+| **Input Voltage** | 5V ±5% | 5V ±5% |
+| **Recommended PSU** | 5V 3A (15W) | 5V 5A (25W) |
+| **Idle Power** | 2.7W | 3.3W |
+| **Typical Load** | 4-7W | 8-12W |
+| **Peak Load** | 7.6W | 12-15W (with peripherals) |
+| **USB Current** | 1.2A total | 1.6A total |
+
+**Power connector:**
+- Pi 4: USB-C
+- Pi 5: USB-C
+
+**Power supply recommendation:**
+- **For bench testing:** Official 5V 5A power adapter ($12)
+- **For robot (from battery):** 12V → 5V 5A buck converter
+
+### Cooling
+
+**Pi 5 runs hotter than Pi 4:**
+
+| Cooling | Idle Temp | Load Temp | Throttling? |
+|---------|-----------|-----------|-------------|
+| **No heatsink** | 50-55°C | 75-85°C | Yes (>80°C) |
+| **Passive heatsink** | 45-50°C | 65-75°C | Rare |
+| **Active (fan)** | 40-45°C | 55-65°C | No |
+
+**Recommendations:**
+- **Minimum:** Heatsink on CPU (included with some kits)
+- **Recommended:** Active cooling (5V fan) for Nav2 workload
+- **Monitor:** `vcgencmd measure_temp` in terminal
+
+**Throttling indicator:**
+```bash
+# Check throttling status
+vcgencmd get_throttled
+
+# 0x0 = No throttling (good)
+# 0x50000 = Throttled due to undervoltage
+# 0x80000 = Soft temp limit reached (80°C)
+```
+
+## Software Stack
+
+### Operating System
+
+**Recommended: Ubuntu 24.04 LTS Server**
+
+| OS | Pros | Cons | Recommended? |
+|----|------|------|--------------|
+| **Ubuntu 24.04 Server (64-bit)** | ROS2 Jazzy native, lightweight, headless | No GUI | **Yes** |
+| **Ubuntu 24.04 Desktop** | GUI for debugging, easier for beginners | Higher resource usage | OK |
+| **Raspberry Pi OS** | Official, optimized for Pi | No ROS2 Jazzy packages | No |
+
+**Installation:**
+```bash
+# Download Ubuntu 24.04 Server ARM64
+# Flash to microSD using Raspberry Pi Imager
+# Boot and configure (see setup guide)
+```
+
+### ROS2 Installation
+
+**ROS2 Jazzy (on Ubuntu 24.04):**
+
+```bash
+# Add ROS2 repository
+sudo apt update && sudo apt install -y software-properties-common
+sudo add-apt-repository universe
+sudo apt update && sudo apt install curl -y
+sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+
+# Install ROS2 Jazzy
+sudo apt update
+sudo apt install ros-jazzy-ros-base -y
+
+# Install additional packages
+sudo apt install -y \
+  ros-jazzy-navigation2 \
+  ros-jazzy-nav2-bringup \
+  ros-jazzy-slam-toolbox \
+  ros-jazzy-robot-localization \
+  ros-jazzy-ros2-control \
+  ros-jazzy-ros2-controllers \
+  python3-colcon-common-extensions
+```
+
+**Storage requirements:**
+- Base OS: 3-4GB
+- ROS2 + dependencies: 2-3GB
+- Workspace + maps: 1-2GB
+- **Total:** ~10GB (64GB SD card plenty of space)
+
+## Performance Benchmarks
+
+### CPU Performance
+
+**ROS2 Nav2 workload (typical):**
+
+| Task | CPU Usage (Pi 5 8GB) | Notes |
+|------|---------------------|-------|
+| **Idle (ROS2 running)** | 5-10% | Background daemons |
+| **SLAM Toolbox (mapping)** | 20-40% | Depends on scan rate |
+| **AMCL (localization)** | 5-15% | Particle filter |
+| **Planner Server** | 10-20% | Path planning (on-demand) |
+| **Controller Server** | 15-25% | Trajectory rollout (20 Hz) |
+| **Costmap Updates** | 10-20% | Local + global |
+| **Total (navigation active)** | 60-80% | All above combined |
+
+**Pi 5 can handle Nav2 comfortably.** Pi 4 may struggle with SLAM + navigation simultaneously.
+
+### Memory Usage
+
+**Typical memory usage:**
+
+| Task | RAM Usage (MB) |
+|------|---------------|
+| Ubuntu Server | 800 |
+| ROS2 daemon | 150 |
+| SLAM Toolbox | 300-600 |
+| Nav2 stack | 500-800 |
+| robot_localization (EKF) | 50 |
+| rplidar_ros | 20 |
+| **Total** | 1820-2620 MB |
+
+**Conclusion:** 4GB sufficient for most tasks, 8GB provides headroom for camera, RViz, etc.
+
+### Network Performance
+
+**WiFi latency (ROS2 communication):**
+- Local node-to-node: &lt;1 ms
+- Pi ↔ Development PC (WiFi 5 GHz): 2-5 ms (good)
+- Pi ↔ Development PC (WiFi 2.4 GHz): 5-15 ms (acceptable)
+- Pi ↔ Development PC (Ethernet): 1-2 ms (best)
+
+**Recommendation:** Use Ethernet for initial setup/debugging, WiFi for untethered operation.
+
+## Pin Usage for Robot
+
+### GPIO (Minimal Usage)
+
+**Raspberry Pi GPIO mostly unused** (ESP32 handles motor/sensor I/O), but can be used for:
+
+**Optional:**
+```python
+import RPi.GPIO as GPIO
+
+# Status LED (heartbeat)
+LED_PIN = 18  # GPIO 18
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(LED_PIN, GPIO.OUT)
+
+# Blink at 1 Hz to indicate system alive
+import time
+while True:
+    GPIO.output(LED_PIN, GPIO.HIGH)
+    time.sleep(0.5)
+    GPIO.output(LED_PIN, GPIO.LOW)
+    time.sleep(0.5)
+```
+
+**Hardware shutdown button:**
+```python
+SHUTDOWN_PIN = 3  # GPIO 3 (pin 5)
+GPIO.setup(SHUTDOWN_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+
+# Detect button press, shutdown safely
+if GPIO.input(SHUTDOWN_PIN) == GPIO.LOW:
+    os.system("sudo shutdown now")
+```
+
+### USB Allocation
+
+**Recommended USB port assignment:**
+
+| Port | Device | Speed | Notes |
+|------|--------|-------|-------|
+| **USB 3.0 #1** | RPLIDAR A1M8 | 5 Gbps | High bandwidth for scan data |
+| **USB 2.0 #1** | ESP32 | 480 Mbps | Serial communication (115200 baud) |
+| **USB 2.0 #2** | Camera (optional) | 480 Mbps | Image streaming |
+| **USB 3.0 #2** | Reserved | 5 Gbps | Future expansion |
+
+## Cooling Solution
+
+### Passive Cooling
+
+**Heatsink installation:**
+1. Clean CPU surface (isopropyl alcohol)
+2. Apply thermal pad (included) or thermal paste
+3. Press heatsink firmly onto CPU
+4. Secure with adhesive or screws
+
+**Temperature improvement:** 50-60°C under load (vs. 75-85°C without)
+
+### Active Cooling
+
+**5V Fan installation:**
+
+```python
+# Fan control via GPIO (PWM)
+FAN_PIN = 18  # GPIO 18 (PWM capable)
+GPIO.setup(FAN_PIN, GPIO.OUT)
+pwm = GPIO.PWM(FAN_PIN, 25000)  # 25 kHz
+
+# Temperature-based fan speed
+import subprocess
+
+def get_cpu_temp():
+    result = subprocess.run(['vcgencmd', 'measure_temp'], capture_output=True, text=True)
+    temp_str = result.stdout.strip().split('=')[1].split("'")[0]
+    return float(temp_str)
+
+temp = get_cpu_temp()
+if temp < 50:
+    pwm.ChangeDutyCycle(0)      # Fan off
+elif temp < 60:
+    pwm.ChangeDutyCycle(30)     # 30% speed
+elif temp < 70:
+    pwm.ChangeDutyCycle(60)     # 60% speed
+else:
+    pwm.ChangeDutyCycle(100)    # Full speed
+```
+
+**Fan recommendations:**
+- 30mm × 30mm × 7mm (fits on official case)
+- 5V DC
+- Quiet (<25 dBA)
+- Connector: 2-pin JST or direct to GPIO
+
+## Storage Recommendations
+
+### microSD Card Selection
+
+**Recommended cards:**
+
+| Brand | Model | Capacity | Speed | Price | Rating |
+|-------|-------|----------|-------|-------|--------|
+| **SanDisk** | Extreme Pro | 64GB | 170/90 MB/s (R/W) | $15 | Best |
+| **Samsung** | EVO Select | 64GB | 130/60 MB/s | $10 | Good |
+| **Kingston** | Canvas Go Plus | 64GB | 170/90 MB/s | $12 | Good |
+
+**Key specs to look for:**
+- **UHS-I U3** (30 MB/s sustained write)
+- **A2** (Application Performance Class 2)
+- **64GB minimum** (128GB for extensive data logging)
+
+**Avoid:**
+- Generic/no-name brands (reliability issues)
+- Very cheap cards (slow, fail quickly)
+- >256GB (diminishing returns, overkill for robot)
+
+### Optional: NVMe SSD (via PCIe HAT)
+
+**For advanced users:**
+
+- **Benefit:** 10× faster than microSD (500 MB/s vs. 50 MB/s)
+- **Use case:** Extensive data logging, frequent map updates
+- **Cost:** $30 (HAT) + $30 (256GB NVMe SSD)
+- **Complexity:** Requires PCIe HAT, more wiring
+
+**Verdict:** Not necessary for course project, but nice for professional deployments.
+
+## Power Supply Options
+
+### Option 1: Bench Power (Development)
+
+**Official Raspberry Pi 5 Power Supply:**
+- 5V 5A (27W)
+- USB-C connector
+- Price: $12
+
+**Use:** Desktop development, debugging, safe
+
+### Option 2: Robot Power (From Battery)
+
+**Buck Converter (12V → 5V):**
+
+| Specification | Value | Product Example |
+|--------------|-------|-----------------|
+| Input Voltage | 8-35V DC | From 3S LiPo (11.1V) |
+| Output Voltage | 5V (fixed or adjustable) | Set to 5.0V ±0.1V |
+| Output Current | 5A minimum | 6-8A recommended |
+| Efficiency | >90% | Less heat |
+| Price | $8-15 | LM2596 or XL4015 |
+
+**Wiring:**
+```
+3S LiPo (12V)
+   │
+   ├──→ Buck Converter (12V → 5V 5A)
+   │          │
+   │          └──→ USB-C cable → Raspberry Pi
+   │
+   └──→ Motor drivers (12V)
+```
+
+**Safety:**
+- Add fuse (3A fast-blow) on 5V line
+- Monitor voltage: 4.75V - 5.25V acceptable
+- If voltage <4.75V → undervoltage warning, possible shutdown
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Pi won't boot (no HDMI output)" icon="power-off">
+    **Causes:**
+    - Corrupted SD card
+    - Insufficient power
+    - Bad SD card
+
+    **Solutions:**
+    1. Check power supply (5V 5A for Pi 5)
+    2. Re-flash SD card with fresh OS image
+    3. Try different SD card
+    4. Check for solid green LED (if on, OS loaded)
+  </Accordion>
+
+  <Accordion title="Pi overheating / throttling" icon="temperature-high">
+    **Symptoms:**
+    - CPU temp >80°C
+    - Sluggish performance
+    - `vcgencmd get_throttled` shows 0x80000
+
+    **Solutions:**
+    - Add heatsink
+    - Add cooling fan
+    - Improve airflow
+    - Reduce CPU load (lower Nav2 rates)
+  </Accordion>
+
+  <Accordion title="WiFi/network issues" icon="wifi">
+    **Debug:**
+    ```bash
+    # Check WiFi status
+    ifconfig wlan0
+
+    # Check WiFi signal strength
+    iwconfig wlan0
+
+    # Reconnect WiFi
+    sudo nmcli device wifi connect YOUR_SSID password YOUR_PASSWORD
+    ```
+
+    **Solutions:**
+    - Use 5 GHz band (less congestion)
+    - Move closer to router
+    - Use wired Ethernet for setup
+  </Accordion>
+
+  <Accordion title="USB device not recognized" icon="usb">
+    **Check:**
+    ```bash
+    # List USB devices
+    lsusb
+
+    # Check dmesg for errors
+    dmesg | tail -n 50
+    ```
+
+    **Common issues:**
+    - Insufficient USB power (use powered hub)
+    - Bad USB cable
+    - Device permissions (add user to dialout group)
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Raspberry Pi Setup"
+    icon="gear"
+    href="/wp4-ros2/setup/raspberry-pi-setup"
+  >
+    Complete Pi configuration guide
+  </Card>
+
+  <Card
+    title="Motor Specifications"
+    icon="gear"
+    href="/reference/hardware/motors"
+  >
+    DC motor details
+  </Card>
+
+  <Card
+    title="LiDAR Specifications"
+    icon="radar"
+    href="/reference/hardware/lidar"
+  >
+    RPLIDAR A1M8 specs
+  </Card>
+
+  <Card
+    title="Power System"
+    icon="battery-full"
+    href="/reference/hardware/power"
+  >
+    Complete power system design
+  </Card>
+</CardGroup>
+
+## References
+
+[1] Raspberry Pi 5 Documentation: https://www.raspberrypi.com/documentation/computers/raspberry-pi.html
+[2] Raspberry Pi 5 Datasheet: https://datasheets.raspberrypi.com/rpi5/raspberry-pi-5-product-brief.pdf
+[3] Ubuntu on Raspberry Pi: https://ubuntu.com/download/raspberry-pi
+[4] ROS2 on Raspberry Pi: https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debians.html

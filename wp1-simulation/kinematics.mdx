@@ -1,0 +1,577 @@
+---
+title: "Mecanum Robot Kinematics"
+description: "Mathematical derivation and implementation of forward and inverse kinematics for Mecanum wheel robots"
+---
+
+## Overview
+
+**Kinematics** describes the relationship between wheel velocities and robot motion, without considering forces or torques. For a Mecanum robot, we need two transformations:
+
+- **Forward Kinematics:** Given wheel velocities → Calculate robot velocity
+- **Inverse Kinematics:** Given desired robot velocity → Calculate required wheel velocities
+
+<Note>
+  **Goal:** Understand and implement the mathematics that makes omnidirectional motion possible.
+</Note>
+
+## Coordinate Frames and Notation
+
+### Robot Body Frame
+
+```
+        Y (left)
+        ↑
+        |
+        |
+        └────→ X (forward)
+```
+
+- **Origin:** Center of robot chassis
+- **X-axis:** Forward direction of robot
+- **Y-axis:** Left direction (perpendicular to X)
+- **θ (theta):** Robot heading angle (counterclockwise from global X)
+
+### Robot Velocity Components
+
+The robot's velocity in its body frame has three components:
+
+- **Vₓ** - Linear velocity in X direction (forward/backward) [m/s]
+- **Vᵧ** - Linear velocity in Y direction (left/right strafing) [m/s]
+- **ω** (omega) - Angular velocity (rotation rate) [rad/s]
+
+**Velocity Vector:**
+```
+V_robot = [Vₓ, Vᵧ, ω]ᵀ
+```
+
+### Wheel Configuration
+
+Standard 4-wheel Mecanum configuration:
+
+```
+        Front (X+)
+    ┌─────────────┐
+    │  ①      ②  │      ① Front-Left (FL)
+    │             │      ② Front-Right (FR)
+L   │      ●      │      ③ Rear-Left (RL)
+    │             │      ④ Rear-Right (RR)
+    │  ③      ④  │
+    └─────────────┘      ● Robot center
+        Rear (X-)
+    |←─────W─────→|
+```
+
+**Parameters:**
+- **L** - Wheelbase (front-to-rear distance) [m]
+- **W** - Track width (left-to-right distance) [m]
+- **r** - Wheel radius [m]
+- **l** = (L + W) / 2 - Distance from center to wheel [m]
+
+## Roller Force Analysis
+
+Each Mecanum wheel has rollers at **45°** angle. When the wheel rotates, the roller contact produces force components:
+
+<img
+  src="/images/mecanum-roller-forces.png"
+  alt="Mecanum wheel roller force components"
+  caption="Force from rotating Mecanum wheel decomposes into X and Y components"
+/>
+
+For a wheel rotating at angular velocity **ωᵢ**:
+
+- Roller surface velocity: **vᵢ = r × ωᵢ**
+- Force acts at 45° angle
+- X-component: **vₓ = vᵢ × cos(45°) = vᵢ / √2**
+- Y-component: **vᵧ = vᵢ × sin(45°) = vᵢ / √2**
+
+**Key Insight:** Each wheel contributes to **both** forward and sideways motion!
+
+## Forward Kinematics Derivation
+
+### Step 1: Individual Wheel Contributions
+
+For each wheel, determine its contribution to robot motion:
+
+**Wheel 1 (Front-Left, FL):**
+- X contribution: +vᵢ / √2 (rollers push forward)
+- Y contribution: +vᵢ / √2 (rollers push left)
+- Rotation contribution: +l × ωᵢ (counterclockwise rotation)
+
+**Wheel 2 (Front-Right, FR):**
+- X contribution: +vᵢ / √2 (rollers push forward)
+- Y contribution: -vᵢ / √2 (rollers push right)
+- Rotation contribution: -l × ωᵢ (clockwise rotation)
+
+**Wheel 3 (Rear-Left, RL):**
+- X contribution: +vᵢ / √2
+- Y contribution: -vᵢ / √2
+- Rotation contribution: +l × ωᵢ
+
+**Wheel 4 (Rear-Right, RR):**
+- X contribution: +vᵢ / √2
+- Y contribution: +vᵢ / √2
+- Rotation contribution: -l × ωᵢ
+
+### Step 2: Sum Contributions
+
+Robot velocities are the average of all wheel contributions:
+
+**Forward velocity (Vₓ):**
+```
+Vₓ = (v₁ + v₂ + v₃ + v₄) / (4√2)
+   = (r/4√2) × (ω₁ + ω₂ + ω₃ + ω₄)
+```
+
+**Sideways velocity (Vᵧ):**
+```
+Vᵧ = (v₁ - v₂ - v₃ + v₄) / (4√2)
+   = (r/4√2) × (ω₁ - ω₂ - ω₃ + ω₄)
+```
+
+**Angular velocity (ω):**
+```
+ω = (v₁ - v₂ + v₃ - v₄) / (4l)
+  = (r/4l) × (ω₁ - ω₂ + ω₃ - ω₄)
+```
+
+### Step 3: Matrix Form
+
+The forward kinematics can be written as:
+
+```
+┌──┐       ┌                    ┐ ┌──┐
+│Vₓ│   r   │ 1    1    1    1  │ │ω₁│
+│Vᵧ│ = ─── │ 1   -1   -1    1  │ │ω₂│
+│ω │   4√2 │√2/l -√2/l √2/l -√2/l│ │ω₃│
+└──┘       └                    ┘ └ω₄┘
+```
+
+**Or more compactly:**
+
+```
+V_robot = J × ω_wheels
+```
+
+Where **J** is the forward kinematics Jacobian matrix.
+
+## Inverse Kinematics Derivation
+
+Inverse kinematics finds wheel velocities needed for desired robot motion. We invert the forward kinematics matrix.
+
+### Matrix Inversion Approach
+
+Starting from:
+```
+V_robot = J × ω_wheels
+```
+
+Solve for wheel velocities:
+```
+ω_wheels = J⁻¹ × V_robot
+```
+
+### Result: Inverse Kinematics Equations
+
+```
+ω₁ = (√2/r) × (Vₓ + Vᵧ + l×ω)
+ω₂ = (√2/r) × (Vₓ - Vᵧ - l×ω)
+ω₃ = (√2/r) × (Vₓ - Vᵧ + l×ω)
+ω₄ = (√2/r) × (Vₓ + Vᵧ - l×ω)
+```
+
+### Matrix Form
+
+```
+┌──┐        ┌            ┐ ┌──┐
+│ω₁│   √2   │ 1   1   l  │ │Vₓ│
+│ω₂│ = ───  │ 1  -1  -l  │ │Vᵧ│
+│ω₃│    r   │ 1  -1   l  │ │ω │
+│ω₄│        │ 1   1  -l  │ └──┘
+└──┘        └            ┘
+```
+
+## MATLAB Implementation
+
+### Robot Parameters
+
+Create a parameter file `robot_params.m`:
+
+```matlab
+function params = robot_params()
+    % Mecanum Robot Parameters
+    % Units: meters (m), radians (rad)
+
+    % Wheel properties
+    params.wheel_radius = 0.05;      % 50mm radius (100mm diameter)
+
+    % Robot dimensions
+    params.wheelbase = 0.30;         % 300mm front-to-rear
+    params.track_width = 0.25;       % 250mm left-to-right
+
+    % Derived parameter
+    params.l = (params.wheelbase + params.track_width) / 2;
+
+    % Limits (for safety / realism)
+    params.max_wheel_velocity = 10;  % rad/s (adjust based on motor)
+    params.max_linear_velocity = 0.5; % m/s
+    params.max_angular_velocity = 2;  % rad/s
+end
+```
+
+### Forward Kinematics Function
+
+Create `forward_kinematics.m`:
+
+```matlab
+function robot_vel = forward_kinematics(wheel_vel, params)
+    % FORWARD_KINEMATICS Convert wheel velocities to robot velocity
+    %
+    % Inputs:
+    %   wheel_vel - [4x1] vector of wheel angular velocities [rad/s]
+    %               [w1; w2; w3; w4] = [FL; FR; RL; RR]
+    %   params    - Robot parameters struct
+    %
+    % Outputs:
+    %   robot_vel - [3x1] vector [Vx; Vy; omega] in m/s and rad/s
+
+    r = params.wheel_radius;
+    l = params.l;
+
+    % Extract individual wheel velocities
+    w1 = wheel_vel(1);  % Front-left
+    w2 = wheel_vel(2);  % Front-right
+    w3 = wheel_vel(3);  % Rear-left
+    w4 = wheel_vel(4);  % Rear-right
+
+    % Forward kinematics equations
+    Vx = (r / (4*sqrt(2))) * (w1 + w2 + w3 + w4);
+    Vy = (r / (4*sqrt(2))) * (w1 - w2 - w3 + w4);
+    omega = (r * sqrt(2) / (4*l)) * (w1 - w2 + w3 - w4);
+
+    % Return as column vector
+    robot_vel = [Vx; Vy; omega];
+end
+```
+
+**Alternative Matrix Form:**
+
+```matlab
+function robot_vel = forward_kinematics_matrix(wheel_vel, params)
+    r = params.wheel_radius;
+    l = params.l;
+
+    % Jacobian matrix
+    J = (r / (4*sqrt(2))) * [
+        1,      1,      1,      1;
+        1,     -1,     -1,      1;
+        sqrt(2)/l, -sqrt(2)/l, sqrt(2)/l, -sqrt(2)/l
+    ];
+
+    robot_vel = J * wheel_vel;
+end
+```
+
+### Inverse Kinematics Function
+
+Create `inverse_kinematics.m`:
+
+```matlab
+function wheel_vel = inverse_kinematics(robot_vel, params)
+    % INVERSE_KINEMATICS Convert robot velocity to wheel velocities
+    %
+    % Inputs:
+    %   robot_vel - [3x1] vector [Vx; Vy; omega] in m/s and rad/s
+    %   params    - Robot parameters struct
+    %
+    % Outputs:
+    %   wheel_vel - [4x1] vector of wheel angular velocities [rad/s]
+    %               [w1; w2; w3; w4] = [FL; FR; RL; RR]
+
+    r = params.wheel_radius;
+    l = params.l;
+
+    % Extract robot velocities
+    Vx = robot_vel(1);
+    Vy = robot_vel(2);
+    omega = robot_vel(3);
+
+    % Inverse kinematics equations
+    w1 = (sqrt(2) / r) * (Vx + Vy + l*omega);  % Front-left
+    w2 = (sqrt(2) / r) * (Vx - Vy - l*omega);  % Front-right
+    w3 = (sqrt(2) / r) * (Vx - Vy + l*omega);  % Rear-left
+    w4 = (sqrt(2) / r) * (Vx + Vy - l*omega);  % Rear-right
+
+    % Return as column vector
+    wheel_vel = [w1; w2; w3; w4];
+end
+```
+
+**Matrix Form:**
+
+```matlab
+function wheel_vel = inverse_kinematics_matrix(robot_vel, params)
+    r = params.wheel_radius;
+    l = params.l;
+
+    % Inverse Jacobian matrix
+    J_inv = (sqrt(2) / r) * [
+        1,   1,   l;
+        1,  -1,  -l;
+        1,  -1,   l;
+        1,   1,  -l
+    ];
+
+    wheel_vel = J_inv * robot_vel;
+end
+```
+
+## Validation and Testing
+
+### Test Script
+
+Create `test_kinematics.m`:
+
+```matlab
+%% Test Kinematics Functions
+clear; clc;
+
+% Load robot parameters
+params = robot_params();
+
+%% Test 1: Forward Only Motion
+fprintf('Test 1: Forward Motion\n');
+fprintf('----------------------\n');
+
+% All wheels same speed (forward)
+wheel_vel_forward = [5; 5; 5; 5];  % rad/s
+
+robot_vel_forward = forward_kinematics(wheel_vel_forward, params);
+
+fprintf('Wheel velocities: [%.2f, %.2f, %.2f, %.2f] rad/s\n', wheel_vel_forward);
+fprintf('Robot velocity: Vx=%.3f m/s, Vy=%.3f m/s, omega=%.3f rad/s\n\n', ...
+    robot_vel_forward);
+
+% Expected: Vx > 0, Vy ≈ 0, omega ≈ 0
+
+%% Test 2: Sideways (Strafe) Motion
+fprintf('Test 2: Strafe Right\n');
+fprintf('-------------------\n');
+
+% Diagonal pairs opposite
+wheel_vel_strafe = [5; -5; -5; 5];  % rad/s
+
+robot_vel_strafe = forward_kinematics(wheel_vel_strafe, params);
+
+fprintf('Wheel velocities: [%.2f, %.2f, %.2f, %.2f] rad/s\n', wheel_vel_strafe);
+fprintf('Robot velocity: Vx=%.3f m/s, Vy=%.3f m/s, omega=%.3f rad/s\n\n', ...
+    robot_vel_strafe);
+
+% Expected: Vx ≈ 0, Vy > 0, omega ≈ 0
+
+%% Test 3: Pure Rotation
+fprintf('Test 3: Counterclockwise Rotation\n');
+fprintf('---------------------------------\n');
+
+% Left wheels forward, right wheels backward
+wheel_vel_rotate = [3; -3; 3; -3];  % rad/s
+
+robot_vel_rotate = forward_kinematics(wheel_vel_rotate, params);
+
+fprintf('Wheel velocities: [%.2f, %.2f, %.2f, %.2f] rad/s\n', wheel_vel_rotate);
+fprintf('Robot velocity: Vx=%.3f m/s, Vy=%.3f m/s, omega=%.3f rad/s\n\n', ...
+    robot_vel_rotate);
+
+% Expected: Vx ≈ 0, Vy ≈ 0, omega > 0
+
+%% Test 4: Inverse Kinematics
+fprintf('Test 4: Inverse Kinematics Round-Trip\n');
+fprintf('-------------------------------------\n');
+
+% Desired robot motion: forward and right
+desired_vel = [0.2; -0.1; 0.5];  % Vx=0.2 m/s, Vy=-0.1 m/s, omega=0.5 rad/s
+
+% Calculate required wheel velocities
+wheel_vel_calc = inverse_kinematics(desired_vel, params);
+
+% Verify with forward kinematics
+robot_vel_verify = forward_kinematics(wheel_vel_calc, params);
+
+fprintf('Desired: Vx=%.3f, Vy=%.3f, omega=%.3f\n', desired_vel);
+fprintf('Calculated wheel: [%.2f, %.2f, %.2f, %.2f] rad/s\n', wheel_vel_calc);
+fprintf('Verified: Vx=%.3f, Vy=%.3f, omega=%.3f\n', robot_vel_verify);
+fprintf('Error: %.6f\n\n', norm(desired_vel - robot_vel_verify));
+
+% Error should be very small (numerical precision)
+
+%% Test 5: Visualize Motion Modes
+figure;
+
+% Create visualization for different motion types
+motion_types = {
+    'Forward',   [0.3, 0, 0];
+    'Backward',  [-0.3, 0, 0];
+    'Left',      [0, 0.3, 0];
+    'Right',     [0, -0.3, 0];
+    'Rotate CW', [0, 0, -1];
+    'Rotate CCW',[0, 0, 1];
+    'Diagonal',  [0.3, 0.3, 0];
+    'Complex',   [0.2, -0.1, 0.5]
+};
+
+for i = 1:length(motion_types)
+    subplot(2, 4, i);
+
+    robot_vel = motion_types{i, 2}';
+    wheel_vel = inverse_kinematics(robot_vel, params);
+
+    % Bar plot of wheel velocities
+    bar(wheel_vel);
+    title(motion_types{i, 1});
+    xlabel('Wheel');
+    ylabel('Angular Velocity (rad/s)');
+    xticklabels({'FL', 'FR', 'RL', 'RR'});
+    grid on;
+    ylim([-15, 15]);
+end
+
+sgtitle('Wheel Velocities for Different Motion Types');
+```
+
+### Expected Results
+
+**Test 1 - Forward Motion:**
+- All wheels same speed → Robot moves forward
+- Vₓ > 0, Vᵧ ≈ 0, ω ≈ 0
+
+**Test 2 - Strafe:**
+- Diagonal pairs opposite → Robot strafes
+- Vₓ ≈ 0, Vᵧ ≠ 0, ω ≈ 0
+
+**Test 3 - Rotation:**
+- Left/right opposite → Robot spins in place
+- Vₓ ≈ 0, Vᵧ ≈ 0, ω ≠ 0
+
+**Test 4 - Round-Trip:**
+- Inverse → Forward should give original velocity
+- Error < 1e-10 (numerical precision)
+
+## Common Issues and Debugging
+
+<AccordionGroup>
+  <Accordion title="Wrong signs in equations" icon="plus-minus">
+    **Symptom:** Robot moves opposite direction or rotates wrong way
+
+    **Debug:**
+    - Check wheel numbering convention (FL, FR, RL, RR)
+    - Verify roller angle signs (+45° vs -45°)
+    - Test each motion mode independently
+
+    **Fix:** Carefully review derivation, check signs in matrix
+  </Accordion>
+
+  <Accordion title="Units mismatch" icon="ruler">
+    **Symptom:** Unrealistic velocities (e.g., 100 m/s)
+
+    **Debug:**
+    - Verify all parameters in consistent units (meters, radians)
+    - Check wheel_radius is in meters, not mm
+    - Print intermediate values
+
+    **Fix:** Convert all to SI units (m, rad, s)
+  </Accordion>
+
+  <Accordion title="Singular configuration" icon="triangle-exclamation">
+    **Symptom:** Inverse kinematics gives infinite wheel speeds
+
+    **Debug:**
+    - Check if desired velocity exceeds physical limits
+    - Verify robot parameters (L, W, r) are positive
+
+    **Fix:** Add velocity limiting in inverse kinematics
+  </Accordion>
+
+  <Accordion title="Drift in simulation" icon="compass">
+    **Symptom:** Robot doesn't follow path exactly
+
+    **Debug:**
+    - Check integration time step (too large causes error)
+    - Verify kinematics equations are correctly implemented
+    - Test with simple motions first
+
+    **Fix:** Use smaller time steps, validate kinematics separately
+  </Accordion>
+</AccordionGroup>
+
+## Advanced Topics
+
+### Velocity Limits
+
+Real motors have maximum speeds. Add limits to inverse kinematics:
+
+```matlab
+function wheel_vel = inverse_kinematics_limited(robot_vel, params)
+    % Calculate ideal wheel velocities
+    wheel_vel = inverse_kinematics(robot_vel, params);
+
+    % Find maximum wheel speed
+    max_wheel = max(abs(wheel_vel));
+
+    % If exceeds limit, scale down all wheels proportionally
+    if max_wheel > params.max_wheel_velocity
+        scale = params.max_wheel_velocity / max_wheel;
+        wheel_vel = wheel_vel * scale;
+        warning('Wheel velocities scaled by %.2f to meet limits', scale);
+    end
+end
+```
+
+### Singularity Analysis
+
+Check if kinematics matrix is invertible:
+
+```matlab
+function is_singular = check_singularity(params)
+    r = params.wheel_radius;
+    l = params.l;
+
+    % Build Jacobian
+    J = (r / (4*sqrt(2))) * [
+        1, 1, 1, 1;
+        1, -1, -1, 1;
+        sqrt(2)/l, -sqrt(2)/l, sqrt(2)/l, -sqrt(2)/l
+    ];
+
+    % Check rank
+    rank_J = rank(J);
+    is_singular = (rank_J < 3);
+
+    if is_singular
+        warning('Kinematics Jacobian is singular!');
+    end
+end
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Trajectory Planning"
+    icon="route"
+    href="/wp1-simulation/trajectory-planning"
+  >
+    Use kinematics to simulate robot following paths
+  </Card>
+  <Card
+    title="Motor Specifications"
+    icon="gear"
+    href="/reference/hardware/motors-encoders"
+  >
+    Get realistic motor parameters for simulation
+  </Card>
+</CardGroup>
+
+## References
+
+[1] M. T. Watson, D. T. Gladwin, and T. J. Prescott, "Collinear Mecanum Drive: Modeling, Analysis, Partial Feedback Linearization, and Nonlinear Control," IEEE Transactions on Robotics, vol. 37, no. 2, pp. 642–658, Apr. 2021.
+
+[2] O. Diegel, A. Badve, G. Bright, J. Potgieter, and S. Tlale, "Improved Mecanum Wheel Design for Omni-directional Robots," Proceedings of the 2002 Australasian Conference on Robotics and Automation, pp. 117-121, 2002.

@@ -1,0 +1,431 @@
+---
+title: "Computer Preparation for ROS2"
+description: "Install Ubuntu 24.04 and ROS2 Jazzy on your development computer"
+---
+
+## Overview
+
+ROS2 Jazzy Jalisco requires Ubuntu 24.04 LTS (Noble Numbat). This guide covers installing Ubuntu and ROS2 on your development computer.
+
+<Note>
+  **Based on:** "Preparing the computer for ROS2" document
+  **ROS2 Version:** Jazzy Jalisco (latest LTS)
+  **Ubuntu Version:** 24.04 Noble Numbat
+</Note>
+
+## Installation Options
+
+<CardGroup cols={3}>
+  <Card title="Virtual Machine" icon="window">
+    **Pros:**
+    - Easy setup
+    - Keep existing OS
+    - Reversible
+
+    **Cons:**
+    - Slower performance
+    - Gazebo laggy
+    - Needs 60GB+ disk
+  </Card>
+
+  <Card title="Dual Boot" icon="hard-drive">
+    **Pros:**
+    - Full performance
+    - Gazebo runs smoothly
+    - Native hardware access
+
+    **Cons:**
+    - More complex setup
+    - Partition required
+    - Dual OS management
+  </Card>
+
+  <Card title="External SSD" icon="usb-drive">
+    **Pros:**
+    - Full performance
+    - Portable
+    - No partition needed
+
+    **Cons:**
+    - Requires USB 3.0+ SSD
+    - Slightly slower than internal
+    - Boot configuration
+  </Card>
+</CardGroup>
+
+<Warning>
+  **Recommendation:** Start with VM for learning. Switch to dual-boot or SSD if Gazebo simulation is too slow.
+</Warning>
+
+## Option 1: Virtual Machine Setup
+
+### Step 1: Install VirtualBox
+
+1. Download VirtualBox: https://www.virtualbox.org/
+2. Install for your OS (Windows/Mac/Linux)
+3. Download Extension Pack (same page)
+4. Install Extension Pack: VirtualBox → Preferences → Extensions
+
+### Step 2: Download Ubuntu 24.04
+
+Download Ubuntu 24.04 Desktop image:
+- Website: https://releases.ubuntu.com/noble/
+- File: `ubuntu-24.04.x-desktop-amd64.iso` (~5GB)
+- Verify checksum (optional but recommended)
+
+### Step 3: Create Virtual Machine
+
+<Steps>
+  <Step title="New VM">
+    1. Open VirtualBox
+    2. Click "New"
+    3. **Name:** Ubuntu_ROS2
+    4. **Type:** Linux
+    5. **Version:** Ubuntu (64-bit)
+    6. Click "Next"
+  </Step>
+
+  <Step title="Memory">
+    - **RAM:** 8GB minimum (8192 MB)
+    - More is better if available (16GB recommended)
+  </Step>
+
+  <Step title="Hard Disk">
+    - Create virtual hard disk
+    - **Type:** VDI (VirtualBox Disk Image)
+    - **Storage:** Dynamically allocated
+    - **Size:** 60GB minimum (100GB recommended)
+  </Step>
+
+  <Step title="VM Settings">
+    Before starting, configure settings:
+
+    **Display:**
+    - Settings → Display → Graphics Controller → **VBoxSVGA**
+    - Video Memory: 128MB
+    - Enable 3D Acceleration
+
+    **Network:**
+    - Adapter 1: **Bridged Adapter** (for WiFi)
+    - Adapter 2: **NAT** (for wired connection backup)
+
+    **USB:**
+    - Settings → USB → **USB 3.0 Controller**
+    - Add filter for ESP32 (click + icon)
+
+    **Processor:**
+    - Settings → System → Processor → 4 CPUs (if available)
+  </Step>
+
+  <Step title="Install Ubuntu">
+    1. Start VM
+    2. Select downloaded ISO file when prompted
+    3. Follow Ubuntu installation:
+       - Language: English
+       - Keyboard: Your layout
+       - Installation type: Minimal / Normal
+       - Erase disk and install (VM disk, not real disk!)
+       - Create user account
+       - Wait for installation (~20 min)
+    4. Restart VM
+    5. Remove ISO from VM settings
+  </Step>
+</Steps>
+
+<Tip>
+  **VM Performance Tips:**
+  - Allocate maximum safe RAM (leave 4GB for host OS)
+  - Enable VT-x/AMD-V in BIOS (hardware virtualization)
+  - Use SSD for VM storage (not HDD)
+</Tip>
+
+## Option 2: Dual Boot Setup
+
+<Warning>
+  **BACKUP YOUR DATA FIRST!** Partitioning can lead to data loss if done incorrectly.
+</Warning>
+
+### General Steps:
+
+1. **Create bootable USB:**
+   - Download Ubuntu 24.04 ISO
+   - Use Rufus (Windows) or Etcher (Mac/Linux)
+   - Flash ISO to USB drive (8GB+)
+
+2. **Shrink existing partition:**
+   - Windows: Disk Management → Shrink Volume → 100GB
+   - Mac: Disk Utility → Partition
+
+3. **Boot from USB:**
+   - Restart computer
+   - Enter BIOS/UEFI (F2, F12, Del key during startup)
+   - Set USB as first boot device
+   - Save and exit
+
+4. **Install Ubuntu alongside existing OS:**
+   - Choose "Install Ubuntu"
+   - Select "Install alongside [your OS]"
+   - Allocate 60-100GB to Ubuntu
+   - Follow installation wizard
+
+5. **Configure boot loader (GRUB):**
+   - Automatically configured
+   - Choose OS at startup
+
+**Detailed guides:**
+- Windows + Ubuntu: https://itsfoss.com/install-ubuntu-dual-boot-mode-windows/
+- Mac + Ubuntu: https://help.ubuntu.com/community/MactelSupportTeam/AppleIntelInstallation
+
+## Install ROS2 Jazzy
+
+Once Ubuntu 24.04 is running:
+
+<Steps>
+  <Step title="Set Locale">
+    ```bash
+    sudo apt update && sudo apt install locales
+    sudo locale-gen en_US en_US.UTF-8
+    sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+    export LANG=en_US.UTF-8
+    ```
+
+    Verify:
+    ```bash
+    locale  # Should show en_US.UTF-8
+    ```
+  </Step>
+
+  <Step title="Enable Required Repositories">
+    ```bash
+    # Ensure Ubuntu Universe repository is enabled
+    sudo apt install software-properties-common
+    sudo add-apt-repository universe
+
+    # Add ROS 2 GPG key
+    sudo apt update && sudo apt install curl -y
+    sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+
+    # Add repository to sources list
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+    ```
+  </Step>
+
+  <Step title="Update Package Cache">
+    ```bash
+    sudo apt update
+    sudo apt upgrade
+    ```
+  </Step>
+
+  <Step title="Install ROS 2 Desktop">
+    ```bash
+    sudo apt install ros-jazzy-ros-base ros-dev-tools
+    ```
+
+    **For development computer with GUI:**
+    ```bash
+    sudo apt install ros-jazzy-desktop
+    ```
+
+    This installs:
+    - ROS 2 core
+    - RViz2 (visualization)
+    - Demos and tutorials
+    - Development tools
+
+    **Installation time:** ~10-15 minutes
+  </Step>
+
+  <Step title="Source ROS2 Setup">
+    Add to `.bashrc` for automatic sourcing:
+
+    ```bash
+    echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
+    source ~/.bashrc
+    ```
+
+    Verify installation:
+    ```bash
+    printenv | grep ROS
+    ```
+
+    Should show:
+    ```
+    ROS_VERSION=2
+    ROS_PYTHON_VERSION=3
+    ROS_DISTRO=jazzy
+    ```
+  </Step>
+</Steps>
+
+## Install Additional Tools
+
+### Essential Tools
+
+```bash
+# Terminator (better terminal)
+sudo apt install terminator
+
+# VSCode
+sudo snap install code --classic
+
+# Git (usually pre-installed)
+sudo apt install git
+
+# Colcon (ROS2 build tool)
+sudo apt install python3-colcon-common-extensions
+
+# Gazebo (simulation)
+sudo apt-get install ros-jazzy-ros-gz
+
+# RViz2 plugins
+sudo apt install ros-jazzy-rviz2
+```
+
+### Optional but Recommended
+
+```bash
+# PlotJuggler (data visualization)
+sudo apt install ros-jazzy-plotjuggler-ros
+
+# Robot localization
+sudo apt install ros-jazzy-robot-localization
+
+# Navigation2
+sudo apt install ros-jazzy-navigation2 ros-jazzy-nav2-bringup
+
+# SLAM Toolbox
+sudo apt install ros-jazzy-slam-toolbox
+
+# TF2 tools
+sudo apt install ros-jazzy-tf2-tools
+```
+
+## Test ROS2 Installation
+
+### Test 1: Talker-Listener
+
+Terminal 1:
+```bash
+ros2 run demo_nodes_cpp talker
+```
+
+Terminal 2:
+```bash
+ros2 run demo_nodes_cpp listener
+```
+
+**Expected:** Listener should print messages from Talker.
+
+### Test 2: Turtlesim
+
+```bash
+ros2 run turtlesim turtlesim_node
+```
+
+**Expected:** Window with turtle appears.
+
+In another terminal:
+```bash
+ros2 run turtlesim turtle_teleop_key
+```
+
+Use arrow keys to move turtle.
+
+### Test 3: RViz2
+
+```bash
+rviz2
+```
+
+**Expected:** RViz window opens (may be slow on VM).
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Black screen on VM startup" icon="window-minimize">
+    **Solution:**
+    - Settings → Display → Graphics Controller → VBoxSVGA
+    - Disable 3D Acceleration if issues persist
+  </Accordion>
+
+  <Accordion title="WiFi not working in VM" icon="wifi">
+    **Solution:**
+    - VM Settings → Network → Adapter 1 → Bridged Adapter
+    - Select your WiFi interface from dropdown
+    - OR use Adapter 2 with NAT for wired connection
+  </Accordion>
+
+  <Accordion title="USB devices not detected" icon="usb">
+    **Solution:**
+    - Install VirtualBox Extension Pack
+    - Settings → USB → USB 3.0 Controller
+    - Add USB filter for ESP32
+    - Plug in device and select it in Devices → USB menu
+  </Accordion>
+
+  <Accordion title="ROS2 commands not found" icon="terminal">
+    **Solution:**
+    ```bash
+    source /opt/ros/jazzy/setup.bash
+    # Or restart terminal
+    ```
+
+    Make permanent:
+    ```bash
+    echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
+    ```
+  </Accordion>
+
+  <Accordion title="Gazebo very slow / laggy" icon="gauge">
+    **Cause:** VM performance limitations
+
+    **Solutions:**
+    - Allocate more RAM to VM (12-16GB)
+    - Allocate more CPU cores (4-6)
+    - Use dual-boot or external SSD instead of VM
+    - Reduce Gazebo quality settings
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Raspberry Pi Setup"
+    icon="raspberry-pi"
+    href="/wp4-ros2/setup/raspberry-pi-setup"
+  >
+    Install ROS2 on Raspberry Pi (onboard computer)
+  </Card>
+
+  <Card
+    title="ROS2 Basics"
+    icon="book"
+    href="/wp4-ros2/setup/ros2-basics"
+  >
+    Learn ROS2 concepts: nodes, topics, packages
+  </Card>
+
+  <Card
+    title="Communication Testing"
+    icon="network-wired"
+    href="/wp4-ros2/setup/communication-testing"
+  >
+    Test PC ↔ Raspberry Pi communication
+  </Card>
+
+  <Card
+    title="Software Reference"
+    icon="tools"
+    href="/reference/software/vscode-platformio"
+  >
+    Set up development tools
+  </Card>
+</CardGroup>
+
+## References
+
+[1] ROS2 Jazzy Documentation: https://docs.ros.org/en/jazzy/
+[2] Ubuntu 24.04 Download: https://releases.ubuntu.com/noble/
+[3] VirtualBox User Manual: https://www.virtualbox.org/manual/

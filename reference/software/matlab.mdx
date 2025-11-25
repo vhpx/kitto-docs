@@ -1,0 +1,768 @@
+---
+title: 'MATLAB'
+description: 'MATLAB for mecanum robot kinematics simulation and trajectory planning'
+icon: 'chart-line'
+---
+
+## Overview
+
+MATLAB (Matrix Laboratory) is a numerical computing environment used in WP1 for simulating mecanum wheel robot kinematics and trajectory planning. You'll use MATLAB to model forward/inverse kinematics, visualize robot motion, and validate control algorithms before implementing them on hardware.
+
+<CardGroup cols={2}>
+  <Card title="Kinematics" icon="calculator">
+    Forward and inverse kinematics for omnidirectional motion
+  </Card>
+  <Card title="Visualization" icon="chart-area">
+    Plot robot trajectories and wheel velocities in real-time
+  </Card>
+</CardGroup>
+
+---
+
+## Installation
+
+### RMIT Students
+
+RMIT provides free MATLAB access through the Total Academic Headcount (TAH) license.
+
+<Steps>
+  <Step title="Access RMIT Software Portal">
+    Visit [RMIT Software Download](https://www.rmit.edu.au/students/student-essentials/information-technology/software-for-students)
+
+    Login with your RMIT credentials
+  </Step>
+
+  <Step title="Download MATLAB">
+    Select **MATLAB R2023b** or later (R2024a recommended)
+
+    Choose your platform:
+    - Windows 10/11 (x64)
+    - macOS 10.15+ (Intel or Apple Silicon)
+    - Ubuntu 20.04+ / Red Hat 8+
+  </Step>
+
+  <Step title="Install MATLAB">
+    **Windows/macOS:** Run the installer and follow the wizard
+
+    **Linux:**
+    ```bash
+    # Extract installer
+    unzip matlab_R2024a_glnxa64.zip -d matlab_installer
+    cd matlab_installer
+
+    # Run installer
+    sudo ./install
+
+    # Follow GUI prompts
+    ```
+  </Step>
+
+  <Step title="Select Toolboxes">
+    Required toolboxes for this course:
+    - **MATLAB** (base installation)
+    - **Simulink** (optional, for advanced modeling)
+    - **Control System Toolbox** (for PID tuning)
+    - **Robotics System Toolbox** (optional, for ROS integration)
+
+    <Note>
+    Minimum installation: ~5GB. With all toolboxes: ~15GB
+    </Note>
+  </Step>
+
+  <Step title="Activate License">
+    Choose **Log in with MathWorks Account**
+
+    Use your RMIT email (e.g., s1234567@student.rmit.edu.au)
+  </Step>
+</Steps>
+
+### Alternative: MATLAB Online
+
+For lightweight work, use MATLAB Online (browser-based):
+
+1. Visit [matlab.mathworks.com](https://matlab.mathworks.com/)
+2. Sign in with RMIT account
+3. Access MATLAB directly in browser (no installation needed)
+
+<Warning>
+MATLAB Online has limited file storage (5GB) and requires constant internet connection
+</Warning>
+
+---
+
+## MATLAB Basics
+
+### Interface Overview
+
+MATLAB interface consists of several key components:
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Home | Plots | Apps                    [Search]    │  Toolstrip
+├─────────────┬───────────────────────────────────────┤
+│             │                                       │
+│  Current    │         Editor                        │
+│  Folder     │  (open .m files)                      │
+│             │                                       │
+│             │                                       │
+├─────────────┼───────────────────────────────────────┤
+│             │                                       │
+│  Workspace  │         Command Window                │
+│  (variables)│  >> plot([1 2 3], [1 4 9])           │
+│             │                                       │
+└─────────────┴───────────────────────────────────────┘
+```
+
+**Key windows:**
+- **Command Window:** Execute commands interactively
+- **Editor:** Write and save scripts (.m files)
+- **Workspace:** View variables and their values
+- **Current Folder:** Browse project files
+
+### Basic Commands
+
+```matlab
+% Comments start with %
+
+%% Section comments (creates code cells)
+
+% Variable assignment
+x = 5;              % Semicolon suppresses output
+y = 10              % No semicolon shows result
+
+% Arrays and matrices
+row_vector = [1 2 3 4];           % Row vector
+col_vector = [1; 2; 3; 4];        % Column vector
+matrix = [1 2; 3 4; 5 6];         % 3x2 matrix
+
+% Array indexing (1-based!)
+first_element = row_vector(1);    % Returns 1 (not 0!)
+subarray = row_vector(2:4);       % Returns [2 3 4]
+
+% Element-wise operations
+a = [1 2 3];
+b = [4 5 6];
+c = a + b;          % [5 7 9]
+d = a .* b;         % [4 10 18] (element-wise multiplication)
+e = a * b';         % 32 (dot product, b' is transpose)
+
+% Common functions
+length(a)           % 3
+size(matrix)        % [3 2]
+zeros(3, 3)         % 3x3 zero matrix
+ones(2, 4)          % 2x4 ones matrix
+eye(3)              % 3x3 identity matrix
+```
+
+<Note>
+**MATLAB uses 1-based indexing**, unlike Python/C++ which use 0-based indexing!
+</Note>
+
+### Control Flow
+
+```matlab
+% If statements
+if x > 5
+    disp('x is greater than 5');
+elseif x == 5
+    disp('x equals 5');
+else
+    disp('x is less than 5');
+end
+
+% For loops
+for i = 1:10
+    fprintf('Iteration %d\n', i);
+end
+
+% While loops
+count = 1;
+while count <= 5
+    count = count + 1;
+end
+
+% Logical operators
+% && (AND), || (OR), ~ (NOT), == (equal), ~= (not equal)
+```
+
+### Functions
+
+Create functions in separate `.m` files:
+
+```matlab title="calculate_velocity.m"
+function [vx, vy, omega] = calculate_velocity(wheel_speeds, params)
+    % CALCULATE_VELOCITY Computes robot velocity from wheel speeds
+    %
+    % Inputs:
+    %   wheel_speeds: [w1; w2; w3; w4] (rad/s)
+    %   params: struct with wheel_radius, wheelbase
+    %
+    % Outputs:
+    %   vx, vy: Linear velocities (m/s)
+    %   omega: Angular velocity (rad/s)
+
+    r = params.wheel_radius;
+    l = params.wheelbase / 2;
+
+    % Forward kinematics matrix
+    vx = (r/4) * (wheel_speeds(1) + wheel_speeds(2) + ...
+                  wheel_speeds(3) + wheel_speeds(4));
+    vy = (r/4) * (-wheel_speeds(1) + wheel_speeds(2) + ...
+                  wheel_speeds(3) - wheel_speeds(4));
+    omega = (r/(4*l)) * (-wheel_speeds(1) + wheel_speeds(2) - ...
+                         wheel_speeds(3) + wheel_speeds(4));
+end
+```
+
+<Tip>
+Use descriptive function names and add help comments at the top. Access help with `help calculate_velocity`
+</Tip>
+
+---
+
+## Mecanum Robot Simulation
+
+### Project Setup
+
+<Steps>
+  <Step title="Create Project Folder">
+    ```matlab
+    % Create and navigate to project directory
+    mkdir('mecanum_simulation');
+    cd('mecanum_simulation');
+    ```
+  </Step>
+
+  <Step title="Define Robot Parameters">
+    ```matlab title="robot_params.m"
+    function params = robot_params()
+        % ROBOT_PARAMS Returns mecanum robot physical parameters
+
+        params.wheel_radius = 0.05;      % 5cm wheel radius (m)
+        params.wheelbase = 0.20;         % 20cm between wheels (m)
+        params.track_width = 0.20;       % 20cm left-right distance (m)
+        params.l = params.wheelbase / 2; % Distance from center (m)
+
+        params.max_wheel_speed = 34.9;   % 333 RPM = 34.9 rad/s
+        params.max_linear_speed = 0.5;   % m/s
+        params.max_angular_speed = 2.0;  % rad/s
+    end
+    ```
+  </Step>
+
+  <Step title="Implement Forward Kinematics">
+    ```matlab title="forward_kinematics.m"
+    function robot_vel = forward_kinematics(wheel_vel, params)
+        % FORWARD_KINEMATICS Convert wheel velocities to robot velocity
+        %
+        % Inputs:
+        %   wheel_vel: [w_FL; w_FR; w_RL; w_RR] (rad/s)
+        %   params: Robot parameters from robot_params()
+        %
+        % Outputs:
+        %   robot_vel: [vx; vy; omega] (m/s, m/s, rad/s)
+
+        r = params.wheel_radius;
+        l = params.l;
+
+        % Mecanum forward kinematics matrix
+        % [vx]     r   [1   1   1   1 ] [w_FL]
+        % [vy]  =  -  [-1   1   1  -1 ] [w_FR]
+        % [ω]      4  [-1   1  -1   1 ] [w_RL]
+        %              [─   ─   ─   ─ ] [w_RR]
+        %              [l   l   l   l ]
+
+        vx = (r/4) * (wheel_vel(1) + wheel_vel(2) + ...
+                      wheel_vel(3) + wheel_vel(4));
+        vy = (r/4) * (-wheel_vel(1) + wheel_vel(2) + ...
+                      wheel_vel(3) - wheel_vel(4));
+        omega = (r/(4*l)) * (-wheel_vel(1) + wheel_vel(2) - ...
+                             wheel_vel(3) + wheel_vel(4));
+
+        robot_vel = [vx; vy; omega];
+    end
+    ```
+  </Step>
+
+  <Step title="Implement Inverse Kinematics">
+    ```matlab title="inverse_kinematics.m"
+    function wheel_vel = inverse_kinematics(robot_vel, params)
+        % INVERSE_KINEMATICS Convert robot velocity to wheel velocities
+        %
+        % Inputs:
+        %   robot_vel: [vx; vy; omega] (m/s, m/s, rad/s)
+        %   params: Robot parameters from robot_params()
+        %
+        % Outputs:
+        %   wheel_vel: [w_FL; w_FR; w_RL; w_RR] (rad/s)
+
+        r = params.wheel_radius;
+        l = params.l;
+
+        vx = robot_vel(1);
+        vy = robot_vel(2);
+        omega = robot_vel(3);
+
+        % Mecanum inverse kinematics
+        % [w_FL]     1  [ 1  -1  -l] [vx   ]
+        % [w_FR]  =  -  [ 1   1   l] [vy   ]
+        % [w_RL]     r  [ 1   1  -l] [omega]
+        % [w_RR]        [ 1  -1   l]
+
+        w_FL = (1/r) * (vx - vy - l*omega);
+        w_FR = (1/r) * (vx + vy + l*omega);
+        w_RL = (1/r) * (vx + vy - l*omega);
+        w_RR = (1/r) * (vx - vy + l*omega);
+
+        wheel_vel = [w_FL; w_FR; w_RL; w_RR];
+    end
+    ```
+  </Step>
+</Steps>
+
+### Trajectory Simulation
+
+Simulate robot following different paths:
+
+```matlab title="simulate_trajectory.m"
+function simulate_trajectory()
+    % SIMULATE_TRAJECTORY Visualize mecanum robot motion
+
+    % Initialize
+    params = robot_params();
+    dt = 0.01;              % Time step (s)
+    t_max = 10;             % Simulation duration (s)
+    t = 0:dt:t_max;         % Time vector
+
+    % Initial state [x, y, theta]
+    state = [0; 0; 0];
+
+    % Preallocate trajectory
+    trajectory = zeros(3, length(t));
+    trajectory(:, 1) = state;
+
+    % Create figure
+    figure('Name', 'Mecanum Robot Trajectory');
+    hold on; grid on; axis equal;
+    xlabel('X (m)'); ylabel('Y (m)');
+    title('Robot Trajectory');
+
+    % Simulate motion
+    for i = 2:length(t)
+        % Define desired velocity (example: circular motion)
+        vx = 0.2;                    % m/s forward
+        vy = 0.1 * sin(2*pi*0.2*t(i)); % m/s lateral (sinusoidal)
+        omega = 0.3;                 % rad/s rotation
+
+        robot_vel = [vx; vy; omega];
+
+        % Update state using kinematics
+        theta = state(3);
+        dx = vx * cos(theta) - vy * sin(theta);
+        dy = vx * sin(theta) + vy * cos(theta);
+        dtheta = omega;
+
+        state = state + dt * [dx; dy; dtheta];
+        trajectory(:, i) = state;
+
+        % Plot every 50 steps
+        if mod(i, 50) == 0
+            plot(trajectory(1, 1:i), trajectory(2, 1:i), 'b-', 'LineWidth', 1.5);
+            quiver(state(1), state(2), 0.1*cos(theta), 0.1*sin(theta), ...
+                   'r', 'LineWidth', 2);
+            drawnow;
+        end
+    end
+
+    hold off;
+end
+```
+
+<Tip>
+Run `simulate_trajectory()` in the Command Window to see the robot's path animated in real-time
+</Tip>
+
+### Plotting Results
+
+```matlab title="plot_wheel_velocities.m"
+function plot_wheel_velocities()
+    % Generate test trajectory
+    params = robot_params();
+    t = 0:0.01:5;  % 5 seconds
+
+    % Desired robot motion (straight line + rotation)
+    vx = 0.3 * ones(size(t));
+    vy = zeros(size(t));
+    omega = 0.5 * sin(2*pi*0.5*t);  % Sinusoidal rotation
+
+    % Calculate wheel velocities
+    wheel_speeds = zeros(4, length(t));
+    for i = 1:length(t)
+        robot_vel = [vx(i); vy(i); omega(i)];
+        wheel_speeds(:, i) = inverse_kinematics(robot_vel, params);
+    end
+
+    % Plot results
+    figure('Name', 'Wheel Velocities');
+
+    % Subplot 1: Robot velocity
+    subplot(2, 1, 1);
+    plot(t, vx, 'r-', t, vy, 'g-', t, omega, 'b-', 'LineWidth', 1.5);
+    grid on;
+    xlabel('Time (s)');
+    ylabel('Velocity');
+    legend('v_x (m/s)', 'v_y (m/s)', '\omega (rad/s)');
+    title('Desired Robot Velocity');
+
+    % Subplot 2: Wheel speeds
+    subplot(2, 1, 2);
+    plot(t, wheel_speeds(1,:), 'r-', ...
+         t, wheel_speeds(2,:), 'g-', ...
+         t, wheel_speeds(3,:), 'b-', ...
+         t, wheel_speeds(4,:), 'm-', 'LineWidth', 1.5);
+    grid on;
+    xlabel('Time (s)');
+    ylabel('Angular Velocity (rad/s)');
+    legend('FL', 'FR', 'RL', 'RR');
+    title('Required Wheel Speeds');
+
+    % Check speed limits
+    max_speed = max(abs(wheel_speeds(:)));
+    fprintf('Maximum wheel speed: %.2f rad/s\n', max_speed);
+    if max_speed > params.max_wheel_speed
+        warning('Wheel speed exceeds motor capability!');
+    end
+end
+```
+
+---
+
+## Common Patterns
+
+### Loading/Saving Data
+
+```matlab
+% Save variables to .mat file
+save('simulation_results.mat', 'trajectory', 'wheel_speeds', 't');
+
+% Load variables from .mat file
+load('simulation_results.mat');
+
+% Import CSV data
+data = readmatrix('encoder_data.csv');
+time = data(:, 1);
+position = data(:, 2);
+
+% Export to CSV
+writematrix([time position], 'processed_data.csv');
+```
+
+### Plotting Multiple Figures
+
+```matlab
+% Figure 1: Trajectory
+figure(1);
+plot(trajectory(1,:), trajectory(2,:));
+title('Robot Path');
+
+% Figure 2: Velocities
+figure(2);
+subplot(2,1,1);
+plot(t, vx);
+title('X Velocity');
+
+subplot(2,1,2);
+plot(t, vy);
+title('Y Velocity');
+
+% Save figure
+saveas(gcf, 'velocity_plot.png');
+```
+
+### Animation
+
+```matlab
+% Animated plot
+figure;
+for i = 1:length(t)
+    clf;  % Clear figure
+    plot(trajectory(1, 1:i), trajectory(2, 1:i), 'b-');
+    hold on;
+    plot(trajectory(1, i), trajectory(2, i), 'ro', 'MarkerSize', 10);
+    axis equal;
+    title(sprintf('Time: %.2f s', t(i)));
+    drawnow;
+    pause(0.01);
+end
+```
+
+---
+
+## Useful Functions
+
+### Mathematics
+
+```matlab
+% Trigonometry
+sin(pi/2)       % Sine (radians)
+cosd(90)        % Sine (degrees)
+atan2(y, x)     % 4-quadrant inverse tangent
+
+% Linear algebra
+A = [1 2; 3 4];
+inv(A)          % Matrix inverse
+det(A)          % Determinant
+eig(A)          % Eigenvalues
+A'              % Transpose
+
+% Calculus
+diff([1 2 4 7 11])      % Differences: [1 2 3 4]
+cumsum([1 2 3 4])       % Cumulative sum: [1 3 6 10]
+trapz(x, y)             % Numerical integration
+```
+
+### Visualization
+
+```matlab
+% 2D plotting
+plot(x, y, 'r--', 'LineWidth', 2);      % Dashed red line
+scatter(x, y, 50, 'filled');            % Scatter plot
+bar([1 2 3], [10 20 15]);               % Bar chart
+
+% 3D plotting
+plot3(x, y, z);                         % 3D line plot
+surf(X, Y, Z);                          % Surface plot
+mesh(X, Y, Z);                          % Mesh plot
+
+% Annotations
+xlabel('Time (s)');
+ylabel('Velocity (m/s)');
+title('Robot Velocity Profile');
+legend('v_x', 'v_y');
+grid on;
+```
+
+### Data Processing
+
+```matlab
+% Statistics
+mean(data)          % Average
+median(data)        % Median
+std(data)           % Standard deviation
+max(data)           % Maximum value
+[val, idx] = min(data)  % Minimum value and index
+
+% Filtering
+filtered = movmean(noisy_data, 10);     % Moving average (10 samples)
+filtered = smooth(noisy_data, 0.1, 'loess');  % LOESS smoothing
+
+% Interpolation
+yi = interp1(x, y, xi);                 % 1D interpolation
+yi = interp1(x, y, xi, 'spline');       % Cubic spline
+```
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="License activation fails">
+    **Symptoms:** "License checkout failed" or "Cannot connect to license server"
+
+    **Solutions:**
+    1. Verify RMIT email is used for activation
+    2. Check internet connection
+    3. Contact RMIT IT Support (ithelp@rmit.edu.au)
+    4. Use MATLAB Online as temporary alternative
+  </Accordion>
+
+  <Accordion title="Function not found error">
+    **Symptoms:** `Undefined function 'forward_kinematics' for input arguments of type 'double'`
+
+    **Solutions:**
+    1. Ensure function file name matches function name:
+       ```matlab
+       % File: forward_kinematics.m
+       function result = forward_kinematics(...)
+       ```
+
+    2. Check current directory contains the function file:
+       ```matlab
+       pwd                    % Show current directory
+       cd('path/to/project')  % Change directory
+       ```
+
+    3. Add folder to path:
+       ```matlab
+       addpath('path/to/functions');
+       ```
+  </Accordion>
+
+  <Accordion title="Array dimension mismatch">
+    **Symptoms:** `Matrix dimensions must agree` or `Arrays have incompatible sizes`
+
+    **Solutions:**
+    1. Check array sizes:
+       ```matlab
+       size(A)
+       size(B)
+       ```
+
+    2. Use transpose if needed:
+       ```matlab
+       c = a * b';  % If a is row, b is row, want dot product
+       ```
+
+    3. Use element-wise operations:
+       ```matlab
+       c = a .* b;  % Element-wise (not matrix) multiplication
+       ```
+  </Accordion>
+
+  <Accordion title="Plot not updating / not showing">
+    **Symptoms:** Figure window doesn't appear or doesn't update
+
+    **Solutions:**
+    1. Add `drawnow` after plotting commands:
+       ```matlab
+       plot(x, y);
+       drawnow;
+       ```
+
+    2. Check if figure is hidden behind other windows
+
+    3. Create new figure explicitly:
+       ```matlab
+       figure;
+       plot(x, y);
+       ```
+
+    4. For animations, add small pause:
+       ```matlab
+       pause(0.01);
+       ```
+  </Accordion>
+
+  <Accordion title="Performance is slow for large simulations">
+    **Symptoms:** Script takes minutes to run
+
+    **Solutions:**
+    1. **Preallocate arrays** (most important):
+       ```matlab
+       % Bad (slow):
+       for i = 1:10000
+           data(i) = i^2;  % Array grows each iteration
+       end
+
+       % Good (fast):
+       data = zeros(1, 10000);  % Preallocate
+       for i = 1:10000
+           data(i) = i^2;
+       end
+       ```
+
+    2. **Vectorize operations** instead of loops:
+       ```matlab
+       % Slow:
+       for i = 1:length(x)
+           y(i) = x(i)^2;
+       end
+
+       % Fast:
+       y = x.^2;  % Vectorized
+       ```
+
+    3. Reduce plot update frequency:
+       ```matlab
+       if mod(i, 100) == 0  % Plot every 100 steps
+           plot(...);
+           drawnow;
+       end
+       ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Tips for WP1 Submission
+
+<Steps>
+  <Step title="Document Your Code">
+    Add comments explaining kinematics equations and variable meanings
+    ```matlab
+    % Forward kinematics for mecanum wheels
+    % Based on equation from "Mecanum Wheel Robot Design" paper
+    vx = (r/4) * (w1 + w2 + w3 + w4);  % Linear velocity in x-direction
+    ```
+  </Step>
+
+  <Step title="Include Validation">
+    Test your functions with known inputs/outputs
+    ```matlab
+    % Test: All wheels same speed -> pure rotation
+    wheel_vel = [10; -10; 10; -10];  % rad/s
+    robot_vel = forward_kinematics(wheel_vel, params);
+    assert(abs(robot_vel(1)) < 1e-6, 'vx should be zero');
+    assert(abs(robot_vel(2)) < 1e-6, 'vy should be zero');
+    ```
+  </Step>
+
+  <Step title="Generate Clear Plots">
+    Export high-quality figures for your report
+    ```matlab
+    figure;
+    plot(...);
+    title('Mecanum Robot Trajectory');
+    xlabel('X Position (m)');
+    ylabel('Y Position (m)');
+    grid on;
+
+    % Export as high-res PNG
+    print('trajectory_plot', '-dpng', '-r300');
+    ```
+  </Step>
+
+  <Step title="Save Your Work">
+    Save all results and scripts
+    ```matlab
+    % Save workspace
+    save('wp1_results.mat');
+
+    % Create diary (log all commands)
+    diary('simulation_log.txt');
+    % ... run your code ...
+    diary off;
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Kinematics Theory" icon="calculator" href="/wp1-simulation/kinematics">
+    Derive mecanum wheel forward and inverse kinematics
+  </Card>
+
+  <Card title="Trajectory Planning" icon="route" href="/wp1-simulation/trajectory-planning">
+    Simulate circle, figure-8, and custom paths
+  </Card>
+
+  <Card title="Control System Toolbox" icon="sliders" href="/reference/ros2/data-visualization">
+    Learn PID tuning in MATLAB for motor control
+  </Card>
+
+  <Card title="ROS2 Integration" icon="diagram-project" href="/wp4-ros2/setup/ros2-basics">
+    Connect MATLAB to ROS2 for hardware-in-loop testing
+  </Card>
+</CardGroup>
+
+---
+
+## References
+
+- [MATLAB Documentation](https://www.mathworks.com/help/matlab/)
+- [MATLAB Onramp](https://www.mathworks.com/learn/tutorials/matlab-onramp.html) - Free 2-hour interactive tutorial
+- [RMIT MATLAB Support](https://www.rmit.edu.au/students/student-essentials/information-technology/software-for-students)
+- [Mecanum Wheel Kinematics Paper](https://research.ijcaonline.org/volume113/number3/pxc3901586.pdf)

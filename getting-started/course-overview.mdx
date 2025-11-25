@@ -1,0 +1,302 @@
+---
+title: "Course Overview"
+description: "Complete overview of EEET2610 Engineering Design 3 project structure and deliverables"
+---
+
+## Course Information
+
+**Course Code:** EEET2610
+**Course Name:** Engineering Design 3
+**Project:** Design of a Mecanum Robot with Autonomous Behavior
+**Duration:** 12 weeks
+**Team Size:** 5-6 members from different programs
+
+## Project Objective
+
+Design and build a **Mecanum wheel robot** with four motors and encoders, capable of autonomous behavior. This project will greatly contribute to your engineering portfolio, as it combines elements of:
+
+- **Mechanical Design** - CAD modeling, 3D printing, assembly
+- **Electrical Design** - PCB design, wiring, power management
+- **Embedded Systems** - Microcontroller programming, motor control, sensors
+- **Autonomous Robotics** - ROS2, SLAM, navigation, computer vision
+- **Project Management** - Team coordination, timeline planning, deliverables
+
+<img
+  src="/images/mecanum-robot.png"
+  alt="Mecanum Wheel Robot"
+  caption="Example of a Mecanum wheel robot with omnidirectional movement"
+/>
+
+## What is a Mecanum Wheel Robot?
+
+A **Mecanum wheel robot** is a type of mobile robot consisting of four special wheels based on rollers. It is designed for maneuverability, making it ideal for tasks like:
+
+- **Warehouse packaging** - Navigate tight spaces and move in any direction
+- **Automated Guided Vehicles (AGVs)** - Industrial material transport
+- **Omnidirectional wheelchairs** - Enhanced mobility for users
+- **Research platforms** - Study advanced motion control algorithms
+
+The Swedish wheel (another name for Mecanum wheels) is gaining popularity due to its ability to move forward, backward, sideways, and rotate, all without changing orientation.
+
+## Work Package Structure
+
+The project is divided into **5 Work Packages (WP)**, each with specific deliverables:
+
+### WP1: Simulation with MATLAB
+**Duration:** 4 weeks
+**Deliverables:**
+- D1.1: Kinematics of the Mecanum robot (1 week)
+- D1.2: Trajectory planning and visualization (3 weeks)
+
+**Key Tasks:**
+- Derive kinematics equations for Mecanum wheel motion
+- Implement forward and inverse kinematics in MATLAB
+- Simulate trajectories (square, circle, custom paths)
+- Analyze how wheel size and robot footprint affect movement
+
+### WP2: Prototyping of the Mecanum Robot
+**Duration:** 4 weeks (can overlap with WP1)
+**Deliverables:**
+- D2.1: CAD modeling of the system (4 weeks)
+- D2.2: PCB design and electrical wiring (4 weeks)
+
+**Key Tasks:**
+- Create 3D CAD model (Fusion 360 or SolidWorks)
+- Generate bill of materials (BOM) with fasteners
+- Design PCB or wiring diagram (EasyEDA or Cadence)
+- Plan for 3D printing (max 2 prints per group)
+
+### WP3: Embedded and Control System
+**Duration:** 4-6 weeks
+**Deliverables:**
+- D3.1: DC motor control with PID controller
+- D3.2: Integration of IMU ICM-20948
+
+**Key Tasks:**
+- Set up ESP32 development environment (VSCode + PlatformIO)
+- Read encoder values from DC motors
+- Implement PID controller for position/velocity control
+- Establish serial communication with computer
+- Integrate and calibrate IMU sensor
+
+### WP4: Autonomous Implementation with ROS2
+**Duration:** 8-10 weeks (most complex work package)
+**Deliverables:**
+- D4.1: LiDAR implementation (4 weeks)
+- D4.2: Camera implementation (4 weeks)
+- D4.3: Navigation and Mapping (4 weeks)
+
+**Key Tasks:**
+- Install Ubuntu and ROS2 Jazzy on development computer
+- Create robot description (URDF)
+- Implement ros2_control for motor control
+- Set up LiDAR A1M8 for obstacle detection
+- Implement SLAM (Simultaneous Localization and Mapping)
+- Configure Nav2 for autonomous navigation
+- Optional: Camera-based object detection and AprilTags
+
+### WP5: Integration and Pitch Presentation
+**Duration:** 2-3 weeks
+**Deliverables:**
+- D5.1: Full integration of mechatronics system (2 weeks)
+- D5.2: PowerPoint video presentation (1 week)
+
+**Key Tasks:**
+- Integrate all subsystems (mechanical, electrical, embedded, ROS2)
+- Demonstrate autonomous behavior aligned with SDG goals
+- Prepare live demonstration
+- Create professional team video presentation (10-15 min)
+
+## Timeline and Milestones
+
+<Note>
+  **Important:** Information on Canvas has higher priority than this document if there are discrepancies. Always check Canvas for official deadlines.
+</Note>
+
+### Suggested Timeline (12-week semester)
+
+| Week | Work Packages | Key Milestones |
+|------|--------------|----------------|
+| 1-2  | Project Proposal | Team formation, contract, literature review |
+| 2-5  | WP1 & WP2 | MATLAB kinematics, CAD design, order components |
+| 4-8  | WP3 | ESP32 setup, motor control, PID tuning, IMU |
+| 5-12 | WP4 | ROS2 installation, URDF, SLAM, navigation |
+| 11-12| WP5 | System integration, testing, presentation |
+
+<Tip>
+  **Parallel Work:** Many work packages can be done in parallel by different team members. For example, while one team member works on MATLAB simulation, another can design the CAD model, and another can set up the ESP32 environment.
+</Tip>
+
+## Major Deliverables
+
+### 1. Project Proposal (Week 2-4)
+**Format:** PDF document
+**Includes:**
+- Abstract
+- Introduction and background research
+- Task descriptions for each work package
+- Gantt chart with timeline
+- Bill of Materials (BOM) with costs
+- Stakeholder analysis
+- Risk analysis table
+- Team introduction and signed team contract
+- References (min. 80% journal articles)
+
+### 2. Interim Reports
+Check Canvas for specific interim report requirements and deadlines.
+
+### 3. Final Demonstration (Week 12)
+**Location:** Demonstration day with stakeholders
+**Requirements:**
+- Robot moves with keyboard/joystick/web app control
+- MATLAB simulation demonstrates robot kinematics
+- LiDAR mapping of environment
+- Autonomous navigation to waypoints
+- Demonstration addresses one or more SDG goals
+- Backup plan if hardware fails (show work-in-progress)
+
+### 4. Video Presentation (Week 12)
+**Format:** Video (10-15 minutes)
+**Content:**
+- Each team member presents a technical section
+- Professional quality video and audio
+- Demonstrates understanding of all work packages
+- Showcases robot capabilities
+
+**Note:** Individual grading based on video contribution.
+
+### 5. Final Report (Week 12)
+**Format:** PDF following provided template
+**Content:**
+- All work packages documented
+- Results, analysis, and discussion
+- Lessons learned and future work
+- Professional figures, tables, and references
+
+## Assessment Criteria
+
+<AccordionGroup>
+  <Accordion title="Technical Competence (40%)" icon="gears">
+    - Correctness of kinematics and control algorithms
+    - Quality of CAD and PCB designs
+    - Embedded system functionality (PID, IMU)
+    - ROS2 implementation (SLAM, navigation)
+    - System integration and demonstration
+  </Accordion>
+
+  <Accordion title="Documentation & Communication (30%)" icon="file-lines">
+    - Project proposal quality and completeness
+    - Final report clarity and professionalism
+    - Video presentation quality
+    - Code documentation and organization
+    - Proper use of figures, tables, and references
+  </Accordion>
+
+  <Accordion title="Teamwork & Project Management (20%)" icon="people-group">
+    - Team contract adherence
+    - Meeting attendance and participation
+    - Task distribution and collaboration
+    - Git/GitHub usage for version control
+    - Response to peer feedback
+  </Accordion>
+
+  <Accordion title="Innovation & Problem Solving (10%)" icon="lightbulb">
+    - Creative solutions to technical challenges
+    - Additional features beyond requirements
+    - SDG alignment and impact
+    - Debugging and troubleshooting approach
+  </Accordion>
+</AccordionGroup>
+
+## Hardware Components
+
+### Provided/Required Components
+- **Microcontroller:** ESP32 development board
+- **Motors:** DC motors 12V 333RPM with encoders (4x)
+- **Motor Driver:** IBT-2 (BTS7960) H-bridge (4x)
+- **IMU:** ICM-20948 9-axis inertial measurement unit
+- **LiDAR:** RPLIDAR A1M8
+- **Camera:** Raspberry Pi Camera Module V3 (optional)
+- **Computer:** Raspberry Pi 4/5 (onboard computer for ROS2)
+- **Power:** 12V battery (LiPo, Li-Ion, or LiFePO4)
+- **Mecanum Wheels:** 4x with appropriate diameter
+- **Structural Materials:** 3D printed parts, fasteners, wiring
+
+<Warning>
+  **Ordering Timeline:** Components can take 2-4 weeks to arrive. Order as early as possible! Include spare parts in your BOM in case of damage.
+</Warning>
+
+## Key Resources
+
+### Software Tools
+- **MATLAB** - Simulation and kinematics
+- **Fusion 360 / SolidWorks** - CAD design
+- **EasyEDA / Cadence** - PCB design
+- **VSCode + PlatformIO** - ESP32 development
+- **ROS2 Jazzy** - Autonomous robotics framework
+- **Git / GitHub** - Version control
+
+### Development Environment
+- **Ubuntu 24.04 (Noble)** - Required for ROS2
+- **Virtual Machine or Dual Boot** - For running Ubuntu
+- **Raspberry Pi OS / Ubuntu Server** - Onboard computer
+
+### Documentation
+- All documentation must follow the provided template
+- Figures must be high quality, centered, and referenced in text
+- References should be primarily journal articles (max 20% web sources)
+
+## Important Notes
+
+<Note>
+  **Report Template:** If your document doesn't look like the provided template, you're using the wrong format. Download and use the official template.
+</Note>
+
+<Warning>
+  **Safety:** Motors can overheat even at low speeds. Handle electrical components carefully. Always disconnect power when making wiring changes.
+</Warning>
+
+<Tip>
+  **3D Printing:** Each group has a maximum of 2 prints. Learn from other groups' mistakes and attend online classes to understand mechanical assembly before printing.
+</Tip>
+
+## Next Steps
+
+Ready to start? Here's what to do next:
+
+<CardGroup cols={2}>
+  <Card
+    title="Check Prerequisites"
+    icon="list-check"
+    href="/getting-started/prerequisites"
+  >
+    Ensure you have the required knowledge and tools
+  </Card>
+  <Card
+    title="Form Your Team"
+    icon="users"
+    href="/getting-started/team-management"
+  >
+    Learn about team contracts and collaboration
+  </Card>
+  <Card
+    title="Project Proposal"
+    icon="file-pen"
+    href="/getting-started/project-proposal"
+  >
+    Start your project proposal and literature review
+  </Card>
+  <Card
+    title="Begin WP1"
+    icon="chart-line"
+    href="/wp1-simulation/introduction"
+  >
+    Start with MATLAB simulation
+  </Card>
+</CardGroup>
+
+## References
+
+[1] K. Kanjanawanishkul, "Omnidirectional wheeled mobile robots: Wheel types and practical applications," International Journal of Advanced Mechatronic Systems, vol. 6, no. 6, pp. 289–302, Feb. 2015, doi: 10.1504/IJAMECHS.2015.074788.
+
+[2] M. T. Watson, D. T. Gladwin, and T. J. Prescott, "Collinear Mecanum Drive: Modeling, Analysis, Partial Feedback Linearization, and Nonlinear Control," IEEE Transactions on Robotics, vol. 37, no. 2, pp. 642–658, Apr. 2021, doi: 10.1109/TRO.2020.2977878.

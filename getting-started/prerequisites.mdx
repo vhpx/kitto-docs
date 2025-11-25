@@ -1,0 +1,411 @@
+---
+title: "Prerequisites"
+description: "Required knowledge, skills, and tools before starting the Mecanum robot project"
+---
+
+## Overview
+
+This course builds on concepts from previous engineering courses. While you'll learn many new skills during the project, having a solid foundation will help you succeed. This page outlines the knowledge and tools you should have before starting.
+
+## Required Knowledge
+
+### Programming Fundamentals
+
+<AccordionGroup>
+  <Accordion title="C/C++ Programming" icon="code">
+    **Required for:** ESP32 embedded programming (WP3, WP4)
+
+    You should be comfortable with:
+    - Variables, data types, and operators
+    - Control structures (if/else, loops)
+    - Functions and modular programming
+    - Pointers and references (basic understanding)
+    - Object-oriented programming basics
+
+    **Where you'll use it:**
+    - Writing PID controllers for motor control
+    - Reading sensor data (encoders, IMU)
+    - Serial communication protocols
+  </Accordion>
+
+  <Accordion title="Python Programming" icon="python">
+    **Required for:** ROS2 nodes, MATLAB alternative, data analysis
+
+    You should be comfortable with:
+    - Basic syntax and data structures (lists, dictionaries)
+    - Functions and modules
+    - File I/O operations
+    - Basic OOP concepts
+
+    **Where you'll use it:**
+    - ROS2 launch files
+    - Sensor data processing
+    - Custom ROS2 nodes (optional)
+  </Accordion>
+
+  <Accordion title="MATLAB" icon="chart-line">
+    **Required for:** WP1 - Kinematics simulation
+
+    You should be able to:
+    - Write scripts and functions
+    - Plot data and create visualizations
+    - Use matrices and linear algebra
+    - Implement basic algorithms
+
+    **Where you'll use it:**
+    - Forward/inverse kinematics calculations
+    - Trajectory planning and simulation
+    - Visualization of robot motion
+  </Accordion>
+</AccordionGroup>
+
+### Engineering Mathematics
+
+<CardGroup cols={2}>
+  <Card title="Linear Algebra" icon="square-root-variable">
+    - Matrix operations and transformations
+    - Rotation matrices
+    - Homogeneous coordinates
+    - Used in: Robot kinematics, coordinate transforms
+  </Card>
+
+  <Card title="Calculus" icon="function">
+    - Derivatives and integration
+    - Differential equations (basic)
+    - Used in: PID control, velocity/acceleration
+  </Card>
+
+  <Card title="Trigonometry" icon="sine-wave">
+    - Sin, cos, tan, atan2 functions
+    - Angle conversions (rad/deg)
+    - Used in: Robot heading, kinematics
+  </Card>
+
+  <Card title="Control Systems" icon="diagram-project">
+    - PID controller concepts
+    - Feedback control
+    - Used in: Motor speed/position control
+  </Card>
+</CardGroup>
+
+### Electronics & Circuits
+
+<AccordionGroup>
+  <Accordion title="Basic Electronics" icon="bolt">
+    - Voltage, current, resistance (Ohm's Law)
+    - Power calculations (P = VI)
+    - Reading datasheets
+    - Understanding PWM (Pulse Width Modulation)
+  </Accordion>
+
+  <Accordion title="Microcontrollers" icon="microchip">
+    - GPIO (General Purpose Input/Output) pins
+    - Digital vs analog signals
+    - Pull-up/pull-down resistors
+    - Serial communication (UART, I2C, SPI basics)
+  </Accordion>
+
+  <Accordion title="Motor Control" icon="gears">
+    - DC motor principles
+    - H-bridge operation
+    - Encoder signals (quadrature encoding)
+    - Motor driver specifications
+  </Accordion>
+</AccordionGroup>
+
+### Mechanical Design
+
+- **CAD Software:** Basic 3D modeling skills (Fusion 360, SolidWorks, or similar)
+- **Engineering Drawing:** Reading technical drawings, understanding dimensions
+- **Assembly:** Fasteners (screws, nuts, bolts), tolerances
+- **3D Printing:** STL export, basic understanding of additive manufacturing
+
+### Version Control
+
+<Note>
+  **Git/GitHub:** Version control is essential for team collaboration. You should know:
+  - Creating repositories
+  - Cloning, committing, pushing code
+  - Branching and merging (basic)
+  - Resolving merge conflicts
+</Note>
+
+## Required Tools & Software
+
+### Hardware Requirements
+
+| Component | Specification | Purpose |
+|-----------|--------------|---------|
+| **Computer** | 8GB+ RAM, 50GB+ free storage | Development, simulation, ROS2 |
+| **Operating System** | Ubuntu 24.04 or VM capable OS | ROS2 requires Linux |
+| **USB Cable** | USB-A to Micro-USB | ESP32 programming |
+| **External SSD (optional)** | 128GB+ USB 3.0 | Dual-boot Ubuntu alternative |
+
+<Warning>
+  **Virtual Machine vs Dual Boot:** ROS2 with Gazebo simulation runs slowly on VMs. If possible, dual-boot Ubuntu or use an external SSD for better performance.
+</Warning>
+
+### Software to Install
+
+#### For Everyone
+
+<Steps>
+  <Step title="MATLAB">
+    Install MATLAB through your university license
+    - Required toolboxes: Robotics System Toolbox (optional but helpful)
+    - Alternative: Octave (free, but limited compatibility)
+  </Step>
+
+  <Step title="CAD Software">
+    Choose one:
+    - **Fusion 360** (free for students) - Recommended for beginners
+    - **SolidWorks** (university license) - More professional
+    - **FreeCAD** (free, open source)
+  </Step>
+
+  <Step title="Git">
+    - **Windows:** Git for Windows (https://git-scm.com/)
+    - **Mac:** Install via Homebrew or Xcode Command Line Tools
+    - **Linux:** `sudo apt install git`
+  </Step>
+
+  <Step title="Text Editor / IDE">
+    - **VSCode** (recommended) - Free, excellent extensions
+    - **Arduino IDE** (for simple ESP32 projects)
+  </Step>
+</Steps>
+
+#### For Embedded Systems (WP3)
+
+<Steps>
+  <Step title="VSCode">
+    Download from https://code.visualstudio.com/
+  </Step>
+
+  <Step title="PlatformIO Extension">
+    Install PlatformIO IDE extension in VSCode
+    - Better than Arduino IDE for complex projects
+    - Supports multiple libraries and platforms
+    - Integrated serial monitor and debugger
+  </Step>
+
+  <Step title="USB Drivers">
+    - **Windows:** CH340/CP2102 USB-to-Serial drivers
+    - **Mac/Linux:** Usually works out of the box
+  </Step>
+</Steps>
+
+#### For ROS2 (WP4)
+
+<Steps>
+  <Step title="Ubuntu 24.04 (Noble Numbat)">
+    Options:
+    - **Dual-boot:** Best performance (recommended)
+    - **Virtual Machine:** VMware Workstation, VirtualBox, UTM (Mac)
+    - **External SSD:** Ubuntu on external drive
+  </Step>
+
+  <Step title="ROS2 Jazzy Jalisco">
+    Will be installed during WP4 setup
+    - Requires Ubuntu 24.04
+    - Installation guide in WP4 section
+  </Step>
+
+  <Step title="Additional Tools (installed later)">
+    - Terminator (terminal emulator)
+    - Gazebo (simulation)
+    - RViz2 (visualization)
+    - PlotJuggler (data plotting)
+  </Step>
+</Steps>
+
+#### For PCB Design (WP2)
+
+Choose one:
+- **EasyEDA** (online, free, beginner-friendly)
+- **Cadence OrCAD** (university license, professional)
+- **KiCad** (free, open source)
+
+## Recommended Skills to Learn
+
+These skills aren't strictly required, but will make your life easier:
+
+<CardGroup cols={2}>
+  <Card title="Linux Terminal" icon="terminal">
+    - Basic bash commands (cd, ls, mkdir, rm)
+    - File permissions and ownership
+    - SSH for remote access
+    - Package management (apt)
+  </Card>
+
+  <Card title="Markdown" icon="markdown">
+    - Document formatting
+    - README files
+    - This documentation uses MDX
+  </Card>
+
+  <Card title="Serial Communication" icon="wave-pulse">
+    - Using serial monitors
+    - Understanding baud rates
+    - Debugging serial output
+  </Card>
+
+  <Card title="Debugging" icon="bug">
+    - Reading error messages
+    - Using print statements
+    - Systematic troubleshooting
+  </Card>
+</CardGroup>
+
+## Team Skills Matrix
+
+Your team should collectively cover these areas:
+
+| Skill Area | Recommended Team Members |
+|------------|-------------------------|
+| **MATLAB/Simulation** | At least 1 member |
+| **CAD/Mechanical Design** | 1-2 members |
+| **Electronics/PCB** | 1-2 members |
+| **Embedded Programming** | 1-2 members |
+| **ROS2/Linux** | 2-3 members (most complex) |
+| **Project Management** | 1 member (coordinator) |
+
+<Tip>
+  **Skill Overlap:** It's beneficial for multiple team members to understand each area. Don't silo knowledge - share and learn together!
+</Tip>
+
+## Pre-Course Checklist
+
+Use this checklist before starting the project:
+
+<Steps>
+  <Step title="Programming">
+    - [ ] Comfortable with C/C++ basics
+    - [ ] Can write and run Python scripts
+    - [ ] Can create MATLAB plots and functions
+  </Step>
+
+  <Step title="Tools">
+    - [ ] Git installed and GitHub account created
+    - [ ] VSCode installed
+    - [ ] MATLAB accessible
+    - [ ] CAD software installed
+  </Step>
+
+  <Step title="Hardware">
+    - [ ] Computer meets minimum requirements
+    - [ ] USB cable for ESP32 available
+    - [ ] Ubuntu installation method decided
+  </Step>
+
+  <Step title="Knowledge">
+    - [ ] Understand basic electronics (Ohm's Law, PWM)
+    - [ ] Know how to read datasheets
+    - [ ] Familiar with GitHub workflow
+  </Step>
+
+  <Step title="Team">
+    - [ ] Team formed (5-6 members)
+    - [ ] Skills matrix completed
+    - [ ] Communication method established
+  </Step>
+</Steps>
+
+## Learning Resources
+
+If you need to brush up on any prerequisites:
+
+### Programming
+- **C++ Tutorial:** [LearnCpp.com](https://www.learncpp.com/)
+- **Python:** [Python.org Tutorial](https://docs.python.org/3/tutorial/)
+- **MATLAB:** MATLAB Onramp (free course from MathWorks)
+
+### Electronics
+- **Basic Electronics:** [All About Circuits](https://www.allaboutcircuits.com/)
+- **Arduino Tutorials:** Even though we use ESP32, Arduino tutorials cover similar concepts
+
+### Linux/Terminal
+- **Linux Command Line:** [Ubuntu Terminal Tutorial](https://ubuntu.com/tutorials/command-line-for-beginners)
+- **Bash Scripting:** [Bash Guide for Beginners](https://tldp.org/LDP/Bash-Beginners-Guide/html/)
+
+### CAD
+- **Fusion 360:** [Autodesk Learning Platform](https://www.autodesk.com/learning)
+- **SolidWorks:** University-provided tutorials
+
+### Git
+- **Git Basics:** [Git Book](https://git-scm.com/book/en/v2)
+- **GitHub Skills:** [GitHub Learning Lab](https://skills.github.com/)
+
+## What If I'm Missing Prerequisites?
+
+<AccordionGroup>
+  <Accordion title="I'm weak in programming" icon="code">
+    **Solution:**
+    - Start practicing now! Use online tutorials
+    - Focus on C++ for ESP32 work
+    - Team up with a strong programmer
+    - Attend tutorial sessions and ask questions
+    - Many code examples are provided - learn by modifying them
+  </Accordion>
+
+  <Accordion title="I've never used Linux" icon="linux">
+    **Solution:**
+    - Install Ubuntu in a VM to practice
+    - Complete basic terminal tutorials
+    - ROS2 setup guide includes step-by-step commands
+    - Linux becomes easier with practice!
+  </Accordion>
+
+  <Accordion title="I don't know CAD" icon="cube">
+    **Solution:**
+    - Follow CAD software tutorials (2-3 hours to learn basics)
+    - Start with simple shapes before complex designs
+    - Let team members with CAD experience lead WP2
+    - You can contribute to other work packages
+  </Accordion>
+
+  <Accordion title="I'm not good at math" icon="calculator">
+    **Solution:**
+    - Kinematics equations are provided in documentation
+    - MATLAB code examples available on GitHub
+    - Team members can collaborate on mathematical sections
+    - Focus on implementation rather than derivation
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+  **Important:** This is a team project! You don't need to be an expert in everything. Leverage your team's diverse skills and learn from each other.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Team Management"
+    icon="users"
+    href="/getting-started/team-management"
+  >
+    Learn how to form and manage your team effectively
+  </Card>
+  <Card
+    title="Project Proposal"
+    icon="file-pen"
+    href="/getting-started/project-proposal"
+  >
+    Understand the project proposal requirements
+  </Card>
+  <Card
+    title="Course Overview"
+    icon="book-open"
+    href="/getting-started/course-overview"
+  >
+    Review the complete course structure
+  </Card>
+  <Card
+    title="Start WP1"
+    icon="chart-line"
+    href="/wp1-simulation/introduction"
+  >
+    Begin with MATLAB simulation
+  </Card>
+</CardGroup>

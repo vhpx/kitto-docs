@@ -1,0 +1,557 @@
+---
+title: "Path Planning"
+description: "Configure Nav2 planners and costmaps for optimal path generation"
+---
+
+## Overview
+
+**Path planning** computes a collision-free path from robot's current position to goal. Nav2 uses two levels of planning:
+
+<CardGroup cols={2}>
+  <Card title="Global Planner" icon="globe">
+    Plans complete path from start to goal using static map. Updates when goal changes or path blocked.
+  </Card>
+
+  <Card title="Local Planner (Controller)" icon="location-dot">
+    Follows global path while avoiding dynamic obstacles. Updates continuously (20-50Hz).
+  </Card>
+</CardGroup>
+
+## Global Planners
+
+### NavFn Planner
+
+**Dijkstra-based planner** (default):
+
+```yaml
+planner_server:
+  ros__parameters:
+    planner_plugins: ["GridBased"]
+    GridBased:
+      plugin: "nav2_navfn_planner/NavfnPlanner"
+      tolerance: 0.5              # Goal tolerance (meters)
+      use_astar: false            # Use Dijkstra (A* if true)
+      allow_unknown: true         # Plan through unknown space
+      use_final_approach_orientation: false
+```
+
+**Characteristics:**
+- **Fast:** O(n log n) complexity
+- **Complete:** Finds path if exists
+- **Smooth:** Produces reasonable paths
+- **No optimization:** May not be shortest
+
+**Use when:** General-purpose, works well for most cases
+
+### Smac Planner
+
+**State lattice planner** (better for complex robots):
+
+```yaml
+planner_server:
+  ros__parameters:
+    planner_plugins: ["SmacPlanner"]
+    SmacPlanner:
+      plugin: "nav2_smac_planner/SmacPlanner2D"
+      tolerance: 0.5
+      downsample_costmap: false
+      downsampling_factor: 1
+      allow_unknown: true
+      max_iterations: 1000000
+      max_on_approach_iterations: 1000
+      max_planning_time: 5.0      # seconds
+      smooth_path: true
+
+      # Motion model
+      motion_model_for_search: "DUBIN"  # or "REEDS_SHEPP" for reverse
+
+      # Search
+      minimum_turning_radius: 0.4  # meters (adjust for robot)
+      cache_obstacle_heuristic: false
+      reverse_penalty: 2.0
+      change_penalty: 0.0
+      non_straight_penalty: 1.2
+      cost_penalty: 2.0
+```
+
+**Characteristics:**
+- **Kinematically feasible:** Respects robot constraints
+- **Smoother paths:** Better for Ackermann steering
+- **Slower:** More computation
+- **Configurable:** Many tuning parameters
+
+**Use when:** Need smooth, feasible paths (car-like robots, tight spaces)
+
+### Comparison
+
+| Feature | NavFn | Smac |
+|---------|-------|------|
+| **Speed** | Fast | Slower |
+| **Path Quality** | Good | Better |
+| **Kinematic Constraints** | No | Yes |
+| **Reverse Motion** | No | Yes (Reeds-Shepp) |
+| **Best For** | Omnidirectional | Car-like, complex |
+
+## Local Planners (Controllers)
+
+### DWB (Dynamic Window Approach)
+
+**Trajectory rollout planner** (default):
+
+```yaml
+controller_server:
+  ros__parameters:
+    controller_plugins: ["FollowPath"]
+    FollowPath:
+      plugin: "dwb_core::DWBLocalPlanner"
+
+      # Velocity limits
+      min_vel_x: -0.5
+      max_vel_x: 0.5
+      min_vel_y: -0.5        # For Mecanum/omnidirectional
+      max_vel_y: 0.5
+      max_vel_theta: 1.0
+      min_speed_xy: 0.0
+      max_speed_xy: 0.55
+      min_speed_theta: 0.0
+
+      # Acceleration limits
+      acc_lim_x: 2.5
+      acc_lim_y: 2.5
+      acc_lim_theta: 3.2
+      decel_lim_x: -2.5
+      decel_lim_y: -2.5
+      decel_lim_theta: -3.2
+
+      # Sampling
+      vx_samples: 20           # Velocity samples
+      vy_samples: 20
+      vtheta_samples: 40
+      sim_time: 1.7            # Trajectory simulation time (s)
+
+      # Critics (trajectory scoring)
+      critics: [
+        "RotateToGoal",
+        "Oscillation",
+        "BaseObstacle",
+        "GoalAlign",
+        "PathAlign",
+        "PathDist",
+        "GoalDist"
+      ]
+
+      # Critic weights
+      BaseObstacle.scale: 0.02
+      PathAlign.scale: 32.0
+      PathAlign.forward_point_distance: 0.1
+      GoalAlign.scale: 24.0
+      GoalAlign.forward_point_distance: 0.1
+      PathDist.scale: 32.0
+      GoalDist.scale: 24.0
+      RotateToGoal.scale: 32.0
+      RotateToGoal.slowing_factor: 5.0
+      RotateToGoal.lookahead_time: -1.0
+```
+
+**How DWB works:**
+1. Sample velocity space (vx, vy, vtheta)
+2. Simulate trajectory for each sample
+3. Score trajectories using critics
+4. Select best trajectory
+5. Execute first command
+
+**Critics explained:**
+- **PathAlign:** Prefer trajectories aligned with global path
+- **GoalAlign:** Turn toward goal when close
+- **PathDist:** Stay close to path
+- **GoalDist:** Move toward goal
+- **BaseObstacle:** Avoid obstacles
+- **RotateToGoal:** Rotate to final orientation
+- **Oscillation:** Penalize back-and-forth motion
+
+**Use when:** Omnidirectional robots, need real-time obstacle avoidance
+
+### TEB (Timed Elastic Band)
+
+**Optimization-based planner:**
+
+```yaml
+controller_server:
+  ros__parameters:
+    controller_plugins: ["FollowPath"]
+    FollowPath:
+      plugin: "teb_local_planner::TebLocalPlannerROS"
+
+      # Trajectory
+      teb_autosize: true
+      dt_ref: 0.3
+      dt_hysteresis: 0.1
+      max_samples: 500
+      global_plan_overwrite_orientation: true
+      allow_init_with_backwards_motion: false
+      max_global_plan_lookahead_dist: 3.0
+      global_plan_viapoint_sep: -1
+
+      # Robot
+      max_vel_x: 0.5
+      max_vel_x_backwards: 0.2
+      max_vel_y: 0.5
+      max_vel_theta: 1.0
+      acc_lim_x: 2.5
+      acc_lim_y: 2.5
+      acc_lim_theta: 3.2
+      min_turning_radius: 0.0  # For differential drive
+
+      # Obstacles
+      min_obstacle_dist: 0.25
+      inflation_dist: 0.6
+      include_costmap_obstacles: true
+      costmap_obstacles_behind_robot_dist: 1.5
+
+      # Optimization
+      no_inner_iterations: 5
+      no_outer_iterations: 4
+      optimization_activate: true
+      optimization_verbose: false
+      penalty_epsilon: 0.1
+      obstacle_cost_exponent: 4
+      weight_max_vel_x: 2
+      weight_max_vel_theta: 1
+      weight_acc_lim_x: 1
+      weight_acc_lim_theta: 1
+      weight_kinematics_nh: 1000
+      weight_kinematics_forward_drive: 1
+      weight_kinematics_turning_radius: 1
+      weight_optimaltime: 1
+      weight_shortest_path: 0
+      weight_obstacle: 100
+      weight_inflation: 0.2
+      weight_dynamic_obstacle: 10
+      weight_dynamic_obstacle_inflation: 0.2
+      weight_viapoint: 1
+      weight_adapt_factor: 2
+```
+
+**Characteristics:**
+- **Smooth paths:** Optimizes for smoothness
+- **Time-optimal:** Minimizes travel time
+- **Complex:** Many parameters
+- **CPU intensive:** Requires good processor
+
+**Use when:** Need very smooth motion, have CPU headroom
+
+### MPPI (Model Predictive Path Integral)
+
+**Sampling-based MPC controller:**
+
+```yaml
+controller_server:
+  ros__parameters:
+    controller_plugins: ["FollowPath"]
+    FollowPath:
+      plugin: "nav2_mppi_controller::MPPIController"
+
+      time_steps: 56
+      model_dt: 0.05
+      batch_size: 2000
+      vx_std: 0.2
+      vy_std: 0.2
+      wz_std: 0.4
+      vx_max: 0.5
+      vx_min: -0.35
+      vy_max: 0.5
+      wz_max: 1.9
+
+      iteration_count: 1
+      prune_distance: 1.7
+      transform_tolerance: 0.1
+      temperature: 0.3
+      gamma: 0.015
+
+      motion_model: "DiffDrive"  # or "Omni" for Mecanum
+
+      critics: [
+        "ConstraintCritic",
+        "CostCritic",
+        "GoalCritic",
+        "GoalAngleCritic",
+        "PathAlignCritic",
+        "PathFollowCritic",
+        "PathAngleCritic",
+        "PreferForwardCritic"
+      ]
+```
+
+**Characteristics:**
+- **Probabilistic:** Explores velocity space stochastically
+- **Robust:** Handles uncertainty well
+- **Smooth:** Natural motion
+- **Experimental:** Newer, less tested
+
+**Use when:** Research projects, need advanced features
+
+## Costmaps
+
+**Costmaps** represent obstacle information for planning.
+
+### Global Costmap
+
+**For global planning (entire map):**
+
+```yaml
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      update_frequency: 1.0          # Hz
+      publish_frequency: 1.0
+      global_frame: map
+      robot_base_frame: base_link
+      use_sim_time: false
+
+      robot_radius: 0.22             # Or footprint (see below)
+      resolution: 0.05               # Same as map
+      track_unknown_space: true
+
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+
+      # Static layer (from map)
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_subscribe_transient_local: true
+
+      # Obstacle layer (from sensors)
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: scan
+        scan:
+          topic: /scan
+          max_obstacle_height: 2.0
+          clearing: true
+          marking: true
+          data_type: "LaserScan"
+          raytrace_max_range: 12.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 11.5
+          obstacle_min_range: 0.0
+
+      # Inflation layer (safety buffer)
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 3.0
+        inflation_radius: 0.55
+```
+
+### Local Costmap
+
+**For local planning (around robot):**
+
+```yaml
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      update_frequency: 5.0          # Faster updates
+      publish_frequency: 2.0
+      global_frame: odom             # Local frame
+      robot_base_frame: base_link
+      use_sim_time: false
+
+      rolling_window: true           # Moves with robot
+      width: 3                       # meters
+      height: 3
+      resolution: 0.05
+
+      robot_radius: 0.22
+
+      plugins: ["voxel_layer", "inflation_layer"]
+
+      # Voxel layer (3D obstacle representation)
+      voxel_layer:
+        plugin: "nav2_costmap_2d::VoxelLayer"
+        enabled: true
+        publish_voxel_map: true
+        origin_z: 0.0
+        z_resolution: 0.05
+        z_voxels: 16
+        max_obstacle_height: 2.0
+        mark_threshold: 0
+        observation_sources: scan
+        scan:
+          topic: /scan
+          max_obstacle_height: 2.0
+          clearing: true
+          marking: true
+          data_type: "LaserScan"
+          raytrace_max_range: 3.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 2.5
+          obstacle_min_range: 0.0
+
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 3.0
+        inflation_radius: 0.55
+```
+
+### Robot Footprint
+
+**For non-circular robots:**
+
+```yaml
+# Instead of robot_radius, define footprint
+footprint: "[[0.25, 0.15], [0.25, -0.15], [-0.25, -0.15], [-0.25, 0.15]]"
+# Defines rectangular robot (0.5m x 0.3m)
+```
+
+**Footprint visualization:**
+```
+      Front
+    ┌─────────┐
+    │  Robot  │  Width: 0.3m
+    └─────────┘
+    Length: 0.5m
+```
+
+## Tuning Guide
+
+### Path Quality Issues
+
+**Problem: Paths too close to obstacles**
+```yaml
+# Solution: Increase inflation
+inflation_radius: 0.7  # Increase from 0.55
+cost_scaling_factor: 5.0  # Increase from 3.0
+```
+
+**Problem: Can't find path through narrow gaps**
+```yaml
+# Solution: Decrease inflation
+inflation_radius: 0.4  # Decrease from 0.55
+robot_radius: 0.20  # Decrease if overestimated
+```
+
+**Problem: Paths are jagged / not smooth**
+```yaml
+# Solution: Use Smac planner with smoothing
+smooth_path: true
+smoother:
+  max_iterations: 1000
+  w_smooth: 0.3
+  w_data: 0.2
+```
+
+### Controller Tuning
+
+**Problem: Robot oscillates**
+```yaml
+# Solution: Reduce velocity/acceleration
+max_vel_x: 0.4  # Reduce from 0.5
+acc_lim_x: 2.0  # Reduce from 2.5
+
+# Or increase controller frequency
+controller_frequency: 30.0  # Increase from 20.0
+```
+
+**Problem: Robot too slow**
+```yaml
+# Solution: Increase limits
+max_vel_x: 0.7
+max_speed_xy: 0.75
+sim_time: 2.0  # Longer lookahead
+```
+
+**Problem: Doesn't avoid obstacles well**
+```yaml
+# Solution: Increase obstacle critic weight
+BaseObstacle.scale: 0.05  # Increase from 0.02
+```
+
+### Performance Optimization
+
+**High CPU usage:**
+```yaml
+# Reduce sampling
+vx_samples: 10  # Reduce from 20
+vy_samples: 10
+vtheta_samples: 20  # Reduce from 40
+
+# Reduce costmap update frequency
+update_frequency: 3.0  # Reduce from 5.0
+```
+
+**Slow path planning:**
+```yaml
+# Use NavFn instead of Smac
+# Reduce max planning time
+max_planning_time: 2.0  # Reduce from 5.0
+```
+
+## Visualization
+
+### View Costmaps
+
+**In RViz:**
+- Add → Map
+- Topic: `/global_costmap/costmap`
+- Color Scheme: costmap
+
+**Cost values:**
+- **254 (red):** Lethal obstacle
+- **253 (pink):** Inscribed obstacle (robot footprint touches)
+- **128-252 (orange-yellow):** Inflation zone
+- **0 (blue):** Free space
+- **255 (gray):** Unknown
+
+### View Plans
+
+**Global plan:**
+- Add → Path
+- Topic: `/plan`
+- Color: Green
+
+**Local plan:**
+- Add → Path
+- Topic: `/local_plan`
+- Color: Red
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Behavior Trees"
+    icon="tree"
+    href="/wp4-ros2/navigation/behavior-trees"
+  >
+    Customize navigation decision logic
+  </Card>
+
+  <Card
+    title="Navigation Testing"
+    icon="flask"
+    href="/wp4-ros2/navigation/testing"
+  >
+    Validate and benchmark navigation
+  </Card>
+
+  <Card
+    title="Recovery Behaviors"
+    icon="life-ring"
+    href="/reference/ros2/nav2-behaviors"
+  >
+    Configure what happens when stuck
+  </Card>
+
+  <Card
+    title="Nav2 Tuning Guide"
+    icon="sliders"
+    href="https://docs.nav2.org/tuning/index.html"
+  >
+    Official Nav2 configuration guide
+  </Card>
+</CardGroup>
+
+## References
+
+[1] Nav2 Planners: https://docs.nav2.org/plugins/index.html
+[2] DWB Controller: https://docs.nav2.org/configuration/packages/dwb-params/index.html
+[3] Costmap2D: https://docs.nav2.org/configuration/packages/costmap-plugins/index.html

@@ -1,0 +1,677 @@
+---
+title: "IMU Specifications"
+description: "Complete ICM-20948 9-axis IMU specifications and integration details"
+---
+
+## Overview
+
+The **ICM-20948** is a 9-axis motion tracking device combining 3-axis gyroscope, 3-axis accelerometer, and 3-axis magnetometer. It provides orientation, angular velocity, and acceleration data for sensor fusion and localization.
+
+<Note>
+  **Key Features:** 9-DOF (degrees of freedom), I2C/SPI interface, onboard DMP (Digital Motion Processor), low power, industry-standard from TDK InvenSense.
+</Note>
+
+## Specifications Summary
+
+### Gyroscope
+
+| Parameter | Specification | Notes |
+|-----------|--------------|-------|
+| **Range** | ±250, ±500, ±1000, ±2000 °/s | Selectable (default ±2000) |
+| **Resolution** | 16-bit | 0.0061 °/s per LSB at ±2000 |
+| **Noise** | 4 mdps/√Hz | Very low noise |
+| **Linearity** | ±0.2% | Excellent linearity |
+| **Zero-Rate Offset** | ±20 °/s | Temperature compensated |
+| **Temperature Drift** | ±0.03 °/s/°C | After calibration |
+| **Bandwidth** | 12-197 Hz | Configurable |
+| **Update Rate** | Up to 1.125 kHz | Internal sampling |
+
+**Recommended settings for robot:**
+- Range: ±2000 °/s (covers fast rotations)
+- Bandwidth: 51 Hz (good noise rejection)
+- Output rate: 100 Hz
+
+### Accelerometer
+
+| Parameter | Specification | Notes |
+|-----------|--------------|-------|
+| **Range** | ±2, ±4, ±8, ±16 g | Selectable (default ±16g) |
+| **Resolution** | 16-bit | 0.000488 g per LSB at ±16g |
+| **Noise Density** | 230 μg/√Hz | Low noise |
+| **Zero-G Offset** | ±50 mg | ±0.05 m/s² |
+| **Sensitivity Tolerance** | ±3% | Factory calibrated |
+| **Bandwidth** | 5.7-473 Hz | Configurable |
+| **Update Rate** | Up to 4.5 kHz | Internal sampling |
+
+**Recommended settings:**
+- Range: ±16g (handles shocks, vibrations)
+- Bandwidth: 50 Hz
+- Output rate: 100 Hz
+
+### Magnetometer (AK09916)
+
+| Parameter | Specification | Notes |
+|-----------|--------------|-------|
+| **Range** | ±4900 μT | Full-scale range |
+| **Resolution** | 16-bit | 0.15 μT per LSB |
+| **Noise** | 0.6 μT RMS | In 50 Hz bandwidth |
+| **Sensitivity** | 0.15 μT/LSB | Fixed sensitivity |
+| **Offset** | &lt;±200 μT | Requires calibration |
+| **Update Rate** | 10, 20, 50, 100 Hz | Selectable |
+
+**Earth's magnetic field:** ~25-65 μT (location dependent)
+
+**Recommended settings:**
+- Range: Full ±4900 μT
+- Mode: Continuous measurement
+- Rate: 50-100 Hz
+
+### Interface
+
+| Parameter | Specification |
+|-----------|--------------|
+| **I2C Address** | 0x68 (default) or 0x69 (AD0 high) |
+| **I2C Speed** | Standard (100 kHz) to Fast Plus (1 MHz) |
+| **SPI Speed** | Up to 7 MHz |
+| **Interrupt Pins** | 1 (INT, configurable) |
+| **FSYNC** | Frame synchronization (optional) |
+
+### Electrical
+
+| Parameter | Specification | Notes |
+|-----------|--------------|-------|
+| **Supply Voltage** | 2.4V - 3.6V | Nominal 3.3V |
+| **I/O Voltage** | 1.71V - VDD | 3.3V I/O compatible |
+| **Current (all sensors)** | 3.5 mA | Typical operation |
+| **Current (low power)** | 330 μA | Duty-cycled mode |
+| **Current (sleep)** | 15 μA | Ultra-low power |
+| **Power** | ~12 mW | At 3.3V, all sensors |
+
+### Physical
+
+| Parameter | Specification |
+|-----------|--------------|
+| **Package** | 3mm × 3mm × 1mm QFN | Surface mount |
+| **Breakout Board** | ~20mm × 15mm | Typical SparkFun/Adafruit size |
+| **Weight** | <1g | Breakout board ~2g |
+| **Operating Temp** | -40°C to +85°C | Industrial range |
+
+## Pin Configuration
+
+### ICM-20948 Breakout Board
+
+**Typical pinout (SparkFun/Adafruit):**
+
+```
+┌─────────────────┐
+│  ICM-20948      │
+│  Breakout       │
+│                 │
+│  ●  VDD (3.3V)  │ ──→ 3.3V
+│  ●  GND         │ ──→ GND
+│  ●  SDA         │ ↔── ESP32 GPIO 21 (I2C)
+│  ●  SCL         │ ←── ESP32 GPIO 22 (I2C)
+│  ●  INT         │ ───→ ESP32 GPIO (optional interrupt)
+│  ●  AD0         │ ──→ GND (I2C address 0x68)
+│  ●  FSYNC       │ ───→ (unused, tie to GND)
+│  ●  CS          │ ──→ VDD (I2C mode, disable SPI)
+└─────────────────┘
+```
+
+**Pin descriptions:**
+
+| Pin | Name | Function | Connection |
+|-----|------|----------|------------|
+| 1 | VDD | Power | 3.3V |
+| 2 | GND | Ground | GND (common) |
+| 3 | SDA | I2C Data | ESP32 GPIO 21 |
+| 4 | SCL | I2C Clock | ESP32 GPIO 22 |
+| 5 | INT | Interrupt | ESP32 GPIO (optional) |
+| 6 | AD0 | Address select | GND (0x68) or VDD (0x69) |
+| 7 | FSYNC | Frame sync | GND (unused) |
+| 8 | CS | Chip select | VDD (I2C mode) |
+
+<Tip>
+  **I2C Pull-ups:** Most breakout boards have onboard 4.7kΩ or 10kΩ pull-up resistors on SDA/SCL. No external pull-ups needed.
+</Tip>
+
+## Coordinate System
+
+### IMU Frame Convention
+
+**ICM-20948 orientation:**
+
+```
+Top View (chip markings visible):
+
+       Y
+       ↑
+       │
+       │
+X ←────┼────
+       │
+       │
+       ↓
+
+Z-axis points DOWN (into chip, right-hand rule)
+```
+
+**ROS REP-103 convention:**
+- X: Forward
+- Y: Left
+- Z: Up
+
+**Mounting orientation for robot:**
+
+**Option 1: Chip markings up, X forward**
+```
+Mount IMU flat, chip markings visible
+→ X_imu = X_robot (forward)
+→ Y_imu = Y_robot (left)
+→ Z_imu = -Z_robot (down → needs inversion)
+
+TF transform:
+<origin xyz="0 0 0.05" rpy="0 3.14159 0"/>
+        (pitch 180° to flip Z)
+```
+
+**Option 2: Chip markings down, Y forward**
+```
+Mount IMU inverted
+→ Requires different TF transform
+(depends on exact mounting)
+```
+
+<Warning>
+  **Orientation Matters!** Incorrect IMU orientation causes wrong sensor fusion. Always verify axes match robot coordinate system.
+</Warning>
+
+## I2C Communication
+
+### Connection to ESP32
+
+**Wiring:**
+```cpp
+// ESP32 pins
+#define IMU_SDA 21  // Default I2C SDA
+#define IMU_SCL 22  // Default I2C SCL
+
+#include <Wire.h>
+
+void setup() {
+  Wire.begin(IMU_SDA, IMU_SCL);
+  Wire.setClock(400000);  // 400 kHz (Fast Mode)
+}
+```
+
+**I2C address:**
+```cpp
+#define ICM20948_ADDRESS 0x68  // AD0 = GND (default)
+// Or 0x69 if AD0 = VDD
+
+// Verify connection
+Wire.beginTransmission(ICM20948_ADDRESS);
+if (Wire.endTransmission() == 0) {
+  Serial.println("ICM-20948 found!");
+}
+```
+
+### Reading Data
+
+**Using library (recommended):**
+```cpp
+#include <ICM_20948.h>  // SparkFun library
+
+ICM_20948_I2C myICM;
+
+void setup() {
+  myICM.begin(Wire, 1);  // Address AD0=1 → 0x69 (or 0 for 0x68)
+}
+
+void loop() {
+  if (myICM.dataReady()) {
+    myICM.getAGMT();  // Get Accel, Gyro, Mag, Temp
+
+    // Access data
+    float ax = myICM.accX();  // Acceleration X (g)
+    float ay = myICM.accY();
+    float az = myICM.accZ();
+
+    float gx = myICM.gyrX();  // Angular velocity X (°/s)
+    float gy = myICM.gyrY();
+    float gz = myICM.gyrZ();
+
+    float mx = myICM.magX();  // Magnetic field X (μT)
+    float my = myICM.magY();
+    float mz = myICM.magZ();
+
+    float temp = myICM.temp(); // Temperature (°C)
+  }
+
+  delay(10);  // 100 Hz
+}
+```
+
+## Data Interpretation
+
+### Gyroscope (Angular Velocity)
+
+**Units:** °/s (degrees per second)
+
+**What it measures:**
+- Rotation rate around X, Y, Z axes
+- NOT absolute orientation (needs integration)
+
+**Typical values:**
+- Stationary: 0 ±0.5 °/s (noise + drift)
+- Slow turn: 30 °/s
+- Fast turn: 180 °/s
+- Very fast spin: 500+ °/s
+
+**Integration to get angle:**
+```cpp
+float yaw = 0.0;  // Accumulated angle
+float last_time = millis();
+
+void loop() {
+  myICM.getAGMT();
+  float gz = myICM.gyrZ();  // Rotation around Z (yaw)
+
+  float current_time = millis();
+  float dt = (current_time - last_time) / 1000.0;  // seconds
+
+  yaw += gz * dt;  // Integrate angular velocity
+
+  last_time = current_time;
+}
+```
+
+**Problem:** Drift accumulates over time (0.02-0.05°/s typical)
+**Solution:** Fuse with magnetometer and/or odometry (EKF)
+
+### Accelerometer
+
+**Units:** g (1g = 9.80665 m/s²)
+
+**What it measures:**
+- Linear acceleration PLUS gravity
+- Tilt angle (from gravity vector)
+
+**Typical values:**
+- Stationary, level: (0, 0, 1) g → Z points up
+- Tilted 45°: ax or ay ≠ 0
+- Free fall: (0, 0, 0) g
+
+**Tilt calculation (roll, pitch):**
+```cpp
+float ax = myICM.accX();
+float ay = myICM.accY();
+float az = myICM.accZ();
+
+// Roll (rotation around X axis)
+float roll = atan2(ay, az);
+
+// Pitch (rotation around Y axis)
+float pitch = atan2(-ax, sqrt(ay*ay + az*az));
+
+// Convert to degrees
+roll *= 180.0 / PI;
+pitch *= 180.0 / PI;
+```
+
+**Note:** Cannot determine yaw from accelerometer alone (no gravity component in horizontal plane)
+
+### Magnetometer
+
+**Units:** μT (microtesla)
+
+**What it measures:**
+- Earth's magnetic field (points magnetic north)
+- Disturbed by ferromagnetic materials (motors, batteries)
+
+**Earth's field strength:** ~25-65 μT (varies by location)
+- Horizontal component: ~20-40 μT
+- Vertical component: ~10-50 μT
+
+**Magnetic declination:** Difference between magnetic north and true north (~10-20° in many locations)
+
+**Heading (yaw) calculation:**
+```cpp
+float mx = myICM.magX();
+float my = myICM.magY();
+
+// Heading (yaw, 0° = magnetic north)
+float heading = atan2(my, mx);
+
+// Convert to degrees
+heading *= 180.0 / PI;
+
+// Adjust for declination (e.g., +15° east)
+heading += 15.0;
+
+// Normalize to [0, 360)
+if (heading < 0) heading += 360;
+```
+
+**Challenges:**
+- **Hard iron distortion:** Permanent magnets (motors) cause constant offset
+- **Soft iron distortion:** Ferromagnetic materials (metal chassis) warp field
+- **Dynamic interference:** Motor currents create temporary fields
+
+**Solution:** Magnetometer calibration (see below)
+
+## Calibration
+
+### Gyroscope Calibration
+
+**Purpose:** Remove zero-rate offset (bias when stationary)
+
+**Procedure:**
+1. Place robot stationary on level surface
+2. Read gyro for 10 seconds
+3. Calculate average (this is the bias)
+4. Subtract bias from all future readings
+
+```cpp
+float gyro_bias_x = 0, gyro_bias_y = 0, gyro_bias_z = 0;
+
+void calibrateGyro() {
+  Serial.println("Calibrating gyroscope... Keep robot stationary!");
+
+  const int samples = 1000;
+  for (int i = 0; i < samples; i++) {
+    myICM.getAGMT();
+    gyro_bias_x += myICM.gyrX();
+    gyro_bias_y += myICM.gyrY();
+    gyro_bias_z += myICM.gyrZ();
+    delay(10);
+  }
+
+  gyro_bias_x /= samples;
+  gyro_bias_y /= samples;
+  gyro_bias_z /= samples;
+
+  Serial.printf("Gyro biases: X=%.2f, Y=%.2f, Z=%.2f °/s\n",
+                gyro_bias_x, gyro_bias_y, gyro_bias_z);
+}
+
+void loop() {
+  myICM.getAGMT();
+
+  // Apply calibration
+  float gx = myICM.gyrX() - gyro_bias_x;
+  float gy = myICM.gyrY() - gyro_bias_y;
+  float gz = myICM.gyrZ() - gyro_bias_z;
+}
+```
+
+### Accelerometer Calibration
+
+**Purpose:** Remove zero-G offset and scale errors
+
+**Simple calibration (6-point):**
+1. Place IMU in 6 orientations (+X, -X, +Y, -Y, +Z, -Z)
+2. Record readings for each orientation
+3. Calculate offsets and scale factors
+
+**Expected readings (ideal):**
+- +X up: (1, 0, 0) g
+- -X up: (-1, 0, 0) g
+- +Y up: (0, 1, 0) g
+- -Y up: (0, -1, 0) g
+- +Z up: (0, 0, 1) g
+- -Z up: (0, 0, -1) g
+
+**Calculate offsets:**
+```cpp
+offset_x = (max_x + min_x) / 2;
+offset_y = (max_y + min_y) / 2;
+offset_z = (max_z + min_z) / 2;
+
+scale_x = 2.0 / (max_x - min_x);
+scale_y = 2.0 / (max_y - min_y);
+scale_z = 2.0 / (max_z - min_z);
+
+// Apply:
+ax_cal = (ax - offset_x) * scale_x;
+```
+
+### Magnetometer Calibration
+
+**Purpose:** Compensate for hard/soft iron distortions
+
+**Calibration procedure (figure-8 pattern):**
+1. Power on robot (all electronics active)
+2. Slowly rotate robot in all 3 axes
+3. Move in figure-8 pattern for 30-60 seconds
+4. Record min/max values for each axis
+
+**Hard iron offset correction:**
+```cpp
+offset_mx = (max_mx + min_mx) / 2;
+offset_my = (max_my + min_my) / 2;
+offset_mz = (max_mz + min_mz) / 2;
+
+// Apply:
+mx_cal = mx - offset_mx;
+my_cal = my - offset_my;
+mz_cal = mz - offset_mz;
+```
+
+**Soft iron correction:** More complex (requires 3×3 matrix correction), typically done by magnetometer calibration tools.
+
+<Warning>
+  **Recalibrate magnetometer:**
+  - After moving motors/batteries
+  - When changing environments
+  - Periodically (monthly)
+</Warning>
+
+## ROS2 Integration
+
+### Publishing IMU Data
+
+**ESP32 → ROS2 (via serial):**
+
+```cpp
+// Send IMU data as CSV string
+void sendIMUData() {
+  myICM.getAGMT();
+
+  // Format: ax,ay,az,gx,gy,gz,mx,my,mz
+  Serial.print(myICM.accX()); Serial.print(",");
+  Serial.print(myICM.accY()); Serial.print(",");
+  Serial.print(myICM.accZ()); Serial.print(",");
+  Serial.print(myICM.gyrX()); Serial.print(",");
+  Serial.print(myICM.gyrY()); Serial.print(",");
+  Serial.print(myICM.gyrZ()); Serial.print(",");
+  Serial.print(myICM.magX()); Serial.print(",");
+  Serial.print(myICM.magY()); Serial.print(",");
+  Serial.println(myICM.magZ());
+}
+```
+
+**ROS2 node (Python):**
+
+```python
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import Imu, MagneticField
+import serial
+
+class IMUPublisher(Node):
+    def __init__(self):
+        super().__init__('imu_publisher')
+        self.imu_pub = self.create_publisher(Imu, '/imu/data', 10)
+        self.mag_pub = self.create_publisher(MagneticField, '/imu/mag', 10)
+
+        self.serial_port = serial.Serial('/dev/ttyUSB0', 115200)
+        self.timer = self.create_timer(0.01, self.timer_callback)  # 100 Hz
+
+    def timer_callback(self):
+        if self.serial_port.in_waiting:
+            line = self.serial_port.readline().decode('utf-8').strip()
+            data = line.split(',')
+
+            if len(data) == 9:
+                imu_msg = Imu()
+                imu_msg.header.stamp = self.get_clock().now().to_msg()
+                imu_msg.header.frame_id = 'imu_link'
+
+                # Linear acceleration (convert g → m/s²)
+                imu_msg.linear_acceleration.x = float(data[0]) * 9.80665
+                imu_msg.linear_acceleration.y = float(data[1]) * 9.80665
+                imu_msg.linear_acceleration.z = float(data[2]) * 9.80665
+
+                # Angular velocity (convert °/s → rad/s)
+                imu_msg.angular_velocity.x = float(data[3]) * 0.0174533
+                imu_msg.angular_velocity.y = float(data[4]) * 0.0174533
+                imu_msg.angular_velocity.z = float(data[5]) * 0.0174533
+
+                # Orientation (not calculated yet, set to zero)
+                imu_msg.orientation.w = 1.0
+
+                self.imu_pub.publish(imu_msg)
+
+                # Magnetometer
+                mag_msg = MagneticField()
+                mag_msg.header = imu_msg.header
+                mag_msg.magnetic_field.x = float(data[6]) * 1e-6  # μT → T
+                mag_msg.magnetic_field.y = float(data[7]) * 1e-6
+                mag_msg.magnetic_field.z = float(data[8]) * 1e-6
+
+                self.mag_pub.publish(mag_msg)
+```
+
+### Sensor Fusion with EKF
+
+**Configure `robot_localization` to use IMU:**
+
+```yaml
+ekf_filter_node:
+  ros__parameters:
+    imu0: /imu/data
+    imu0_config: [false, false, false,  # x, y, z position (not from IMU)
+                  false, false, true,   # roll, pitch, yaw (use yaw from mag)
+                  false, false, false,  # x_dot, y_dot, z_dot
+                  false, false, true,   # roll_dot, pitch_dot, yaw_dot (use gyro Z)
+                  false, false, false]  # x_ddot, y_ddot, z_ddot
+
+    # IMU noise (tune based on calibration)
+    imu0_linear_acceleration_rejection_threshold: 0.8
+    imu0_angular_velocity_rejection_threshold: 0.8
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="IMU not detected on I2C" icon="microchip">
+    **Debug:**
+    ```cpp
+    // I2C scanner
+    for (byte addr = 1; addr < 127; addr++) {
+      Wire.beginTransmission(addr);
+      if (Wire.endTransmission() == 0) {
+        Serial.printf("Device at 0x%02X\n", addr);
+      }
+    }
+    // Expected: 0x68 or 0x69
+    ```
+
+    **Causes:**
+    - Wrong I2C address (check AD0 pin)
+    - SDA/SCL swapped
+    - No power (3.3V)
+    - Broken breakout board
+
+    **Solutions:**
+    - Verify 3.3V on VDD pin
+    - Check continuity on SDA/SCL wires
+    - Try external pull-ups (4.7kΩ)
+  </Accordion>
+
+  <Accordion title="Gyro drifts significantly" icon="rotate">
+    **Symptoms:** Integrated angle drifts 5-10°/minute
+
+    **Causes:**
+    - Not calibrated
+    - Temperature changes
+    - Vibration
+
+    **Solutions:**
+    - Calibrate gyro (see above)
+    - Wait 30s after power-on for thermal stabilization
+    - Mount rigidly (reduce vibration)
+    - Use sensor fusion (EKF corrects drift)
+  </Accordion>
+
+  <Accordion title="Magnetometer readings erratic" icon="compass">
+    **Causes:**
+    - Magnetic interference (motors, batteries)
+    - Not calibrated
+    - Metal nearby
+
+    **Solutions:**
+    - Mount IMU away from motors (>10cm)
+    - Calibrate magnetometer (figure-8 pattern)
+    - Check for magnetic materials near IMU
+    - Consider disabling magnetometer if too noisy
+  </Accordion>
+
+  <Accordion title="Accelerometer noisy" icon="wave-square">
+    **Causes:**
+    - Vibration from motors
+    - Electrical noise
+
+    **Solutions:**
+    - Add low-pass filter in software:
+      ```cpp
+      ax_filtered = 0.9 * ax_filtered + 0.1 * ax_raw;
+      ```
+    - Mount on vibration-damping material
+    - Reduce accelerometer bandwidth (5-20 Hz)
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="IMU Integration Guide"
+    icon="compass"
+    href="/wp3-embedded/imu-integration"
+  >
+    Complete IMU setup and calibration
+  </Card>
+
+  <Card
+    title="Sensor Fusion (EKF)"
+    icon="diagram-project"
+    href="/wp4-ros2/localization/ekf"
+  >
+    Fuse IMU with odometry
+  </Card>
+
+  <Card
+    title="Power System"
+    icon="battery-full"
+    href="/reference/hardware/power"
+  >
+    Power supply design
+  </Card>
+
+  <Card
+    title="Components Overview"
+    icon="microchip"
+    href="/reference/hardware/components"
+  >
+    All hardware components
+  </Card>
+</CardGroup>
+
+## References
+
+[1] ICM-20948 Datasheet: https://invensense.tdk.com/download-pdf/icm-20948-datasheet/
+[2] SparkFun ICM-20948 Library: https://github.com/sparkfun/SparkFun_ICM-20948_ArduinoLibrary
+[3] Sensor Fusion Guide: https://www.nxp.com/docs/en/application-note/AN5017.pdf
+[4] ROS sensor_msgs/Imu: https://docs.ros2.org/latest/api/sensor_msgs/msg/Imu.html

@@ -1,0 +1,607 @@
+---
+title: "Nav2 Introduction"
+description: "Introduction to ROS2 Navigation Stack (Nav2) for autonomous robot navigation"
+---
+
+## Overview
+
+**Nav2** (Navigation 2) is the ROS2 navigation stack. It enables robots to autonomously navigate from point A to point B while avoiding obstacles.
+
+<Note>
+  **Nav2** combines localization, mapping, path planning, and obstacle avoidance into a complete autonomous navigation system.
+</Note>
+
+## Nav2 Architecture
+
+```
+Goal (2D Nav Goal)
+       ↓
+┌──────────────────┐
+│  Behavior Tree   │ ← Decision making
+└────────┬─────────┘
+         ↓
+┌──────────────────┐
+│  Planner Server  │ ← Global path (A to B)
+└────────┬─────────┘
+         ↓
+┌──────────────────┐
+│ Controller Server│ ← Local control (follow path, avoid obstacles)
+└────────┬─────────┘
+         ↓
+    /cmd_vel (robot moves)
+```
+
+### Components
+
+<CardGroup cols={2}>
+  <Card title="Planner Server" icon="route">
+    Computes global path from start to goal using map. Algorithms: NavFn, Smac Planner.
+  </Card>
+
+  <Card title="Controller Server" icon="gamepad">
+    Follows path while avoiding dynamic obstacles. Algorithms: DWB, TEB, MPPI.
+  </Card>
+
+  <Card title="Behavior Server" icon="sitemap">
+    Executes recovery behaviors (backup, spin, wait) when stuck.
+  </Card>
+
+  <Card title="BT Navigator" icon="tree">
+    Coordinates all servers using Behavior Trees (decision logic).
+  </Card>
+
+  <Card title="Waypoint Follower" icon="location-dot">
+    Navigates through multiple waypoints in sequence.
+  </Card>
+
+  <Card title="Lifecycle Manager" icon="power-off">
+    Manages server lifecycles (startup, shutdown, recovery).
+  </Card>
+
+  <Card title="Map Server" icon="map">
+    Provides occupancy grid map (from SLAM or pre-built).
+  </Card>
+
+  <Card title="AMCL / Localization" icon="crosshairs">
+    Localizes robot in map (corrects odometry drift).
+  </Card>
+</CardGroup>
+
+## Prerequisites
+
+Before using Nav2:
+
+- [ ] **Map created** (using SLAM Toolbox or Cartographer)
+- [ ] **Localization working** (EKF fusion or AMCL)
+- [ ] **Odometry accurate** (&lt;5% error)
+- [ ] **LiDAR functioning** (publishes `/scan`)
+- [ ] **Robot control** (accepts `/cmd_vel`)
+- [ ] **TF tree complete** (map → odom → base_link)
+
+## Installation
+
+```bash
+# Install Nav2
+sudo apt install ros-jazzy-navigation2 ros-jazzy-nav2-bringup
+
+# Install AMCL for localization
+sudo apt install ros-jazzy-nav2-amcl
+```
+
+## Basic Configuration
+
+### Minimal Nav2 Parameters
+
+**File:** `config/nav2_params.yaml`
+
+```yaml
+bt_navigator:
+  ros__parameters:
+    use_sim_time: False
+    global_frame: map
+    robot_base_frame: base_link
+    odom_topic: /odometry/filtered
+    bt_loop_duration: 10
+    default_server_timeout: 20
+
+controller_server:
+  ros__parameters:
+    use_sim_time: False
+    controller_frequency: 20.0  # Hz
+    min_x_velocity_threshold: 0.001
+    min_y_velocity_threshold: 0.5
+    min_theta_velocity_threshold: 0.001
+    progress_checker_plugin: "progress_checker"
+    goal_checker_plugins: ["general_goal_checker"]
+    controller_plugins: ["FollowPath"]
+
+    # DWB controller (good for Mecanum)
+    FollowPath:
+      plugin: "dwb_core::DWBLocalPlanner"
+      min_vel_x: -0.5
+      max_vel_x: 0.5
+      min_vel_y: -0.5  # Mecanum strafing
+      max_vel_y: 0.5
+      max_vel_theta: 1.0
+      min_speed_xy: 0.0
+      max_speed_xy: 0.55
+      min_speed_theta: 0.0
+      acc_lim_x: 2.5
+      acc_lim_y: 2.5
+      acc_lim_theta: 3.2
+      decel_lim_x: -2.5
+      decel_lim_y: -2.5
+      decel_lim_theta: -3.2
+      vx_samples: 20
+      vy_samples: 20
+      vtheta_samples: 40
+
+planner_server:
+  ros__parameters:
+    use_sim_time: False
+    planner_plugins: ["GridBased"]
+    GridBased:
+      plugin: "nav2_navfn_planner/NavfnPlanner"
+      tolerance: 0.5
+      use_astar: false
+      allow_unknown: true
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      update_frequency: 5.0
+      publish_frequency: 2.0
+      global_frame: odom
+      robot_base_frame: base_link
+      use_sim_time: False
+      rolling_window: true
+      width: 3
+      height: 3
+      resolution: 0.05
+      robot_radius: 0.22  # Adjust for your robot
+      plugins: ["obstacle_layer", "inflation_layer"]
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 3.0
+        inflation_radius: 0.55
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: True
+        observation_sources: scan
+        scan:
+          topic: /scan
+          max_obstacle_height: 2.0
+          clearing: True
+          marking: True
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      update_frequency: 1.0
+      publish_frequency: 1.0
+      global_frame: map
+      robot_base_frame: base_link
+      use_sim_time: False
+      robot_radius: 0.22
+      resolution: 0.05
+      track_unknown_space: true
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_subscribe_transient_local: True
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: True
+        observation_sources: scan
+        scan:
+          topic: /scan
+          max_obstacle_height: 2.0
+          clearing: True
+          marking: True
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 3.0
+        inflation_radius: 0.55
+```
+
+### Launch File
+
+**File:** `launch/navigation.launch.py`
+
+```python
+from launch import LaunchDescription
+from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch_ros.substitutions import FindPackageShare
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    # Paths
+    pkg_share = FindPackageShare('mecanum_description').find('mecanum_description')
+    nav2_params = PathJoinSubstitution([pkg_share, 'config', 'nav2_params.yaml'])
+    map_yaml = PathJoinSubstitution([pkg_share, 'maps', 'my_map.yaml'])
+
+    # Arguments
+    use_sim_time = LaunchConfiguration('use_sim_time')
+
+    declare_use_sim_time_cmd = DeclareLaunchArgument(
+        'use_sim_time',
+        default_value='false',
+        description='Use simulation (Gazebo) clock if true')
+
+    # Map server
+    map_server_cmd = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('mecanum_description'),
+                'launch',
+                'map_server.launch.py'
+            ])
+        ]),
+        launch_arguments={'map': map_yaml}.items()
+    )
+
+    # AMCL localization
+    amcl_cmd = Node(
+        package='nav2_amcl',
+        executable='amcl',
+        name='amcl',
+        output='screen',
+        parameters=[nav2_params]
+    )
+
+    # Nav2 bringup
+    nav2_bringup_cmd = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('nav2_bringup'),
+                'launch',
+                'navigation_launch.py'
+            ])
+        ]),
+        launch_arguments={
+            'params_file': nav2_params,
+            'use_sim_time': use_sim_time
+        }.items()
+    )
+
+    return LaunchDescription([
+        declare_use_sim_time_cmd,
+        map_server_cmd,
+        amcl_cmd,
+        nav2_bringup_cmd,
+    ])
+```
+
+## Complete System Launch
+
+**File:** `launch/robot_navigation.launch.py`
+
+```python
+from launch import LaunchDescription
+from launch.actions import IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import PathJoinSubstitution
+from launch_ros.substitutions import FindPackageShare
+
+def generate_launch_description():
+    # Robot control (motors, odometry, EKF)
+    robot_control = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('mecanum_description'),
+                'launch',
+                'robot_full.launch.py'
+            ])
+        ])
+    )
+
+    # LiDAR
+    lidar = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('mecanum_description'),
+                'launch',
+                'lidar.launch.py'
+            ])
+        ])
+    )
+
+    # Navigation
+    navigation = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('mecanum_description'),
+                'launch',
+                'navigation.launch.py'
+            ])
+        ])
+    )
+
+    return LaunchDescription([
+        robot_control,
+        lidar,
+        navigation,
+    ])
+```
+
+**Usage:**
+```bash
+ros2 launch mecanum_description robot_navigation.launch.py
+```
+
+## RViz Configuration
+
+### Launch RViz
+
+```bash
+rviz2
+```
+
+### Essential Displays
+
+1. **Fixed Frame:** `map`
+
+2. **Map** - Static map
+   - Topic: `/map`
+   - Color Scheme: map
+
+3. **Global Costmap** - Planning costmap
+   - Topic: `/global_costmap/costmap`
+   - Color Scheme: costmap
+
+4. **Local Costmap** - Local obstacle avoidance
+   - Topic: `/local_costmap/costmap`
+   - Color Scheme: costmap
+
+5. **Global Plan** - Computed path
+   - Topic: `/plan`
+   - Color: Green
+
+6. **Local Plan** - Trajectory being followed
+   - Topic: `/local_plan`
+   - Color: Red
+
+7. **LaserScan** - LiDAR data
+   - Topic: `/scan`
+
+8. **RobotModel** - Robot visualization
+
+9. **TF** - Coordinate frames
+
+10. **2D Nav Goal** - Set navigation goals
+    - Toolbar → 2D Nav Goal button
+
+### Save RViz Config
+
+File → Save Config As → `rviz/navigation.rviz`
+
+## Sending Navigation Goals
+
+### Method 1: RViz (Interactive)
+
+1. Click "2D Nav Goal" button in toolbar
+2. Click and drag on map:
+   - **Click:** Goal position
+   - **Drag direction:** Goal orientation
+3. Release mouse
+4. Robot navigates to goal!
+
+<img
+  src="/images/nav2-rviz-goal.png"
+  alt="Setting 2D Nav Goal in RViz"
+  caption="Click and drag to set navigation goal (green arrow shows path)"
+/>
+
+### Method 2: Command Line
+
+```bash
+ros2 topic pub --once /goal_pose geometry_msgs/msg/PoseStamped \
+  "{header: {stamp: {sec: 0}, frame_id: 'map'},
+    pose: {position: {x: 2.0, y: 1.0, z: 0.0},
+           orientation: {w: 1.0}}}"
+```
+
+### Method 3: Python Script
+
+```python
+#!/usr/bin/env python3
+import rclpy
+from rclpy.node import Node
+from geometry_msgs.msg import PoseStamped
+
+class NavGoalPublisher(Node):
+    def __init__(self):
+        super().__init__('nav_goal_publisher')
+        self.publisher = self.create_publisher(PoseStamped, '/goal_pose', 10)
+
+    def send_goal(self, x, y, yaw=0.0):
+        goal = PoseStamped()
+        goal.header.frame_id = 'map'
+        goal.header.stamp = self.get_clock().now().to_msg()
+
+        goal.pose.position.x = x
+        goal.pose.position.y = y
+        goal.pose.position.z = 0.0
+
+        # Convert yaw to quaternion
+        goal.pose.orientation.z = np.sin(yaw / 2.0)
+        goal.pose.orientation.w = np.cos(yaw / 2.0)
+
+        self.publisher.publish(goal)
+        self.get_logger().info(f'Sent goal: ({x}, {y}, {yaw})')
+
+def main():
+    rclpy.init()
+    node = NavGoalPublisher()
+    node.send_goal(2.0, 1.0, 0.0)  # Navigate to (2, 1) facing 0°
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+```
+
+## Navigation Workflow
+
+<Steps>
+  <Step title="Launch Complete System">
+    ```bash
+    ros2 launch mecanum_description robot_navigation.launch.py
+    ```
+
+    **Verify:**
+    - All nodes running (`ros2 node list`)
+    - Map loaded (`/map` topic)
+    - Localization active (AMCL or EKF)
+    - Costmaps publishing
+  </Step>
+
+  <Step title="Localize Robot">
+    **If using AMCL:**
+    1. Open RViz
+    2. Click "2D Pose Estimate"
+    3. Click robot's actual position on map
+    4. Drag to set orientation
+    5. Watch particles converge
+
+    **If using SLAM localization mode:**
+    - Already localized automatically
+  </Step>
+
+  <Step title="Send Navigation Goal">
+    1. Click "2D Nav Goal" in RViz
+    2. Click goal position on map
+    3. Drag to set orientation
+    4. Release mouse
+  </Step>
+
+  <Step title="Monitor Navigation">
+    **Watch in RViz:**
+    - Green path (global plan) from robot to goal
+    - Red trajectory (local plan) adjusting around obstacles
+    - Robot moving toward goal
+    - Costmaps updating in real-time
+
+    **Monitor status:**
+    ```bash
+    ros2 topic echo /behavior_tree_log
+    ```
+  </Step>
+
+  <Step title="Goal Reached">
+    **Success indicators:**
+    - Robot stops at goal
+    - Status: "Goal succeeded"
+    - Velocity commands stop (`/cmd_vel` = 0)
+
+    **If failed:**
+    - Check logs: `ros2 node logs /controller_server`
+    - Common: Path blocked, timeout, robot stuck
+  </Step>
+</Steps>
+
+## Behavior Tree
+
+Nav2 uses **Behavior Trees** for decision logic:
+
+```
+NavigateToPoseSequence
+├── ComputePathToPose
+├── FollowPath
+└── [Recovery behaviors if stuck]
+    ├── Backup
+    ├── Spin
+    └── Wait
+```
+
+**Custom behavior trees** possible (advanced topic).
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="No path found" icon="route">
+    **Causes:**
+    - Goal in occupied space
+    - Goal too close to obstacle
+    - No valid path exists
+
+    **Solutions:**
+    - Choose different goal
+    - Increase planner tolerance
+    - Check global costmap (goal might appear blocked)
+  </Accordion>
+
+  <Accordion title="Robot won't move" icon="robot">
+    **Debug:**
+    1. Check `/cmd_vel` published:
+       ```bash
+       ros2 topic echo /cmd_vel
+       ```
+
+    2. Check controller server status
+    3. Verify robot control stack running
+    4. Check velocity limits not too restrictive
+  </Accordion>
+
+  <Accordion title="Robot oscillates / unstable" icon="wave-square">
+    **Cause:** Controller gains too aggressive
+
+    **Solutions:**
+    - Reduce max velocities
+    - Increase controller frequency
+    - Tune DWB parameters
+    - Switch controller plugin (try TEB or MPPI)
+  </Accordion>
+
+  <Accordion title="Gets stuck near obstacles" icon="circle-stop">
+    **Cause:** Costmap inflation too large
+
+    **Solution:**
+    - Reduce `inflation_radius`
+    - Reduce `cost_scaling_factor`
+    - Check `robot_radius` accurate
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Path Planning"
+    icon="route"
+    href="/wp4-ros2/navigation/path-planning"
+  >
+    Deep dive into planners and costmaps
+  </Card>
+
+  <Card
+    title="Behavior Trees"
+    icon="tree"
+    href="/wp4-ros2/navigation/behavior-trees"
+  >
+    Customize navigation behavior
+  </Card>
+
+  <Card
+    title="Navigation Testing"
+    icon="flask"
+    href="/wp4-ros2/navigation/testing"
+  >
+    Systematic navigation validation
+  </Card>
+
+  <Card
+    title="AMCL Localization"
+    icon="crosshairs"
+    href="/wp4-ros2/navigation/amcl"
+  >
+    Localize robot in pre-built map
+  </Card>
+</CardGroup>
+
+## References
+
+[1] Nav2 Documentation: https://docs.nav2.org/
+[2] Nav2 Tutorials: https://docs.nav2.org/tutorials/index.html
+[3] Nav2 Configuration Guide: https://docs.nav2.org/configuration/index.html

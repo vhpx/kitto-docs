@@ -1,0 +1,383 @@
+---
+title: "WP3: Embedded Systems - Introduction"
+description: "Introduction to ESP32 embedded programming and motor control for the Mecanum robot"
+---
+
+## Overview
+
+Work Package 3 brings your robot to life! You'll program the ESP32 microcontroller to:
+
+- Control DC motors with precise speed/position
+- Read encoder feedback for odometry
+- Implement PID controllers
+- Integrate IMU for orientation sensing
+- Communicate with the onboard computer (Raspberry Pi)
+
+<Note>
+  **Duration:** 4-6 weeks (can overlap with WP2 and WP4)
+  **Prerequisites:** C/C++ programming, basic electronics
+</Note>
+
+## Deliverables
+
+### D3.1: DC Motor Control with PID
+**Suggested Time:** 3-4 weeks
+
+**What to deliver:**
+- ESP32 code to read encoder values
+- PID controller implementation for motor speed/position
+- Serial communication for monitoring and debugging
+- Unit testing demonstrating working motor control
+
+**Success Criteria:**
+- Motor responds to velocity commands accurately
+- PID tuned for smooth motion (no oscillation)
+- Encoder readings accurate and stable
+- Serial interface allows parameter tuning
+
+### D3.2: IMU Integration (ICM-20948)
+**Suggested Time:** 2-3 weeks
+
+**What to deliver:**
+- I2C communication with IMU
+- Sensor data reading (accelerometer, gyroscope, magnetometer)
+- Sensor fusion for orientation estimate
+- Integration with motor control system
+
+**Success Criteria:**
+- IMU data read successfully at >50Hz
+- Orientation estimate stable and accurate
+- Data published to ROS2 (or ready for integration)
+- Sensor calibration procedure documented
+
+## Why Embedded Systems?
+
+<AccordionGroup>
+  <Accordion title="Real-Time Control" icon="clock">
+    Microcontrollers provide deterministic timing for motor control loops. ESP32 runs control at precise intervals (e.g., 100Hz) for smooth motion.
+  </Accordion>
+
+  <Accordion title="Hardware Interfaces" icon="microchip">
+    Direct GPIO access to motors, encoders, sensors. No operating system overhead means predictable performance.
+  </Accordion>
+
+  <Accordion title="Low Power" icon="battery-half">
+    Embedded systems are energy-efficient. ESP32 consumes ~500mA vs Raspberry Pi's 2-3A.
+  </Accordion>
+
+  <Accordion title="Reliability" icon="shield-check">
+    Dedicated control separates safety-critical motor control from higher-level navigation (ROS2 on RPi).
+  </Accordion>
+</AccordionGroup>
+
+## System Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│              Raspberry Pi (ROS2)                │
+│  - Navigation, SLAM, Perception                 │
+│  - High-level planning                          │
+└────────────────┬────────────────────────────────┘
+                 │ USB Serial / UART
+                 │ Commands: velocity setpoints
+                 │ Feedback: odometry, IMU
+┌────────────────▼────────────────────────────────┐
+│              ESP32 (Embedded)                   │
+│  - Motor control (PID loops)                    │
+│  - Encoder reading (odometry)                   │
+│  - IMU sensor fusion                            │
+│  - Low-level safety (e-stop, limits)            │
+└──┬──┬──┬──┬───────────────────────┬─────────────┘
+   │  │  │  │                       │
+   ▼  ▼  ▼  ▼                       ▼
+ Motor Drivers              IMU (I2C)
+ (4× IBT-2)
+   │  │  │  │
+   ▼  ▼  ▼  ▼
+DC Motors + Encoders
+```
+
+## Development Environment
+
+### Software Stack
+
+**Required:**
+- VSCode (IDE)
+- PlatformIO (ESP32 toolchain and library manager)
+- USB drivers for ESP32
+
+**Libraries:**
+- ESP32 Arduino Core
+- PID library (or write your own)
+- IMU libraries (SparkFun ICM-20948, or TDK InvenSense)
+
+**Optional but helpful:**
+- Serial Plotter/Monitor in PlatformIO
+- Teleplot (VSCode extension for data visualization)
+
+### Hardware Setup
+
+**Minimum for testing:**
+- 1× ESP32 dev board
+- 1× DC motor with encoder
+- 1× IBT-2 motor driver
+- 12V power supply
+- USB cable for programming
+
+**Full system:**
+- 4× motors + encoders
+- 4× motor drivers
+- IMU module
+- Battery
+- Complete robot assembly
+
+<Tip>
+  **Start Simple:** Test with ONE motor first. Get it working perfectly before adding complexity!
+</Tip>
+
+## Work Package Timeline
+
+<Steps>
+  <Step title="Week 1: Environment Setup">
+    - Install VSCode and PlatformIO
+    - Test ESP32 with "Blink" example
+    - Study encoder and motor driver datasheets
+    - Plan GPIO pin assignments
+  </Step>
+
+  <Step title="Week 2: Basic I/O">
+    - PWM output to motor driver
+    - Read encoder pulses (interrupts)
+    - Serial communication setup
+    - Test motor spinning (open-loop)
+  </Step>
+
+  <Step title="Week 3: PID Implementation">
+    - Implement PID controller
+    - Tune parameters (Kp, Ki, Kd)
+    - Test velocity control
+    - Debug and refine
+  </Step>
+
+  <Step title="Week 4: Multi-Motor Control">
+    - Expand to 4 motors
+    - Synchronized control
+    - Odometry calculation
+    - Performance testing
+  </Step>
+
+  <Step title="Week 5: IMU Integration">
+    - I2C communication
+    - Read sensor data
+    - Calibration procedure
+    - Sensor fusion (basic)
+  </Step>
+
+  <Step title="Week 6: Integration & Testing">
+    - Combine all subsystems
+    - Communication protocol with ROS2
+    - Extensive testing
+    - Documentation
+  </Step>
+</Steps>
+
+## Key Concepts
+
+### GPIO (General Purpose Input/Output)
+
+ESP32 pins can be configured as:
+- **Digital Output:** PWM for motor drivers
+- **Digital Input:** Encoder pulses, buttons
+- **Analog Input:** Battery voltage monitoring (ADC)
+- **Communication:** I2C (IMU), UART (serial), SPI
+
+### Interrupts
+
+**Why:** Encoder pulses happen fast! Polling might miss counts.
+
+**How:** Attach interrupt handlers to encoder pins. ESP32 calls function on every edge (rising/falling).
+
+```cpp
+attachInterrupt(digitalPinToInterrupt(ENC_A_PIN), encoderISR, RISING);
+```
+
+### PWM (Pulse Width Modulation)
+
+**Purpose:** Control motor speed by varying duty cycle (0-100%).
+
+**ESP32:** Hardware PWM on most pins, 8-bit or 16-bit resolution, adjustable frequency.
+
+```cpp
+ledcWrite(channel, dutyCycle);  // dutyCycle: 0-255 for 8-bit
+```
+
+### PID Control
+
+**Concept:** Feedback controller that adjusts output based on error.
+
+```
+error = setpoint - measured_value
+output = Kp*error + Ki*∫error + Kd*(d_error/dt)
+```
+
+**Tuning:** Start with Kp only, then add Ki for steady-state, Kd for damping.
+
+### I2C Communication
+
+**Purpose:** Talk to IMU (and other sensors).
+
+**ESP32:** Built-in I2C hardware, typically GPIO21 (SDA) and GPIO22 (SCL).
+
+**Protocol:** Master-slave, 7-bit addressing, clock speed 100kHz-400kHz.
+
+## Learning Resources
+
+<CardGroup cols={2}>
+  <Card title="ESP32 Basics" icon="microchip">
+    - Espressif documentation
+    - RandomNerd Tutorials
+    - DroneBot Workshop
+  </Card>
+
+  <Card title="PID Control" icon="chart-line">
+    - "PID Without a PhD" by Tim Wescott
+    - Brett Beauregard's PID library
+    - Control Systems lectures
+  </Card>
+
+  <Card title="Encoder Interfacing" icon="rotate">
+    - Quadrature encoder basics
+    - Interrupt handling
+    - Velocity estimation methods
+  </Card>
+
+  <Card title="Motor Drivers" icon="gears">
+    - H-bridge operation
+    - IBT-2 datasheet
+    - PWM frequency selection
+  </Card>
+</CardGroup>
+
+## Safety Considerations
+
+<Warning>
+  **Electrical Safety:**
+</Warning>
+
+- **Never** connect/disconnect while powered
+- Motors can draw high current (3A peak)
+- Check polarity before applying power
+- Use current-limited power supply for testing
+- Keep emergency stop accessible
+
+**Motor Safety:**
+- Motors can spin fast and get HOT
+- Secure robot during testing (prevent falling off table)
+- Start with low PWM duty cycle (20-30%)
+- Monitor current draw
+
+**Battery Safety:**
+- LiPo batteries require careful handling
+- Never discharge below 3.0V per cell
+- Use LiPo safety bag
+- Implement low-voltage cutoff in code
+
+## Testing Strategy
+
+### Unit Testing Approach
+
+Test each component separately:
+
+1. **GPIO Output Test:** Blink LED on each motor driver pin
+2. **Encoder Input Test:** Print encoder counts while manually rotating wheel
+3. **Open-Loop Motor Test:** Spin motor at fixed PWM, observe
+4. **Closed-Loop Test:** PID control one motor to target speed
+5. **Multi-Motor Test:** Control all four motors independently
+6. **IMU Test:** Read and print sensor data
+7. **Integration Test:** Full system with all components
+
+<Tip>
+  **Document Everything:** Keep a testing log. Note what worked, what failed, parameter values, observations.
+</Tip>
+
+## Common Challenges
+
+<AccordionGroup>
+  <Accordion title="Encoder counts unstable" icon="chart-line">
+    **Causes:** Noise, bouncing, interrupt conflicts
+
+    **Solutions:**
+    - Add hardware filtering (capacitor)
+    - Use interrupt-safe code
+    - Check wiring and grounding
+  </Accordion>
+
+  <Accordion title="Motor oscillates with PID" icon="wave-pulse">
+    **Causes:** Gains too high, especially Kp and Kd
+
+    **Solutions:**
+    - Reduce all gains by 50%
+    - Tune systematically (Kp → Ki → Kd)
+    - Increase control loop frequency
+  </Accordion>
+
+  <Accordion title="ESP32 crashes/reboots" icon="power-off">
+    **Causes:** Voltage drops, memory overflow, watchdog timeout
+
+    **Solutions:**
+    - Separate power for motors and logic
+    - Check for memory leaks
+    - Disable watchdog or feed it regularly
+  </Accordion>
+
+  <Accordion title="IMU not responding" icon="sensor">
+    **Causes:** Wrong I2C address, bad connections, voltage issues
+
+    **Solutions:**
+    - I2C scanner to detect devices
+    - Check SDA/SCL wiring
+    - Verify 3.3V power to IMU
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Environment Setup"
+    icon="download"
+    href="/wp3-embedded/environment-setup"
+  >
+    Install VSCode, PlatformIO, drivers
+  </Card>
+
+  <Card
+    title="ESP32 Basics"
+    icon="microchip"
+    href="/wp3-embedded/esp32-basics"
+  >
+    Learn ESP32 pinout and capabilities
+  </Card>
+
+  <Card
+    title="Motor Driver Guide"
+    icon="gears"
+    href="/wp3-embedded/motor-driver"
+  >
+    Understand IBT-2 motor driver
+  </Card>
+
+  <Card
+    title="DC Motor Control"
+    icon="rotate"
+    href="/wp3-embedded/dc-motor-control"
+  >
+    Implement PID control (main deliverable)
+  </Card>
+</CardGroup>
+
+## References
+
+[1] ESP32 Technical Reference: https://www.espressif.com/en/products/socs/esp32
+[2] PID Control Tutorial: http://brettbeauregard.com/blog/2011/04/improving-the-beginners-pid-introduction/
+[3] Quadrature Encoders: https://www.dynapar.com/technology/encoder_basics/quadrature_encoder/

@@ -1,0 +1,928 @@
+---
+title: "System Integration Guide"
+description: "Step-by-step procedure to integrate all subsystems into complete robot"
+---
+
+## Overview
+
+This guide provides a **systematic approach** to integrating embedded control (ESP32), ROS2 autonomy (Raspberry Pi), sensors (LiDAR, IMU), and navigation into a unified autonomous robot system.
+
+<Note>
+  Follow steps sequentially. Test thoroughly after each step before proceeding. Integration problems are easier to debug when isolated to specific subsystems.
+</Note>
+
+## Prerequisites
+
+Before beginning integration:
+
+- [ ] **Hardware:**
+  - Robot mechanically assembled
+  - All electronics mounted and wired
+  - Power supplies tested independently
+  - Emergency stop functional
+
+- [ ] **Software:**
+  - ESP32 firmware uploaded and tested (WP3)
+  - ROS2 packages built successfully (WP4)
+  - All sensor drivers installed
+  - Development PC configured
+
+- [ ] **Testing:**
+  - Individual motor control verified
+  - Encoder counting accurate
+  - IMU publishing orientation
+  - LiDAR producing scans
+
+## Integration Roadmap
+
+```
+Step 1: Base Hardware Layer
+   └─► Step 2: ESP32-ROS2 Communication
+          └─► Step 3: Teleoperation Control
+                 └─► Step 4: Odometry & Sensor Fusion
+                        └─► Step 5: SLAM Mapping
+                               └─► Step 6: Autonomous Navigation
+                                      └─► Step 7: System Validation
+```
+
+## Step 1: Base Hardware Layer
+
+<Steps>
+  <Step title="Power System Test">
+    **Verify all voltage rails stable:**
+
+    ```bash
+    # Use multimeter to check:
+    # - 12V rail (motors): 11.5V - 12.6V
+    # - 5V rail (Pi, sensors): 4.9V - 5.1V
+    # - 3.3V rail (ESP32): 3.2V - 3.4V
+    ```
+
+    **Load test:**
+    1. Power on system
+    2. Run all motors at 50% PWM
+    3. Check voltage doesn't drop >0.3V
+
+    **Success criteria:** All voltages stable under load
+  </Step>
+
+  <Step title="Motor Direction Test">
+    **Upload motor test firmware to ESP32:**
+
+    ```cpp
+    // Test forward motion
+    void loop() {
+      // All motors forward at 30% PWM
+      setMotorSpeed(MOTOR_FL, 30);
+      setMotorSpeed(MOTOR_FR, 30);
+      setMotorSpeed(MOTOR_RL, 30);
+      setMotorSpeed(MOTOR_RR, 30);
+      delay(2000);
+
+      // Stop
+      setMotorSpeed(MOTOR_FL, 0);
+      setMotorSpeed(MOTOR_FR, 0);
+      setMotorSpeed(MOTOR_RL, 0);
+      setMotorSpeed(MOTOR_RR, 0);
+      delay(2000);
+    }
+    ```
+
+    **Verify:**
+    - All wheels rotate in same direction (forward)
+    - If any wheel rotates backward → swap motor wires
+    - Robot should move straight forward
+
+    **Success criteria:** Robot moves forward when all motors set to positive PWM
+  </Step>
+
+  <Step title="Encoder Validation">
+    **Test encoder counting:**
+
+    ```cpp
+    void loop() {
+      Serial.print("FL: "); Serial.print(encoder_FL);
+      Serial.print(" FR: "); Serial.print(encoder_FR);
+      Serial.print(" RL: "); Serial.print(encoder_RL);
+      Serial.print(" RR: "); Serial.println(encoder_RR);
+      delay(100);
+    }
+    ```
+
+    **Manually rotate each wheel:**
+    - Forward rotation → positive count increase
+    - Backward rotation → negative count increase
+    - Check ~900 counts per wheel revolution
+
+    **Success criteria:** All encoders count correctly in both directions
+  </Step>
+
+  <Step title="IMU Validation">
+    **Test IMU data publishing:**
+
+    ```bash
+    # On Raspberry Pi
+    cd ~/ros2_ws
+    ros2 run mecanum_description imu_publisher
+
+    # In another terminal
+    ros2 topic echo /imu/data
+    ```
+
+    **Verify:**
+    - Stationary robot: angular_velocity ≈ (0, 0, 0)
+    - Rotate robot: angular_velocity.z changes
+    - Tilt robot: linear_acceleration changes
+
+    **Success criteria:** IMU responds correctly to motion
+  </Step>
+
+  <Step title="LiDAR Validation">
+    **Test LiDAR scanning:**
+
+    ```bash
+    # Launch LiDAR
+    ros2 launch mecanum_description lidar.launch.py
+
+    # Check scan topic
+    ros2 topic hz /scan
+    # Expected: ~5.5 Hz
+
+    # View in RViz
+    rviz2
+    # Add LaserScan, topic: /scan
+    ```
+
+    **Verify:**
+    - 360° scan visible
+    - Obstacles detected correctly
+    - No excessive noise
+
+    **Success criteria:** Clean LiDAR scans at correct rate
+  </Step>
+</Steps>
+
+## Step 2: ESP32-ROS2 Communication
+
+<Steps>
+  <Step title="Upload Final ESP32 Firmware">
+    **Use complete firmware with serial protocol:**
+
+    ```cpp
+    // Main loop with serial communication
+    void loop() {
+      // Read commands from ROS2
+      if (Serial.available()) {
+        String cmd = Serial.readStringUntil('\n');
+        parseWheelCommands(cmd);  // Format: "v1,v2,v3,v4"
+      }
+
+      // Run PID control at 50 Hz
+      runPIDControl();
+
+      // Send feedback to ROS2 at 50 Hz
+      sendFeedback();
+
+      delay(20);  // 50 Hz loop
+    }
+
+    void sendFeedback() {
+      // Format: "pos1,pos2,pos3,pos4,vel1,vel2,vel3,vel4"
+      Serial.print(encoder_pos_FL); Serial.print(",");
+      Serial.print(encoder_pos_FR); Serial.print(",");
+      Serial.print(encoder_pos_RL); Serial.print(",");
+      Serial.print(encoder_pos_RR); Serial.print(",");
+      Serial.print(encoder_vel_FL); Serial.print(",");
+      Serial.print(encoder_vel_FR); Serial.print(",");
+      Serial.print(encoder_vel_RL); Serial.print(",");
+      Serial.println(encoder_vel_RR);
+    }
+    ```
+
+    **Success criteria:** Firmware compiles and uploads successfully
+  </Step>
+
+  <Step title="Test Serial Communication">
+    **Verify bidirectional data flow:**
+
+    ```bash
+    # Terminal 1: Monitor ESP32 output
+    screen /dev/ttyUSB0 115200
+
+    # Should see encoder feedback (CSV format):
+    # 0.123,0.456,0.789,0.234,0.5,0.5,0.5,0.5
+    ```
+
+    **Send test command:**
+    ```bash
+    # Type in terminal:
+    1.0,1.0,1.0,1.0
+    # Wheels should start moving
+    ```
+
+    **Success criteria:** Can send commands and receive feedback via serial
+  </Step>
+
+  <Step title="Configure ros2_control Hardware Interface">
+    **File:** `mecanum_hardware_interface.cpp`
+
+    ```cpp
+    hardware_interface::return_type MecanumSystemHardware::read(
+      const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
+    {
+      // Read from serial port
+      std::string line;
+      if (serial_port_.readline(line, '\n') > 0) {
+        // Parse CSV: pos1,pos2,pos3,pos4,vel1,vel2,vel3,vel4
+        std::vector<std::string> tokens = split(line, ',');
+        if (tokens.size() == 8) {
+          hw_positions_[0] = std::stod(tokens[0]);
+          hw_positions_[1] = std::stod(tokens[1]);
+          hw_positions_[2] = std::stod(tokens[2]);
+          hw_positions_[3] = std::stod(tokens[3]);
+          hw_velocities_[0] = std::stod(tokens[4]);
+          hw_velocities_[1] = std::stod(tokens[5]);
+          hw_velocities_[2] = std::stod(tokens[6]);
+          hw_velocities_[3] = std::stod(tokens[7]);
+        }
+      }
+      return hardware_interface::return_type::OK;
+    }
+
+    hardware_interface::return_type MecanumSystemHardware::write(
+      const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
+    {
+      // Write to serial port
+      std::stringstream ss;
+      ss << hw_commands_[0] << ","
+         << hw_commands_[1] << ","
+         << hw_commands_[2] << ","
+         << hw_commands_[3] << "\n";
+
+      serial_port_.write(ss.str());
+      return hardware_interface::return_type::OK;
+    }
+    ```
+
+    **Build and install:**
+    ```bash
+    cd ~/ros2_ws
+    colcon build --packages-select mecanum_hardware_interface
+    source install/setup.bash
+    ```
+
+    **Success criteria:** Package builds without errors
+  </Step>
+
+  <Step title="Launch Hardware Interface">
+    **Start controller manager:**
+
+    ```bash
+    ros2 launch mecanum_description robot_hardware.launch.py
+    ```
+
+    **Check nodes running:**
+    ```bash
+    ros2 node list
+    # Expected:
+    # /controller_manager
+    # /robot_state_publisher
+    ```
+
+    **Check joint states publishing:**
+    ```bash
+    ros2 topic echo /joint_states
+    ```
+
+    **Success criteria:** Joint states match encoder feedback from ESP32
+  </Step>
+
+  <Step title="Activate Controllers">
+    **Start drive controller:**
+
+    ```bash
+    # List controllers
+    ros2 control list_controllers
+
+    # Activate controllers
+    ros2 control switch_controllers \
+      --activate mecanum_drive_controller \
+      --activate joint_state_broadcaster
+    ```
+
+    **Verify:**
+    ```bash
+    ros2 control list_controllers
+    # Both controllers should show "active"
+    ```
+
+    **Success criteria:** Controllers active and publishing topics
+  </Step>
+</Steps>
+
+## Step 3: Teleoperation Control
+
+<Steps>
+  <Step title="Launch Complete Robot Stack">
+    **File:** `launch/robot_full.launch.py` (should already exist from WP4)
+
+    ```bash
+    ros2 launch mecanum_description robot_full.launch.py
+    ```
+
+    **Verify all nodes:**
+    ```bash
+    ros2 node list
+    # /controller_manager
+    # /mecanum_drive_controller
+    # /joint_state_broadcaster
+    # /robot_state_publisher
+    # /imu_publisher
+    # /ekf_filter_node (if using EKF)
+    ```
+  </Step>
+
+  <Step title="Test Keyboard Teleoperation">
+    **Launch teleop:**
+
+    ```bash
+    ros2 run teleop_twist_keyboard teleop_twist_keyboard \
+      --ros-args -r /cmd_vel:=/mecanum_drive_controller/cmd_vel
+    ```
+
+    **Test motions:**
+    - Press `i`: Forward
+    - Press `k`: Stop
+    - Press `,`: Backward
+    - Press `j`: Strafe left
+    - Press `l`: Strafe right
+    - Press `u`: Forward-left diagonal
+    - Press `o`: Forward-right diagonal
+
+    **Success criteria:**
+    - Robot responds to all commands
+    - Motion is smooth (no jerking)
+    - Robot stops when key released
+  </Step>
+
+  <Step title="Monitor Odometry">
+    **Watch odometry as robot moves:**
+
+    ```bash
+    # In separate terminal
+    ros2 topic echo /mecanum_drive_controller/odom --field pose.pose.position
+    ```
+
+    **Test:**
+    - Drive forward 1m → X position increases by ~1.0
+    - Strafe right 1m → Y position decreases by ~1.0
+    - Rotate 360° → X,Y return to origin (check drift)
+
+    **Success criteria:** Odometry tracks motion with &lt;10% error
+  </Step>
+
+  <Step title="Verify TF Tree">
+    **Check coordinate frame transforms:**
+
+    ```bash
+    # Generate TF tree diagram
+    ros2 run tf2_tools view_frames
+
+    # View generated PDF
+    evince frames.pdf
+    ```
+
+    **Expected tree:**
+    ```
+    odom → base_footprint → base_link → [sensors + wheels]
+    ```
+
+    **Test specific transform:**
+    ```bash
+    ros2 run tf2_ros tf2_echo odom base_link
+    # Should output current robot pose
+    ```
+
+    **Success criteria:** Complete TF tree with no errors
+  </Step>
+</Steps>
+
+## Step 4: Odometry & Sensor Fusion
+
+<Steps>
+  <Step title="Calibrate Wheel Odometry">
+    **Test forward motion accuracy:**
+
+    ```bash
+    # Mark starting position
+    # Drive exactly 2.0m forward using tape measure
+    ros2 topic pub --once /mecanum_drive_controller/cmd_vel \
+      geometry_msgs/msg/Twist \
+      "{linear: {x: 0.3, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}"
+
+    # Manually stop after 2.0m
+    # Check odometry:
+    ros2 topic echo /mecanum_drive_controller/odom --field pose.pose.position.x
+    ```
+
+    **Calculate error:**
+    ```
+    error = (measured_distance - odometry_distance) / measured_distance
+    ```
+
+    **If error > 5%:**
+    Adjust wheel radius in `config/robot_config.yaml`:
+    ```yaml
+    mecanum_drive_controller:
+      ros__parameters:
+        wheel_radius: 0.050  # Adjust based on calibration
+    ```
+
+    **Success criteria:** Odometry error <5% over 2m
+  </Step>
+
+  <Step title="Configure EKF Sensor Fusion">
+    **File:** `config/ekf.yaml`
+
+    ```yaml
+    ekf_filter_node:
+      ros__parameters:
+        frequency: 50.0
+        two_d_mode: true
+
+        odom0: /mecanum_drive_controller/odom
+        odom0_config: [true, true, false,
+                       false, false, false,
+                       true, true, false,
+                       false, false, true,
+                       false, false, false]
+
+        imu0: /imu/data
+        imu0_config: [false, false, false,
+                      false, false, true,
+                      false, false, false,
+                      false, false, true,
+                      false, false, false]
+
+        odom_frame: odom
+        base_link_frame: base_link
+        world_frame: odom
+    ```
+
+    **Launch EKF:**
+    ```bash
+    ros2 run robot_localization ekf_node --ros-args --params-file config/ekf.yaml
+    ```
+
+    **Success criteria:** No warnings in EKF logs
+  </Step>
+
+  <Step title="Verify Sensor Fusion">
+    **Compare odometry sources:**
+
+    ```bash
+    # Terminal 1: Raw wheel odometry
+    ros2 topic echo /mecanum_drive_controller/odom --field pose.pose.position
+
+    # Terminal 2: Fused odometry
+    ros2 topic echo /odometry/filtered --field pose.pose.position
+    ```
+
+    **Test rotation:**
+    - Rotate robot 360° slowly
+    - Raw odometry may drift significantly
+    - Fused odometry should return close to origin (IMU corrects)
+
+    **Success criteria:** Fused odometry more stable than raw odometry
+  </Step>
+
+  <Step title="Launch Complete Sensor Stack">
+    **File:** `launch/sensors_all.launch.py` (created in WP4 Sensors section)
+
+    ```bash
+    ros2 launch mecanum_description sensors_all.launch.py
+    ```
+
+    **Verify all sensors:**
+    ```bash
+    ros2 topic list | grep -E "(scan|imu|odom)"
+    # /scan
+    # /imu/data
+    # /mecanum_drive_controller/odom
+    # /odometry/filtered
+    ```
+
+    **Check rates:**
+    ```bash
+    ros2 topic hz /scan          # ~5.5 Hz
+    ros2 topic hz /imu/data      # ~100 Hz
+    ros2 topic hz /odometry/filtered  # ~50 Hz
+    ```
+
+    **Success criteria:** All sensors publishing at correct rates
+  </Step>
+</Steps>
+
+## Step 5: SLAM Mapping
+
+<Steps>
+  <Step title="Launch SLAM Toolbox">
+    **Terminal 1: Robot + Sensors**
+    ```bash
+    ros2 launch mecanum_description sensors_all.launch.py
+    ```
+
+    **Terminal 2: SLAM**
+    ```bash
+    ros2 launch mecanum_description slam.launch.py
+    ```
+
+    **Terminal 3: RViz**
+    ```bash
+    rviz2 -d config/slam.rviz
+    ```
+
+    **Configure RViz:**
+    - Fixed Frame: `map`
+    - Add Map (`/map`)
+    - Add LaserScan (`/scan`)
+    - Add RobotModel
+    - Add TF
+
+    **Success criteria:** RViz shows robot and partial map
+  </Step>
+
+  <Step title="Drive Robot to Map Environment">
+    **Launch teleop:**
+    ```bash
+    ros2 run teleop_twist_keyboard teleop_twist_keyboard \
+      --ros-args -r /cmd_vel:=/mecanum_drive_controller/cmd_vel
+    ```
+
+    **Mapping tips:**
+    - Move slowly (~0.2 m/s)
+    - Cover entire area systematically
+    - Ensure loop closures (revisit same locations)
+    - Avoid rapid rotation
+
+    **Monitor map quality in RViz:**
+    - Walls should be continuous
+    - No duplicate features
+    - Good loop closures (green lines in SLAM Toolbox)
+
+    **Success criteria:** Complete map of demo environment created
+  </Step>
+
+  <Step title="Save Map">
+    **Save map to file:**
+
+    ```bash
+    ros2 run nav2_map_server map_saver_cli -f ~/ros2_ws/src/mecanum_description/maps/demo_map
+    ```
+
+    **Generated files:**
+    - `demo_map.pgm` (image)
+    - `demo_map.yaml` (metadata)
+
+    **Verify map:**
+    ```bash
+    eog ~/ros2_ws/src/mecanum_description/maps/demo_map.pgm
+    ```
+
+    **Success criteria:** Map saved and viewable
+  </Step>
+
+  <Step title="Test Map Loading">
+    **Stop SLAM, load saved map:**
+
+    ```bash
+    # Kill SLAM node (Ctrl+C)
+
+    # Launch map server
+    ros2 launch mecanum_description map_server.launch.py \
+      map:=/home/user/ros2_ws/src/mecanum_description/maps/demo_map.yaml
+    ```
+
+    **Verify in RViz:**
+    - Map appears correctly
+    - Robot position matches physical location
+
+    **Success criteria:** Map loads and displays correctly
+  </Step>
+</Steps>
+
+## Step 6: Autonomous Navigation
+
+<Steps>
+  <Step title="Launch Navigation Stack">
+    **Complete system launch:**
+
+    ```bash
+    ros2 launch mecanum_description robot_navigation.launch.py \
+      map:=/home/user/ros2_ws/src/mecanum_description/maps/demo_map.yaml
+    ```
+
+    **Nodes should include:**
+    - Robot control & sensors
+    - Map server
+    - AMCL localization
+    - Nav2 stack (planner, controller, behavior tree)
+
+    **Check:**
+    ```bash
+    ros2 node list | grep -E "(planner|controller|bt_navigator|amcl)"
+    ```
+
+    **Success criteria:** All Nav2 nodes running, no errors in logs
+  </Step>
+
+  <Step title="Localize Robot (AMCL)">
+    **In RViz:**
+    1. Click "2D Pose Estimate" button
+    2. Click on robot's actual position on map
+    3. Drag to set orientation
+    4. Release mouse
+
+    **Watch particle cloud converge:**
+    - Initial: Particles spread across map
+    - After few seconds: Particles cluster around robot
+    - Converged: Tight cluster (localization successful)
+
+    **Verify localization:**
+    ```bash
+    ros2 run tf2_ros tf2_echo map base_link
+    # Should match robot's physical position
+    ```
+
+    **Success criteria:** Robot correctly localized in map (<0.1m error)
+  </Step>
+
+  <Step title="Send First Navigation Goal">
+    **In RViz:**
+    1. Click "2D Nav Goal" button
+    2. Click goal position (2-3m away, clear path)
+    3. Drag to set orientation
+    4. Release mouse
+
+    **Watch robot:**
+    - Green path appears (global plan)
+    - Red trajectory appears (local plan)
+    - Robot begins moving toward goal
+    - Costmaps update in real-time
+
+    **Monitor status:**
+    ```bash
+    ros2 topic echo /behavior_tree_log | grep -i "goal"
+    ```
+
+    **Success criteria:** Robot reaches goal (<0.1m error)
+  </Step>
+
+  <Step title="Test Obstacle Avoidance">
+    **Static obstacle test:**
+    1. Place object in robot's path (box, chair)
+    2. Send navigation goal beyond obstacle
+    3. Robot should plan path around obstacle
+
+    **Dynamic obstacle test:**
+    1. Start robot navigating to goal
+    2. Walk across robot's path
+    3. Robot should slow down or stop
+    4. Robot resumes after person clears
+
+    **Success criteria:** Robot avoids all obstacles without collision
+  </Step>
+
+  <Step title="Test Recovery Behaviors">
+    **Get robot stuck:**
+    1. Navigate to tight corner
+    2. Observe recovery behaviors:
+       - Clears costmaps
+       - Spins in place
+       - Backs up
+       - Retries navigation
+
+    **Success criteria:** Robot recovers from stuck situations autonomously
+  </Step>
+</Steps>
+
+## Step 7: System Validation
+
+<Steps>
+  <Step title="Navigation Success Rate Test">
+    **Run 10 navigation tests:**
+
+    ```python
+    # Script: test_navigation.py
+    test_goals = [
+        (2.0, 1.0, 0.0),
+        (4.0, 2.0, 1.57),
+        (3.0, 3.0, 3.14),
+        # ... 10 total goals
+    ]
+
+    successes = 0
+    for goal in test_goals:
+        if navigate_to_goal(goal):
+            successes += 1
+
+    success_rate = successes / len(test_goals) * 100
+    print(f"Success Rate: {success_rate}%")
+    ```
+
+    **Target:** >90% success rate
+
+    **Success criteria:** At least 9/10 goals reached successfully
+  </Step>
+
+  <Step title="Continuous Operation Test">
+    **Run patrol route for 30 minutes:**
+
+    ```bash
+    ros2 run mecanum_description waypoint_follower \
+      --waypoints "[[2,1,0],[4,2,0],[2,3,0],[0,0,0]]" \
+      --loop true
+    ```
+
+    **Monitor:**
+    - CPU usage (should stay <80%)
+    - Temperature (should stay <75°C)
+    - Battery voltage (should not drop suddenly)
+    - Navigation failures (should be <1 per 10 cycles)
+
+    **Success criteria:** Robot operates reliably for 30+ minutes
+  </Step>
+
+  <Step title="Performance Benchmarks">
+    **Measure key metrics:**
+
+    | Metric | Target | Your Value |
+    |--------|--------|------------|
+    | Odometry accuracy (10m) | <5% error | _____ |
+    | Navigation success rate | >90% | _____ |
+    | Average speed | >0.3 m/s | _____ |
+    | Battery life (continuous) | >45 min | _____ |
+    | MTBF (mean time between failures) | >60 min | _____ |
+
+    **Success criteria:** All metrics meet or exceed targets
+  </Step>
+
+  <Step title="Documentation & Code Review">
+    **Complete documentation:**
+    - [ ] System architecture diagram
+    - [ ] Launch file documentation
+    - [ ] Configuration parameter guide
+    - [ ] Troubleshooting guide
+    - [ ] User operation manual
+
+    **Code quality:**
+    - [ ] All code commented
+    - [ ] No hardcoded paths or values
+    - [ ] Error handling implemented
+    - [ ] Logging for debugging
+
+    **Success criteria:** Complete, professional documentation
+  </Step>
+</Steps>
+
+## Integration Checklist
+
+### Final System Verification
+
+- [ ] **Hardware:**
+  - [ ] All components securely mounted
+  - [ ] Clean cable management
+  - [ ] Emergency stop tested
+  - [ ] Battery charging procedure documented
+
+- [ ] **Software:**
+  - [ ] Single-command launch works: `ros2 launch mecanum_description robot_navigation.launch.py`
+  - [ ] All nodes start without errors
+  - [ ] TF tree complete (no warnings)
+  - [ ] Sensor data quality validated
+
+- [ ] **Navigation:**
+  - [ ] Map covers demo environment
+  - [ ] Localization reliable (<10cm error)
+  - [ ] Navigation success rate >90%
+  - [ ] Obstacle avoidance tested
+  - [ ] Recovery behaviors tested
+
+- [ ] **Performance:**
+  - [ ] Continuous operation >30 minutes
+  - [ ] No crashes or freezes
+  - [ ] CPU usage reasonable (<80%)
+  - [ ] Battery life sufficient (>45 min)
+
+- [ ] **Documentation:**
+  - [ ] User manual written
+  - [ ] System architecture documented
+  - [ ] Troubleshooting guide created
+  - [ ] Demo procedure prepared
+
+## Troubleshooting Integration Issues
+
+<AccordionGroup>
+  <Accordion title="Robot doesn't move when Nav2 sends goals" icon="robot">
+    **Debug steps:**
+    1. Check `/cmd_vel` published:
+       ```bash
+       ros2 topic echo /mecanum_drive_controller/cmd_vel
+       ```
+    2. Check controller active:
+       ```bash
+       ros2 control list_controllers
+       ```
+    3. Check ESP32 receiving commands (monitor serial output)
+    4. Verify velocity limits not too restrictive
+
+    **Common causes:**
+    - Controller not activated
+    - Serial communication broken
+    - Velocity limits set to 0
+  </Accordion>
+
+  <Accordion title="Localization drifts or jumps" icon="location-crosshairs">
+    **Debug steps:**
+    1. Check particle cloud in RViz (should be tight cluster)
+    2. Verify LiDAR scan quality (clean, no noise)
+    3. Check odometry accuracy (compare to physical motion)
+    4. Tune AMCL parameters (increase particles, reduce noise)
+
+    **Common causes:**
+    - Poor LiDAR scan quality (dirty lens, sunlight)
+    - Inaccurate odometry (wheel slip, calibration off)
+    - Insufficient map features
+  </Accordion>
+
+  <Accordion title="Navigation gets stuck frequently" icon="circle-stop">
+    **Debug steps:**
+    1. Watch costmaps in RViz (obstacles inflated correctly?)
+    2. Check recovery behaviors (are they helping?)
+    3. Reduce inflation radius if too conservative
+    4. Increase timeout if giving up too early
+
+    **Common causes:**
+    - Costmap inflation too large
+    - Recovery behaviors not configured
+    - Planner timeout too short
+  </Accordion>
+
+  <Accordion title="High CPU usage / system slow" icon="microchip">
+    **Debug steps:**
+    1. Check CPU per process:
+       ```bash
+       top
+       ```
+    2. Identify bottlenecks (likely Nav2 or camera)
+    3. Reduce processing load
+
+    **Solutions:**
+    - Lower controller frequency (20Hz → 10Hz)
+    - Reduce costmap resolution (5cm → 10cm)
+    - Disable camera if not needed
+    - Reduce velocity sampling (DWB)
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Performance Optimization"
+    icon="gauge"
+    href="/wp5-integration/performance-optimization"
+  >
+    Tune parameters for optimal performance
+  </Card>
+
+  <Card
+    title="Deployment Guide"
+    icon="rocket"
+    href="/wp5-integration/deployment"
+  >
+    Prepare for autonomous operation
+  </Card>
+
+  <Card
+    title="Maintenance Guide"
+    icon="wrench"
+    href="/wp5-integration/maintenance"
+  >
+    Keep system running reliably
+  </Card>
+
+  <Card
+    title="Final Demo Prep"
+    icon="video"
+    href="/wp5-integration/final-demo"
+  >
+    Practice and perfect demonstration
+  </Card>
+</CardGroup>
+
+## References
+
+[1] ros2_control Integration: https://control.ros.org/master/doc/getting_started/getting_started.html
+[2] Nav2 Setup Guide: https://docs.nav2.org/setup_guides/index.html
+[3] robot_localization Tuning: http://docs.ros.org/en/noetic/api/robot_localization/html/preparing_sensor_data.html

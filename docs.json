@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "EEET2610 - Mecanum Robot Guide",
   "colors": {
     "primary": "#16A34A",
     "light": "#07C983",
@@ -11,58 +11,185 @@
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Getting Started",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Introduction",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "index"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Course Overview",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
-            ]
-          },
-          {
-            "group": "Writing content",
-            "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
-            ]
-          },
-          {
-            "group": "AI tools",
-            "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "getting-started/course-overview",
+              "getting-started/prerequisites",
+              "getting-started/team-management",
+              "getting-started/project-proposal"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "Work Packages",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "WP1: MATLAB Simulation",
             "pages": [
-              "api-reference/introduction"
+              "wp1-simulation/introduction",
+              "wp1-simulation/kinematics",
+              "wp1-simulation/trajectory-planning"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "WP2: Prototyping",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "wp2-prototyping/introduction",
+              "wp2-prototyping/cad-design",
+              "wp2-prototyping/pcb-design",
+              "wp2-prototyping/mechanical-assembly"
+            ]
+          },
+          {
+            "group": "WP3: Embedded Systems",
+            "pages": [
+              "wp3-embedded/introduction",
+              "wp3-embedded/environment-setup",
+              "wp3-embedded/esp32-basics",
+              "wp3-embedded/motor-driver",
+              "wp3-embedded/dc-motor-control",
+              "wp3-embedded/imu-integration",
+              "wp3-embedded/unit-testing"
+            ]
+          },
+          {
+            "group": "WP4: ROS2 Setup",
+            "pages": [
+              "wp4-ros2/setup/computer-preparation",
+              "wp4-ros2/setup/raspberry-pi-setup",
+              "wp4-ros2/setup/ros2-basics",
+              "wp4-ros2/setup/communication-testing"
+            ]
+          },
+          {
+            "group": "WP4: Robot Description",
+            "pages": [
+              "wp4-ros2/description/urdf-introduction",
+              "wp4-ros2/description/mecanum-urdf",
+              "wp4-ros2/description/visualization"
+            ]
+          },
+          {
+            "group": "WP4: Control",
+            "pages": [
+              "wp4-ros2/control/ros2-control-intro",
+              "wp4-ros2/control/hardware-interface",
+              "wp4-ros2/control/teleop"
+            ]
+          },
+          {
+            "group": "WP4: Localization",
+            "pages": [
+              "wp4-ros2/localization/odometry",
+              "wp4-ros2/localization/imu-fusion",
+              "wp4-ros2/localization/ekf",
+              "wp4-ros2/localization/testing"
+            ]
+          },
+          {
+            "group": "WP4: Mapping",
+            "pages": [
+              "wp4-ros2/mapping/slam-toolbox",
+              "wp4-ros2/mapping/cartographer",
+              "wp4-ros2/mapping/map-server"
+            ]
+          },
+          {
+            "group": "WP4: Navigation",
+            "pages": [
+              "wp4-ros2/navigation/nav2-intro",
+              "wp4-ros2/navigation/path-planning",
+              "wp4-ros2/navigation/behavior-trees",
+              "wp4-ros2/navigation/testing"
+            ]
+          },
+          {
+            "group": "WP4: Sensors",
+            "pages": [
+              "wp4-ros2/sensors/lidar-setup",
+              "wp4-ros2/sensors/camera-setup",
+              "wp4-ros2/sensors/sensor-integration"
+            ]
+          },
+          {
+            "group": "WP5: Integration & Presentation",
+            "pages": [
+              "wp5-integration/introduction",
+              "wp5-integration/system-integration",
+              "wp5-integration/deployment",
+              "wp5-integration/performance-optimization",
+              "wp5-integration/maintenance",
+              "wp5-integration/final-demo"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "Hardware",
+            "pages": [
+              "reference/hardware/components",
+              "reference/hardware/esp32",
+              "reference/hardware/raspberry-pi",
+              "reference/hardware/motors",
+              "reference/hardware/lidar",
+              "reference/hardware/imu",
+              "reference/hardware/power"
+            ]
+          },
+          {
+            "group": "Software Tools",
+            "pages": [
+              "reference/software/vscode-platformio",
+              "reference/software/matlab",
+              "reference/software/fusion360-solidworks",
+              "reference/software/easyeda-cadence",
+              "reference/software/git-github"
+            ]
+          },
+          {
+            "group": "ROS2 Concepts",
+            "pages": [
+              "reference/ros2/architecture",
+              "reference/ros2/packages",
+              "reference/ros2/launch-files",
+              "reference/ros2/urdf-xacro",
+              "reference/ros2/tf-transforms",
+              "reference/ros2/gazebo-plugins",
+              "reference/ros2/data-visualization"
+            ]
+          },
+          {
+            "group": "Code Examples",
+            "pages": [
+              "reference/code-examples/pid-controller",
+              "reference/code-examples/encoder-reading",
+              "reference/code-examples/serial-communication",
+              "reference/code-examples/ros2-publisher",
+              "reference/code-examples/ros2-subscriber"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Help",
+        "groups": [
+          {
+            "group": "Troubleshooting",
+            "pages": [
+              "troubleshooting/common-errors"
             ]
           }
         ]
@@ -71,14 +198,14 @@
     "global": {
       "anchors": [
         {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
+          "anchor": "GitHub Repositories",
+          "href": "https://github.com/ROS2-rmitbot",
+          "icon": "github"
         },
         {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
+          "anchor": "SDG Goals",
+          "href": "https://sdgs.un.org/goals",
+          "icon": "leaf"
         }
       ]
     }
@@ -88,35 +215,25 @@
     "dark": "/logo/dark.svg"
   },
   "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
     "primary": {
       "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
+      "label": "ROS2 AutoBot",
+      "href": "https://github.com/ROS2-AutoBot"
     }
   },
   "contextual": {
     "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
+      "copy",
+      "view",
+      "chatgpt",
+      "claude",
+      "cursor",
+      "vscode"
+    ]
   },
   "footer": {
     "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
+      "github": "https://github.com/ROS2-AutoBot"
     }
   }
 }

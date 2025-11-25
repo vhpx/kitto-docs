@@ -1,0 +1,597 @@
+---
+title: "URDF Visualization"
+description: "Visualize and validate robot URDF model in RViz with TF debugging"
+---
+
+## Overview
+
+After creating your URDF, visualization in RViz helps verify correctness before deploying to real robot. This guide covers RViz configuration, TF debugging, and common visualization issues.
+
+<Note>
+  **Goal:** Ensure your URDF accurately represents the physical robot before adding control and navigation layers.
+</Note>
+
+## RViz Basics
+
+### Launch RViz with Robot Model
+
+```bash
+# Method 1: Using display launch file
+ros2 launch mecanum_description display.launch.py
+
+# Method 2: Manual launch
+ros2 run robot_state_publisher robot_state_publisher \
+  --ros-args -p robot_description:="$(xacro urdf/mecanum_robot.urdf.xacro)"
+
+ros2 run rviz2 rviz2
+```
+
+### RViz Interface
+
+<CardGroup cols={2}>
+  <Card title="Displays Panel (Left)" icon="list">
+    Add/configure visualization plugins:
+    - RobotModel
+    - TF
+    - LaserScan
+    - Camera
+    - Markers
+  </Card>
+
+  <Card title="Toolbar (Top)" icon="toolbox">
+    - Move camera
+    - Select objects
+    - Measure tool
+    - 2D Nav Goal (for navigation)
+  </Card>
+
+  <Card title="Views Panel (Bottom-left)" icon="camera">
+    - Orbit view (default)
+    - FPS view
+    - TopDown view
+    - XYOrbit view
+  </Card>
+
+  <Card title="3D View (Center)" icon="cube">
+    Main visualization area:
+    - Left-click drag: rotate
+    - Middle-click drag: pan
+    - Scroll: zoom
+  </Card>
+</CardGroup>
+
+## Essential Displays
+
+### RobotModel Display
+
+Shows robot URDF with links and joints.
+
+**Add Display:**
+1. Click "Add" button
+2. Select "RobotModel"
+3. Configure:
+   - **Description Topic:** `/robot_description` (default)
+   - **TF Prefix:** (leave empty)
+   - **Alpha:** 1.0 (fully opaque)
+   - **Visual Enabled:** ✓
+   - **Collision Enabled:** ☐ (usually off)
+
+**Troubleshooting:**
+- "No transform from [link] to [link]" → TF tree broken
+- "URDF file failed to load" → Check `robot_state_publisher` running
+
+### TF Display
+
+Shows coordinate frame axes (RGB = XYZ).
+
+**Add Display:**
+1. Click "Add"
+2. Select "TF"
+3. Configure:
+   - **Show Names:** ✓ (show frame labels)
+   - **Show Axes:** ✓
+   - **Show Arrows:** ☐ (usually off)
+   - **Marker Scale:** 0.3 (size of axes)
+   - **Frame Timeout:** 15 (seconds)
+
+**Color Convention:**
+- **Red:** X-axis (forward)
+- **Green:** Y-axis (left)
+- **Blue:** Z-axis (up)
+
+<Tip>
+  **Frame filtering:** Expand "Frames" in TF display to hide specific frames (e.g., hide all wheel frames for cleaner view).
+</Tip>
+
+### Grid Display
+
+Ground reference.
+
+**Configure:**
+- **Plane:** XY (horizontal)
+- **Cell Size:** 0.5 m
+- **Color:** Gray
+
+## Fixed Frame Selection
+
+**Fixed Frame** is the reference for all visualizations.
+
+**Common choices:**
+- **`base_footprint`** (recommended for robot-centric view)
+- **`base_link`** (robot base)
+- **`odom`** (world-fixed, shows robot movement)
+- **`map`** (for navigation)
+
+**Change Fixed Frame:**
+- Displays → Global Options → Fixed Frame → Select from dropdown
+
+<Warning>
+  **Frame must exist!** Fixed frame must be published by `robot_state_publisher` or `tf2_ros` nodes. If invalid, RViz shows errors.
+</Warning>
+
+## Joint State Publisher
+
+Allows testing movable joints interactively.
+
+### Joint State Publisher (Basic)
+
+Publishes fixed joint states (all joints at 0):
+
+```bash
+ros2 run joint_state_publisher joint_state_publisher
+```
+
+### Joint State Publisher GUI
+
+Provides sliders for each joint:
+
+```bash
+ros2 run joint_state_publisher_gui joint_state_publisher_gui
+```
+
+**GUI Features:**
+- Slider for each continuous/revolute joint
+- Real-time URDF update in RViz
+- Reset button
+- Randomize button (testing)
+
+<img
+  src="/images/joint-state-publisher-gui.png"
+  alt="Joint State Publisher GUI with sliders"
+  caption="Joint State Publisher GUI showing sliders for 4 wheel joints"
+/>
+
+**Expected Behavior:**
+- Moving slider → wheel rotates in RViz
+- All 4 wheels should rotate around Y-axis
+
+## TF Debugging
+
+### View TF Tree
+
+Generate visual TF tree diagram:
+
+```bash
+# Generate PDF diagram
+ros2 run tf2_tools view_frames
+
+# Output saved as: frames.pdf
+evince frames.pdf  # Linux
+open frames.pdf    # Mac
+```
+
+**Example TF Tree:**
+```
+base_footprint
+    └── base_link
+        ├── wheel_FL
+        ├── wheel_FR
+        ├── wheel_RL
+        ├── wheel_RR
+        ├── lidar_link
+        └── imu_link
+```
+
+### Check Specific Transform
+
+```bash
+# Syntax
+ros2 run tf2_ros tf2_echo <source_frame> <target_frame>
+
+# Example: base_link to front-left wheel
+ros2 run tf2_ros tf2_echo base_link wheel_FL
+```
+
+**Output:**
+```
+At time 1234567.890
+- Translation: [0.150, 0.175, -0.050]
+- Rotation: in Quaternion [0.000, 0.000, 0.000, 1.000]
+            in RPY (radian) [0.000, 0.000, 0.000]
+            in RPY (degree) [0.000, 0.000, 0.000]
+```
+
+**Verify:**
+- Translation X: 0.15m (front)
+- Translation Y: 0.175m (left)
+- Translation Z: -0.05m (below, wheel radius)
+
+### TF Tree Monitoring
+
+```bash
+# Monitor TF tree continuously
+ros2 run tf2_ros tf2_monitor
+
+# Output shows all frames and update rates
+```
+
+**Healthy output:**
+```
+Frame: wheel_FL published by /robot_state_publisher Average rate: 50.0 Hz
+Frame: wheel_FR published by /robot_state_publisher Average rate: 50.0 Hz
+...
+```
+
+## Advanced RViz Configuration
+
+### Save Custom Configuration
+
+**After setting up displays:**
+1. File → Save Config As
+2. Save to `mecanum_description/rviz/urdf.rviz`
+3. Update launch file to load config automatically
+
+**Launch file:**
+```python
+# RViz with custom config
+Node(
+    package='rviz2',
+    executable='rviz2',
+    name='rviz2',
+    arguments=['-d', rviz_config_path]
+)
+```
+
+### Multiple Configurations
+
+Create different configs for different tasks:
+- `urdf.rviz` - URDF visualization only
+- `teleop.rviz` - Add velocity arrows, odometry
+- `navigation.rviz` - Add map, path, costmaps
+- `debug.rviz` - Add markers, diagnostics
+
+**Load specific config:**
+```bash
+ros2 launch mecanum_description display.launch.py rviz_config:=navigation.rviz
+```
+
+## Visualization Tips
+
+<AccordionGroup>
+  <Accordion title="Color-code robot parts" icon="palette">
+    Assign different colors to easily identify parts:
+    - **Base:** Orange
+    - **Wheels:** Silver/Gray
+    - **Sensors:** Black (LiDAR), Blue (IMU)
+    - **Mounts:** Green
+
+    **In URDF:**
+    ```xml
+    <material name="orange">
+      <color rgba="1.0 0.55 0.0 1.0"/>
+    </material>
+    ```
+  </Accordion>
+
+  <Accordion title="Hide/show parts selectively" icon="eye-slash">
+    **In RViz:**
+    - Expand "RobotModel" display
+    - Expand "Links"
+    - Uncheck links to hide (e.g., hide wheels during sensor alignment)
+
+    **In URDF (permanent):**
+    ```xml
+    <!-- Make link invisible (collision only) -->
+    <link name="hidden_part">
+      <!-- No <visual> tag -->
+      <collision>
+        <!-- ... -->
+      </collision>
+    </link>
+    ```
+  </Accordion>
+
+  <Accordion title="Measure distances" icon="ruler">
+    **RViz Measure Tool:**
+    1. Toolbar → Measure (ruler icon)
+    2. Click start point
+    3. Click end point
+    4. Distance shown in meters
+
+    **Use for:**
+    - Verify wheel spacing
+    - Check sensor heights
+    - Validate clearances
+  </Accordion>
+
+  <Accordion title="View from different angles" icon="camera">
+    **Orbit Camera (default):**
+    - Left-drag: rotate around focal point
+    - Shift + left-drag: pan
+    - Scroll: zoom
+
+    **Set specific view:**
+    - Views panel → Type → Select:
+      - **TopDownOrtho:** Top view (good for wheel alignment)
+      - **FPS:** First-person (good for sensor FOV)
+      - **XYOrbit:** Side view (good for height verification)
+  </Accordion>
+
+  <Accordion title="Check for visual artifacts" icon="triangle-exclamation">
+    **Common issues:**
+    - **Z-fighting:** Two surfaces overlap (flicker)
+      - Solution: Offset surfaces slightly
+    - **Inside-out meshes:** Faces rendered wrong
+      - Solution: Fix normals in CAD software
+    - **Missing textures:** Mesh appears black
+      - Solution: Embed textures or use materials instead
+  </Accordion>
+</AccordionGroup>
+
+## Testing Procedures
+
+### Visual Inspection Checklist
+
+- [ ] **Base link:**
+  - Correct size (length, width, height)
+  - Centered at origin
+  - Proper orientation (X forward, Z up)
+
+- [ ] **Wheels:**
+  - 4 wheels present
+  - Positioned at corners
+  - Touching ground (Z = 0 at `base_footprint`)
+  - Correct orientation (can roll forward)
+
+- [ ] **Sensors:**
+  - LiDAR on top, unobstructed view
+  - IMU at center of base
+  - Frames aligned (X forward)
+
+- [ ] **TF Frames:**
+  - All frames visible in TF display
+  - Axes follow ROS convention
+  - No disconnected frames
+
+- [ ] **Joint Motion:**
+  - Wheel joints rotate smoothly (GUI sliders)
+  - No collision between parts
+  - Rotation axis correct (Y-axis for wheels)
+
+### Physical Measurements Comparison
+
+**Measure real robot, compare with URDF in RViz:**
+
+| Parameter | Real Robot | URDF (RViz) | Match? |
+|-----------|------------|-------------|--------|
+| Base length | ___ mm | 400 mm | ☐ |
+| Base width | ___ mm | 300 mm | ☐ |
+| Base height | ___ mm | 100 mm | ☐ |
+| Wheel diameter | ___ mm | 100 mm | ☐ |
+| Wheelbase (FL to RL) | ___ mm | 300 mm | ☐ |
+| Track width (FL to FR) | ___ mm | 350 mm | ☐ |
+| LiDAR height | ___ mm | 200 mm | ☐ |
+
+<Warning>
+  **Accurate dimensions critical!** Navigation relies on URDF matching physical robot. Measure carefully!
+</Warning>
+
+### Simulation vs Reality
+
+**Before first real-world test:**
+1. Drive robot forward 1m (encoder odometry)
+2. Measure actual distance traveled
+3. If mismatch:
+   - Check wheel radius in URDF
+   - Verify encoder CPR
+   - Calibrate odometry
+
+## Common Visualization Issues
+
+<AccordionGroup>
+  <Accordion title="No robot visible in RViz" icon="eye-slash">
+    **Causes & Solutions:**
+
+    1. **No robot_description published:**
+       ```bash
+       ros2 topic echo /robot_description
+       # Should show URDF XML
+       ```
+       If empty → `robot_state_publisher` not running
+
+    2. **Fixed frame invalid:**
+       - Change Fixed Frame to `base_link`
+
+    3. **RobotModel display not added:**
+       - Add → RobotModel → OK
+
+    4. **Alpha = 0 (invisible):**
+       - RobotModel → Alpha → 1.0
+  </Accordion>
+
+  <Accordion title="TF errors in RViz" icon="triangle-exclamation">
+    **Error:** "No transform from [base_link] to [wheel_FL]"
+
+    **Causes:**
+    - `robot_state_publisher` not running
+    - URDF syntax error (joint references nonexistent link)
+    - TF tree disconnected
+
+    **Debug:**
+    ```bash
+    # Check TF tree
+    ros2 run tf2_tools view_frames
+    evince frames.pdf
+
+    # Check robot_state_publisher
+    ros2 node list
+    # Should show /robot_state_publisher
+    ```
+  </Accordion>
+
+  <Accordion title="Parts in wrong position" icon="location-arrow">
+    **Symptom:** Wheels floating, sensor underground, etc.
+
+    **Solution:**
+    - Check `<origin xyz="..." rpy="..."/>` in URDF
+    - Verify parent/child links in joints
+    - Use TF debugging:
+      ```bash
+      ros2 run tf2_ros tf2_echo base_link wheel_FL
+      # Check translation matches expected position
+      ```
+  </Accordion>
+
+  <Accordion title="Joint doesn't move" icon="circle-pause">
+    **Symptom:** GUI slider doesn't affect robot
+
+    **Causes:**
+    - Joint type is `fixed` (should be `continuous`)
+    - Joint name mismatch
+    - `joint_state_publisher` publishing conflicting states
+
+    **Solution:**
+    ```bash
+    # Check joint states being published
+    ros2 topic echo /joint_states
+
+    # Verify joint name in URDF matches
+    ```
+  </Accordion>
+
+  <Accordion title="Mesh not loading" icon="cube">
+    **Error:** "Could not load resource [package://.../.../file.stl]"
+
+    **Solutions:**
+    1. **Verify file exists:**
+       ```bash
+       ls ~/ros2_ws/install/mecanum_description/share/mecanum_description/meshes/
+       ```
+
+    2. **Check package name in path:**
+       ```xml
+       <mesh filename="package://mecanum_description/meshes/base.stl"/>
+       <!-- NOT: package://my_robot/... if package is mecanum_description -->
+       ```
+
+    3. **Rebuild package:**
+       ```bash
+       colcon build --packages-select mecanum_description
+       source install/setup.bash
+       ```
+  </Accordion>
+</AccordionGroup>
+
+## Recording and Playback
+
+### Save RViz Screenshots
+
+**For documentation:**
+1. 3D View → Right-click → "Save Image"
+2. Or: File → Export → Screenshot
+
+**Programmatic:**
+```bash
+# Install tool
+sudo apt install ros-jazzy-rviz-visual-tools
+
+# Use in code to save programmatically
+```
+
+### Record Bag File
+
+Record TF and joint states for playback:
+
+```bash
+# Record
+ros2 bag record /tf /tf_static /joint_states -o urdf_test
+
+# Playback
+ros2 bag play urdf_test
+```
+
+**Use case:** Record joint motion, replay to verify smooth animation.
+
+## Integration with Real Robot
+
+Once URDF validated:
+
+### Publish Real Joint States
+
+**From ESP32 (via microROS or serial bridge):**
+```cpp
+// Publish joint states from encoders
+sensor_msgs::msg::JointState joint_state;
+joint_state.name = {"wheel_FL", "wheel_FR", "wheel_RL", "wheel_RR"};
+joint_state.position = {theta_FL, theta_FR, theta_RL, theta_RR};
+joint_state.velocity = {omega_FL, omega_FR, omega_RL, omega_RR};
+joint_state_pub->publish(joint_state);
+```
+
+**In RViz:**
+- Wheels now rotate in sync with real robot!
+
+### Visualize Sensor Data
+
+**Add LaserScan display:**
+```bash
+# In RViz:
+# Add → LaserScan
+# Topic: /scan
+# Size: 0.05
+# Color: Red
+```
+
+**Expected:** LiDAR points shown relative to robot, updating in real-time.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="ros2_control Setup"
+    icon="gamepad"
+    href="/wp4-ros2/control/ros2-control-intro"
+  >
+    Add hardware interfaces to URDF for motor control
+  </Card>
+
+  <Card
+    title="Teleop Control"
+    icon="keyboard"
+    href="/wp4-ros2/control/teleop"
+  >
+    Control robot with keyboard commands
+  </Card>
+
+  <Card
+    title="Localization Setup"
+    icon="location-dot"
+    href="/wp4-ros2/localization/odometry"
+  >
+    Publish odometry from wheel encoders
+  </Card>
+
+  <Card
+    title="TF2 Reference"
+    icon="book"
+    href="/reference/ros2/tf2"
+  >
+    Deep dive into coordinate transforms
+  </Card>
+</CardGroup>
+
+## References
+
+[1] RViz User Guide: https://docs.ros.org/en/jazzy/Tutorials/Intermediate/RViz/RViz-User-Guide.html
+[2] TF2 Tutorials: https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Tf2/Tf2-Main.html
+[3] URDF Visualization: https://docs.ros.org/en/jazzy/Tutorials/Intermediate/URDF/Using-URDF-with-Robot-State-Publisher.html

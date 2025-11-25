@@ -1,0 +1,509 @@
+---
+title: "Raspberry Pi Setup for ROS2"
+description: "Install Ubuntu Server and ROS2 Jazzy on Raspberry Pi for onboard robot computer"
+---
+
+## Overview
+
+The Raspberry Pi serves as the onboard computer running ROS2 for autonomous navigation. It handles high-level tasks like SLAM, path planning, and sensor processing, while the ESP32 handles low-level motor control.
+
+<Note>
+  **Raspberry Pi:** RPi 4 (4GB+) or RPi 5 recommended
+  **OS:** Ubuntu Server 24.04 (no desktop GUI needed)
+  **ROS2:** Jazzy Jalisco (ROS-Base, not Desktop)
+</Note>
+
+## Why Raspberry Pi?
+
+<CardGroup cols={2}>
+  <Card title="Onboard Computing" icon="microchip">
+    Runs ROS2 navigation stack on the robot itself, enabling autonomous operation without tethered connection to laptop.
+  </Card>
+
+  <Card title="Sensor Integration" icon="camera">
+    Connects to LiDAR (USB), Camera (CSI), and ESP32 (serial/USB), processing all sensor data locally.
+  </Card>
+
+  <Card title="WiFi Communication" icon="wifi">
+    Wireless connection to development computer for monitoring, debugging, and high-level commands.
+  </Card>
+
+  <Card title="Power Efficient" icon="battery-half">
+    Lower power consumption (~2-3A @ 5V) compared to laptop, suitable for battery-powered robot.
+  </Card>
+</CardGroup>
+
+## Hardware Requirements
+
+| Component | Specification | Notes |
+|-----------|--------------|-------|
+| **Raspberry Pi** | RPi 4 (4GB+) or RPi 5 | 8GB RAM recommended for Nav2 |
+| **microSD Card** | 32GB+ Class 10/UHS-I | 64GB recommended |
+| **Power Supply** | 5V 3A USB-C | Official RPi power supply recommended |
+| **Cooling** | Heatsink + fan (optional) | Recommended for continuous operation |
+
+**Optional:**
+- Case with fan
+- External SSD for better performance (via USB 3.0)
+
+## Prepare SD Card
+
+### Step 1: Download Raspberry Pi Imager
+
+- Website: https://www.raspberrypi.com/software/
+- Available for Windows, Mac, Linux
+- Install and launch
+
+### Step 2: Choose OS
+
+1. Click "Choose OS"
+2. Navigate: Other general-purpose OS → Ubuntu → **Ubuntu Server 24.04.2 LTS (64-bit)**
+3. **Important:** Select **Server**, not Desktop (no GUI needed)
+
+<Warning>
+  **Use Ubuntu Server 24.04 (64-bit)** - Not Raspberry Pi OS! ROS2 Jazzy requires Ubuntu 24.04.
+</Warning>
+
+### Step 3: Choose Storage
+
+1. Click "Choose Storage"
+2. Select your microSD card
+3. **Verify correct drive selected** (all data will be erased!)
+
+### Step 4: Configure Settings
+
+Click gear icon (⚙️) or "Edit Settings":
+
+**General Tab:**
+- **Hostname:** `alpha-pi.local` (or beta-pi, gamma-pi, etc.)
+- **Username:** `alpha-pi` (match hostname for simplicity)
+- **Password:** Choose secure password (e.g., `robotics2024`)
+- **Configure WiFi:**
+  - SSID: Your WiFi network name
+  - Password: Your WiFi password
+  - WiFi country: Your country code
+
+**Services Tab:**
+- **Enable SSH:** ✓ Use password authentication
+
+### Step 5: Write Image
+
+1. Click "Write"
+2. Confirm (all data on SD card will be erased)
+3. Wait for write + verify (~10-15 minutes)
+4. Remove SD card when complete
+
+## First Boot and SSH Connection
+
+<Steps>
+  <Step title="Insert SD Card and Power On">
+    1. Insert microSD card into Raspberry Pi
+    2. Connect power (5V USB-C)
+    3. Wait 2-3 minutes for first boot
+    4. RPi will connect to WiFi automatically
+  </Step>
+
+  <Step title="Find IP Address">
+    **Method 1: Hostname (easiest)**
+    ```bash
+    ping alpha-pi.local
+    ```
+
+    **Method 2: Router admin panel**
+    - Log into your router
+    - Look for device named "alpha-pi"
+
+    **Method 3: Network scan**
+    ```bash
+    # Linux/Mac
+    sudo nmap -sn 192.168.1.0/24
+
+    # Windows (install nmap first)
+    nmap -sn 192.168.1.0/24
+    ```
+  </Step>
+
+  <Step title="SSH into Raspberry Pi">
+    From your development computer:
+
+    ```bash
+    ssh alpha-pi@alpha-pi.local
+    # Or use IP: ssh alpha-pi@192.168.1.XX
+    ```
+
+    - Type "yes" to accept fingerprint
+    - Enter password
+    - You should see Ubuntu prompt: `alpha-pi@alpha-pi:~$`
+
+    <Tip>
+      **Success!** You're now controlling Raspberry Pi remotely from your computer.
+    </Tip>
+  </Step>
+
+  <Step title="Update System">
+    **Important:** First boot takes time for background updates. Wait 5-10 minutes, then:
+
+    ```bash
+    sudo apt update
+    sudo apt upgrade -y
+    ```
+
+    This may take 15-30 minutes. Be patient!
+
+    **Note:** RPi may reboot itself during updates. If disconnected, wait 2 min and reconnect via SSH.
+  </Step>
+</Steps>
+
+## Install ROS2 Jazzy on Raspberry Pi
+
+Once SSH connected and system updated:
+
+<Steps>
+  <Step title="Set Locale">
+    ```bash
+    sudo apt update && sudo apt install locales
+    sudo locale-gen en_US en_US.UTF-8
+    sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+    export LANG=en_US.UTF-8
+    ```
+  </Step>
+
+  <Step title="Enable Required Repositories">
+    ```bash
+    sudo apt install software-properties-common
+    sudo add-apt-repository universe
+
+    sudo apt update && sudo apt install curl -y
+    sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+    ```
+  </Step>
+
+  <Step title="Update Package Cache">
+    ```bash
+    sudo apt update
+    sudo apt upgrade -y
+    ```
+  </Step>
+
+  <Step title="Install ROS2 ROS-Base">
+    **Important:** Install **ROS-Base** (not Desktop - no GUI on RPi):
+
+    ```bash
+    sudo apt install ros-jazzy-ros-base
+    ```
+
+    ROS-Base includes:
+    - Core ROS2 libraries
+    - Command-line tools
+    - No GUI tools (RViz, Gazebo)
+
+    **Installation time:** ~10-15 minutes
+  </Step>
+
+  <Step title="Install Development Tools">
+    ```bash
+    sudo apt install ros-dev-tools
+    ```
+  </Step>
+
+  <Step title="Install Demo Packages">
+    For testing:
+
+    ```bash
+    sudo apt install ros-jazzy-demo-nodes-cpp ros-jazzy-demo-nodes-py
+    ```
+  </Step>
+
+  <Step title="Source ROS2 Setup">
+    Add to `.bashrc`:
+
+    ```bash
+    echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
+    source ~/.bashrc
+    ```
+
+    Verify:
+    ```bash
+    printenv | grep ROS
+    ```
+
+    Should show `ROS_DISTRO=jazzy`
+  </Step>
+</Steps>
+
+## Install Additional Packages
+
+### Essential for Robot
+
+```bash
+# Robot localization (sensor fusion)
+sudo apt install ros-jazzy-robot-localization
+
+# SLAM Toolbox (mapping)
+sudo apt install ros-jazzy-slam-toolbox
+
+# Navigation2 (autonomous navigation)
+sudo apt install ros-jazzy-navigation2 ros-jazzy-nav2-bringup
+
+# TF2 tools (coordinate transforms)
+sudo apt install ros-jazzy-tf2-tools ros-jazzy-tf2-ros
+
+# Teleop (keyboard control)
+sudo apt install ros-jazzy-teleop-twist-keyboard
+
+# Serial communication (ESP32)
+sudo apt install ros-jazzy-serial-driver
+```
+
+### LiDAR Support
+
+```bash
+# RPLIDAR A1M8
+sudo apt install ros-jazzy-rplidar-ros
+```
+
+### Camera Support (if using)
+
+```bash
+# Camera interface
+sudo apt install ros-jazzy-camera-ros
+```
+
+## Test ROS2 Installation
+
+### Test 1: Talker Node
+
+In SSH terminal on RPi:
+
+```bash
+ros2 run demo_nodes_cpp talker
+```
+
+**Expected:** Messages printing "Hello World: X"
+
+Press Ctrl+C to stop.
+
+### Test 2: Node List
+
+```bash
+ros2 node list
+```
+
+While talker running, should show `/talker`
+
+### Test 3: Topic List
+
+```bash
+ros2 topic list
+```
+
+Should show `/chatter`, `/parameter_events`, `/rosout`
+
+## Configure Network for Multi-Machine
+
+To communicate between PC and RPi:
+
+### On Raspberry Pi
+
+Check IP address:
+```bash
+hostname -I
+```
+
+Note the IP (e.g., `192.168.1.50`)
+
+### Test Communication
+
+**On PC:** Run listener
+```bash
+ros2 run demo_nodes_cpp listener
+```
+
+**On RPi via SSH:** Run talker
+```bash
+ros2 run demo_nodes_cpp talker
+```
+
+**Expected:** Listener on PC should receive messages from RPi talker!
+
+<Note>
+  **ROS2 Discovery:** By default, ROS2 nodes on same network auto-discover each other. No configuration needed for simple setups!
+</Note>
+
+## Performance Optimization
+
+### Reduce Swap Usage
+
+```bash
+# Check current swappiness
+cat /proc/sys/vm/swappiness  # Default: 60
+
+# Reduce to 10 (better for SD card)
+sudo sysctl vm.swappiness=10
+
+# Make permanent
+echo "vm.swappiness=10" | sudo tee -a /etc/sysctl.conf
+```
+
+### Enable Fan Control (RPi 5)
+
+If using active cooling:
+
+```bash
+# Check temperature
+vcgencmd measure_temp
+
+# Configure fan (edit config)
+sudo nano /boot/firmware/config.txt
+
+# Add:
+# dtparam=cooling_fan
+# fan_temp=60000  # Start fan at 60°C
+```
+
+### Disable Unnecessary Services
+
+```bash
+# Disable Bluetooth if not used
+sudo systemctl disable bluetooth
+sudo systemctl stop bluetooth
+```
+
+## Remote Development Tips
+
+### VSCode Remote SSH
+
+1. Install "Remote - SSH" extension in VSCode
+2. Connect to RPi: `F1` → "Remote-SSH: Connect to Host"
+3. Enter: `alpha-pi@alpha-pi.local`
+4. Edit code directly on RPi!
+
+### File Transfer
+
+**From PC to RPi:**
+```bash
+scp myfile.txt alpha-pi@alpha-pi.local:~/
+```
+
+**From RPi to PC:**
+```bash
+scp alpha-pi@alpha-pi.local:~/myfile.txt ./
+```
+
+**Entire directory:**
+```bash
+scp -r my_ros2_ws/ alpha-pi@alpha-pi.local:~/
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Cannot SSH to Raspberry Pi" icon="network-wired">
+    **Solutions:**
+    - Wait 5 minutes after first boot
+    - Check WiFi credentials in imager settings
+    - Verify RPi and PC on same network
+    - Try IP address instead of hostname
+    - Connect monitor + keyboard to RPi for direct access
+  </Accordion>
+
+  <Accordion title="apt update fails" icon="download">
+    **Cause:** Background auto-update running
+
+    **Solution:**
+    Wait 10-15 minutes after first boot, then retry
+  </Accordion>
+
+  <Accordion title="ROS2 installation very slow" icon="clock">
+    **Expected:** RPi is slower than PC
+
+    **Tips:**
+    - Be patient (10-20 min for ROS2 install)
+    - Use wired Ethernet if possible
+    - Good microSD card improves speed
+  </Accordion>
+
+  <Accordion title="PC and RPi can't see each other's nodes" icon="eye-slash">
+    **Solutions:**
+    - Ensure both on same WiFi network
+    - Check firewall settings
+    - Verify ROS_DOMAIN_ID matches (default: 0)
+    - Try: `ros2 daemon stop && ros2 daemon start`
+  </Accordion>
+
+  <Accordion title="Raspberry Pi runs hot / throttles" icon="temperature-high">
+    **Solutions:**
+    - Add heatsink
+    - Enable fan
+    - Ensure good airflow
+    - Check: `vcgencmd get_throttled` (0x0 = good)
+  </Accordion>
+</AccordionGroup>
+
+## Power Considerations
+
+**Raspberry Pi Power:**
+- RPi 4: ~2.5A @ 5V (12.5W)
+- RPi 5: ~3A @ 5V (15W)
+
+**Robot Power Budget:**
+- Motors: 12V rail
+- RPi + ESP32 + sensors: 5V rail (buck converter from 12V)
+- Total 5V load: ~4-5A peak
+
+**Recommended:** 12V to 5V buck converter, 5A rated
+
+## Backup SD Card
+
+Once configured, create backup image:
+
+**Linux/Mac:**
+```bash
+sudo dd if=/dev/sdX of=rpi_backup.img bs=4M status=progress
+```
+
+**Windows:** Use Win32DiskImager to create image
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="ROS2 Basics"
+    icon="book"
+    href="/wp4-ros2/setup/ros2-basics"
+  >
+    Learn ROS2 fundamental concepts
+  </Card>
+
+  <Card
+    title="Communication Testing"
+    icon="network-wired"
+    href="/wp4-ros2/setup/communication-testing"
+  >
+    Test PC ↔ RPi communication thoroughly
+  </Card>
+
+  <Card
+    title="Robot Description"
+    icon="robot"
+    href="/wp4-ros2/description/urdf-introduction"
+  >
+    Create URDF model of your robot
+  </Card>
+
+  <Card
+    title="Hardware Integration"
+    icon="microchip"
+    href="/wp5-integration/system-integration"
+  >
+    Connect RPi to robot hardware
+  </Card>
+</CardGroup>
+
+## References
+
+[1] Raspberry Pi Documentation: https://www.raspberrypi.com/documentation/
+[2] Ubuntu on Raspberry Pi: https://ubuntu.com/raspberry-pi
+[3] ROS2 Multi-Machine: https://docs.ros.org/en/jazzy/Tutorials/Multi-Machine.html

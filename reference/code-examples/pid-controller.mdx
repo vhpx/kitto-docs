@@ -1,0 +1,436 @@
+---
+title: 'PID Controller'
+description: 'Complete PID controller implementation for motor speed control'
+icon: 'sliders'
+---
+
+## Overview
+
+A **PID (Proportional-Integral-Derivative) controller** maintains motor speed at a desired setpoint by calculating and applying corrective actions based on the error between setpoint and measured speed.
+
+---
+
+## Complete C++ Implementation (ESP32)
+
+```cpp title="pid_controller.h"
+#ifndef PID_CONTROLLER_H
+#define PID_CONTROLLER_H
+
+class PIDController {
+private:
+    // PID gains
+    float kp;
+    float ki;
+    float kd;
+
+    // State variables
+    float integral;
+    float previous_error;
+
+    // Anti-windup limits
+    float integral_min;
+    float integral_max;
+
+    // Output limits
+    float output_min;
+    float output_max;
+
+    // Time tracking
+    unsigned long last_time;
+
+public:
+    PIDController(float Kp, float Ki, float Kd);
+
+    void setGains(float Kp, float Ki, float Kd);
+    void setIntegralLimits(float min_val, float max_val);
+    void setOutputLimits(float min_val, float max_val);
+    float compute(float setpoint, float measured_value);
+    void reset();
+};
+
+#endif
+```
+
+```cpp title="pid_controller.cpp"
+#include "pid_controller.h"
+#include <Arduino.h>
+
+PIDController::PIDController(float Kp, float Ki, float Kd) {
+    kp = Kp;
+    ki = Ki;
+    kd = Kd;
+
+    integral = 0.0;
+    previous_error = 0.0;
+
+    // Default limits
+    integral_min = -100.0;
+    integral_max = 100.0;
+    output_min = -255.0;  // PWM range
+    output_max = 255.0;
+
+    last_time = millis();
+}
+
+void PIDController::setGains(float Kp, float Ki, float Kd) {
+    kp = Kp;
+    ki = Ki;
+    kd = Kd;
+}
+
+void PIDController::setIntegralLimits(float min_val, float max_val) {
+    integral_min = min_val;
+    integral_max = max_val;
+}
+
+void PIDController::setOutputLimits(float min_val, float max_val) {
+    output_min = min_val;
+    output_max = max_val;
+}
+
+float PIDController::compute(float setpoint, float measured_value) {
+    // Calculate time delta
+    unsigned long current_time = millis();
+    float dt = (current_time - last_time) / 1000.0;  // Convert to seconds
+    last_time = current_time;
+
+    // Prevent division by zero
+    if (dt <= 0.0) {
+        dt = 0.01;  // 10ms default
+    }
+
+    // Calculate error
+    float error = setpoint - measured_value;
+
+    // Proportional term
+    float P = kp * error;
+
+    // Integral term with anti-windup
+    integral += error * dt;
+    if (integral > integral_max) integral = integral_max;
+    if (integral < integral_min) integral = integral_min;
+    float I = ki * integral;
+
+    // Derivative term
+    float derivative = (error - previous_error) / dt;
+    float D = kd * derivative;
+
+    // Calculate output
+    float output = P + I + D;
+
+    // Clamp output to limits
+    if (output > output_max) output = output_max;
+    if (output < output_min) output = output_min;
+
+    // Save for next iteration
+    previous_error = error;
+
+    return output;
+}
+
+void PIDController::reset() {
+    integral = 0.0;
+    previous_error = 0.0;
+    last_time = millis();
+}
+```
+
+---
+
+## Usage Example
+
+```cpp title="main.cpp"
+#include <Arduino.h>
+#include "pid_controller.h"
+
+// Motor pins
+#define MOTOR_PWM 4
+#define MOTOR_DIR1 23
+#define MOTOR_DIR2 19
+
+// Encoder pins
+#define ENCODER_A 34
+#define ENCODER_B 35
+
+// Encoder state
+volatile long encoder_count = 0;
+volatile long last_encoder_count = 0;
+
+// PID controller
+PIDController motor_pid(2.5, 0.5, 0.1);  // Kp, Ki, Kd
+
+// Target speed (rad/s)
+float target_speed = 10.0;
+
+// Timing
+unsigned long last_pid_time = 0;
+const int PID_INTERVAL = 50;  // 50ms = 20 Hz
+
+void IRAM_ATTR encoder_isr() {
+    int b = digitalRead(ENCODER_B);
+    if (b > 0) {
+        encoder_count++;
+    } else {
+        encoder_count--;
+    }
+}
+
+void setup() {
+    Serial.begin(115200);
+
+    // Motor pins
+    pinMode(MOTOR_PWM, OUTPUT);
+    pinMode(MOTOR_DIR1, OUTPUT);
+    pinMode(MOTOR_DIR2, OUTPUT);
+
+    // Encoder pins
+    pinMode(ENCODER_A, INPUT);
+    pinMode(ENCODER_B, INPUT);
+    attachInterrupt(digitalPinToInterrupt(ENCODER_A), encoder_isr, RISING);
+
+    // PWM configuration
+    ledcSetup(0, 20000, 8);  // Channel 0, 20kHz, 8-bit resolution
+    ledcAttachPin(MOTOR_PWM, 0);
+
+    // PID limits
+    motor_pid.setOutputLimits(-255, 255);
+    motor_pid.setIntegralLimits(-50, 50);
+
+    Serial.println("PID Motor Control Started");
+}
+
+void loop() {
+    unsigned long current_time = millis();
+
+    // Run PID at fixed interval
+    if (current_time - last_pid_time >= PID_INTERVAL) {
+        last_pid_time = current_time;
+
+        // Calculate velocity (rad/s)
+        long encoder_diff = encoder_count - last_encoder_count;
+        last_encoder_count = encoder_count;
+
+        float dt = PID_INTERVAL / 1000.0;  // seconds
+        const float COUNTS_PER_REV = 209.0;  // JGA25-370 encoder
+        float revolutions = encoder_diff / COUNTS_PER_REV;
+        float current_speed = (revolutions * 2.0 * PI) / dt;  // rad/s
+
+        // Compute PID output
+        float pid_output = motor_pid.compute(target_speed, current_speed);
+
+        // Apply to motor
+        if (pid_output > 0) {
+            digitalWrite(MOTOR_DIR1, HIGH);
+            digitalWrite(MOTOR_DIR2, LOW);
+            ledcWrite(0, (int)pid_output);
+        } else if (pid_output < 0) {
+            digitalWrite(MOTOR_DIR1, LOW);
+            digitalWrite(MOTOR_DIR2, HIGH);
+            ledcWrite(0, (int)(-pid_output));
+        } else {
+            digitalWrite(MOTOR_DIR1, LOW);
+            digitalWrite(MOTOR_DIR2, LOW);
+            ledcWrite(0, 0);
+        }
+
+        // Debug output
+        Serial.printf("Target: %.2f | Current: %.2f | PID: %.2f\n",
+                      target_speed, current_speed, pid_output);
+    }
+
+    // Check for serial commands
+    if (Serial.available()) {
+        target_speed = Serial.parseFloat();
+        Serial.printf("New target speed: %.2f rad/s\n", target_speed);
+        motor_pid.reset();  // Reset integral on setpoint change
+    }
+}
+```
+
+---
+
+## Python Implementation (ROS2)
+
+```python title="pid_controller.py"
+import time
+
+class PIDController:
+    def __init__(self, kp, ki, kd):
+        self.kp = kp
+        self.ki = ki
+        self.kd = kd
+
+        self.integral = 0.0
+        self.previous_error = 0.0
+
+        self.integral_min = -100.0
+        self.integral_max = 100.0
+        self.output_min = -1.0
+        self.output_max = 1.0
+
+        self.last_time = time.time()
+
+    def set_gains(self, kp, ki, kd):
+        self.kp = kp
+        self.ki = ki
+        self.kd = kd
+
+    def set_integral_limits(self, min_val, max_val):
+        self.integral_min = min_val
+        self.integral_max = max_val
+
+    def set_output_limits(self, min_val, max_val):
+        self.output_min = min_val
+        self.output_max = max_val
+
+    def compute(self, setpoint, measured_value):
+        current_time = time.time()
+        dt = current_time - self.last_time
+        self.last_time = current_time
+
+        if dt <= 0.0:
+            dt = 0.01
+
+        error = setpoint - measured_value
+
+        # Proportional
+        P = self.kp * error
+
+        # Integral with anti-windup
+        self.integral += error * dt
+        self.integral = max(self.integral_min, min(self.integral, self.integral_max))
+        I = self.ki * self.integral
+
+        # Derivative
+        derivative = (error - self.previous_error) / dt
+        D = self.kd * derivative
+
+        output = P + I + D
+
+        # Clamp output
+        output = max(self.output_min, min(output, self.output_max))
+
+        self.previous_error = error
+
+        return output
+
+    def reset(self):
+        self.integral = 0.0
+        self.previous_error = 0.0
+        self.last_time = time.time()
+```
+
+---
+
+## Tuning Guidelines
+
+### Ziegler-Nichols Method
+
+1. **Set Ki = 0, Kd = 0**
+2. **Increase Kp** until system oscillates steadily
+3. **Record Ku (ultimate gain)** and **Tu (oscillation period)**
+4. **Calculate PID gains:**
+   ```
+   Kp = 0.6 * Ku
+   Ki = 2 * Kp / Tu
+   Kd = Kp * Tu / 8
+   ```
+
+### Manual Tuning Steps
+
+1. **Start with Kp only:**
+   - Increase until response is quick but slightly oscillatory
+   - Typical range: 1.0 - 5.0
+
+2. **Add Ki (if needed):**
+   - Eliminates steady-state error
+   - Start small (0.1 - 0.5)
+   - Too high = overshoot and instability
+
+3. **Add Kd (if needed):**
+   - Reduces overshoot
+   - Start small (0.01 - 0.1)
+   - Too high = amplifies noise
+
+### Recommended Starting Values (Mecanum Robot)
+
+```cpp
+// Motor speed control
+PIDController motor_pid(2.5, 0.5, 0.1);
+
+// Position control
+PIDController position_pid(1.0, 0.0, 0.5);
+
+// Heading control
+PIDController heading_pid(3.0, 0.1, 0.2);
+```
+
+---
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Integral windup (overshoot)">
+    **Solution:** Set integral limits
+    ```cpp
+    motor_pid.setIntegralLimits(-50, 50);
+    ```
+  </Accordion>
+
+  <Accordion title="Oscillation around setpoint">
+    **Cause:** Kp too high or Kd too low
+
+    **Solution:** Reduce Kp or increase Kd
+  </Accordion>
+
+  <Accordion title="Slow response">
+    **Cause:** Kp too low
+
+    **Solution:** Increase Kp
+  </Accordion>
+
+  <Accordion title="Steady-state error">
+    **Cause:** Ki = 0 or too small
+
+    **Solution:** Increase Ki
+  </Accordion>
+
+  <Accordion title="Noisy derivative term">
+    **Solution:** Low-pass filter or reduce Kd
+    ```cpp
+    // Add filtering
+    float alpha = 0.8;
+    derivative = alpha * derivative + (1 - alpha) * old_derivative;
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Encoder Reading" icon="gauge" href="/reference/code-examples/encoder-reading">
+    Read motor encoder for velocity feedback
+  </Card>
+
+  <Card title="Motor Control" icon="gear" href="/wp3-embedded/dc-motor-control">
+    Complete motor control implementation
+  </Card>
+
+  <Card title="Serial Communication" icon="usb" href="/reference/code-examples/serial-communication">
+    Send PID parameters from ROS2
+  </Card>
+
+  <Card title="Troubleshooting" icon="wrench" href="/troubleshooting/common-errors">
+    Debug PID tuning issues
+  </Card>
+</CardGroup>
+
+---
+
+## References
+
+- [PID Control Wikipedia](https://en.wikipedia.org/wiki/PID_controller)
+- [Ziegler-Nichols Tuning](https://en.wikipedia.org/wiki/Ziegler%E2%80%93Nichols_method)
+- [Arduino PID Library](https://github.com/br3ttb/Arduino-PID-Library/)

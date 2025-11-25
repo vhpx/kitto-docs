@@ -1,97 +1,169 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "EEET2610 - Engineering Design 3"
+description: "Complete guide for designing and building an autonomous Mecanum wheel robot"
 ---
 
-## Setting up
+<img
+  className="block dark:hidden"
+  src="/images/hero-light.png"
+  alt="Mecanum Robot Hero Light"
+/>
+<img
+  className="hidden dark:block"
+  src="/images/hero-dark.png"
+  alt="Mecanum Robot Hero Dark"
+/>
 
-Get your documentation site up and running in minutes.
+## Welcome to Engineering Design 3
+
+This comprehensive guide will help you successfully complete **EEET2610: Engineering Design 3** - a project-based course where you'll design, build, and program an autonomous Mecanum wheel robot.
+
+### What You'll Build
+
+By the end of this semester, you and your team will have created:
+
+- **Mecanum wheel robot** with omnidirectional movement capabilities
+- **Embedded control system** using ESP32 microcontroller
+- **Autonomous navigation** using ROS2, LiDAR, and computer vision
+- **Complete project documentation** for your engineering portfolio
+
+### Course Structure
+
+This project is organized into **5 Work Packages (WP)**, each building upon the previous:
+
+<CardGroup cols={2}>
+  <Card
+    title="WP1: MATLAB Simulation"
+    icon="chart-line"
+    href="/wp1-simulation/introduction"
+  >
+    Model robot kinematics and plan trajectories in MATLAB
+  </Card>
+  <Card
+    title="WP2: Prototyping"
+    icon="screwdriver-wrench"
+    href="/wp2-prototyping/introduction"
+  >
+    Design CAD models and PCB schematics for your robot
+  </Card>
+  <Card
+    title="WP3: Embedded Systems"
+    icon="microchip"
+    href="/wp3-embedded/introduction"
+  >
+    Program ESP32 to control DC motors with PID and integrate IMU
+  </Card>
+  <Card
+    title="WP4: ROS2 Autonomous System"
+    icon="robot"
+    href="/wp4-ros2/setup/computer-preparation"
+  >
+    Implement autonomous navigation using ROS2, SLAM, and sensors
+  </Card>
+</CardGroup>
 
 <Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
+  title="WP5: Integration & Presentation"
+  icon="presentation"
+  href="/wp5-integration/introduction"
 >
-  Follow our three step quickstart guide.
+  Integrate all systems and present your solution to SDG challenges
 </Card>
 
-## Make it yours
+### Getting Started
 
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
+<CardGroup cols={3}>
   <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
+    title="Course Overview"
+    icon="book-open"
+    href="/getting-started/course-overview"
   >
-    Edit your docs locally and preview them in real time.
+    Understand deliverables, timeline, and expectations
   </Card>
   <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
+    title="Prerequisites"
+    icon="list-check"
+    href="/getting-started/prerequisites"
   >
-    Customize the design and colors of your site to match your brand.
-  </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+    Required knowledge and tools before starting
   </Card>
   <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
+    title="Team Management"
+    icon="users"
+    href="/getting-started/team-management"
   >
-    Auto-generate API documentation from OpenAPI specifications.
+    Group contracts, meetings, and collaboration tips
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+### Key Features of This Guide
 
-Everything you need to create world-class documentation.
+<AccordionGroup>
+  <Accordion title="Comprehensive Tutorials" icon="graduation-cap">
+    Step-by-step instructions for every work package, from simulation to autonomous navigation
+  </Accordion>
 
-<Columns cols={2}>
+  <Accordion title="Hardware & Software Reference" icon="book">
+    Detailed specifications for ESP32, motors, sensors, and all software tools
+  </Accordion>
+
+  <Accordion title="Code Examples" icon="code">
+    Tested code snippets for PID control, ROS2 nodes, and embedded systems
+  </Accordion>
+
+  <Accordion title="Troubleshooting Support" icon="life-ring">
+    Common errors, debugging techniques, and solutions to typical problems
+  </Accordion>
+</AccordionGroup>
+
+### Project Deliverables
+
+Throughout the semester, you'll complete these major deliverables:
+
+1. **Project Proposal** - Literature review, Gantt chart, BOM, team contract
+2. **MATLAB Simulation** - Kinematics modeling and trajectory planning
+3. **CAD & PCB Design** - Mechanical and electrical design documentation
+4. **Embedded System** - Working motor control with PID and IMU integration
+5. **ROS2 Implementation** - Autonomous navigation with SLAM and sensor fusion
+6. **Final Demonstration** - Live demo addressing Sustainable Development Goals
+7. **Video Presentation** - Professional team presentation of your work
+
+<Note>
+  **Important:** This project combines mechanical design, electrical engineering, embedded systems, and robotics. You'll need to collaborate effectively with teammates from different programs to succeed.
+</Note>
+
+### Need Help?
+
+<CardGroup cols={2}>
   <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
+    title="Troubleshooting Guide"
+    icon="wrench"
+    href="/troubleshooting/common-errors"
   >
-    Use MDX to style your docs pages.
+    Find solutions to common issues
   </Card>
   <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
+    title="FAQ"
+    icon="circle-question"
+    href="/troubleshooting/faq"
   >
-    Add sample code to demonstrate how to use your product.
+    Frequently asked questions
   </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+</CardGroup>
 
-## Need inspiration?
+### Learning Outcomes
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+By completing this project, you will:
+
+- ✅ Apply engineering design principles to a complex mechatronics system
+- ✅ Integrate mechanical, electrical, and software subsystems
+- ✅ Use industry-standard tools (ROS2, PlatformIO, Git, CAD)
+- ✅ Develop autonomous robotics algorithms (SLAM, navigation, control)
+- ✅ Work in multidisciplinary teams with project management
+- ✅ Create professional documentation for your engineering portfolio
+
+<Tip>
+  **Pro Tip:** Start early and order components as soon as possible! Shipping delays can impact your project timeline. Review the [Project Proposal](/getting-started/project-proposal) section for procurement guidance.
+</Tip>
+
+Ready to get started? Begin with the [Course Overview](/getting-started/course-overview) to understand the full scope of the project.

@@ -1,0 +1,650 @@
+---
+title: "Maintenance Guide"
+description: "Keep your robot running reliably through proper maintenance and care"
+---
+
+## Overview
+
+Regular **maintenance** ensures your robot operates reliably over time. This guide covers routine inspections, component care, and preventive maintenance to avoid unexpected failures.
+
+<Note>
+  **Maintenance Schedule:** Weekly inspections during active use, monthly deep cleaning, quarterly component replacement as needed.
+</Note>
+
+## Maintenance Schedule
+
+### Daily (Before Each Use)
+
+<Steps>
+  <Step title="Visual Inspection">
+    **Quick check (2 minutes):**
+
+    - [ ] Battery charged (>11.5V for 3S LiPo)
+    - [ ] No loose wires or components
+    - [ ] Wheels turn freely
+    - [ ] LiDAR rotates freely
+    - [ ] Emergency stop releases properly
+  </Step>
+
+  <Step title="Power-On Test">
+    **System boot test:**
+
+    - [ ] All LEDs illuminate correctly
+    - [ ] No unusual sounds (grinding, clicking)
+    - [ ] Motors respond to test commands
+    - [ ] Sensors publishing data
+  </Step>
+</Steps>
+
+### Weekly (Active Use)
+
+<Steps>
+  <Step title="Hardware Inspection">
+    **Mechanical check (10 minutes):**
+
+    - [ ] Tighten loose screws (vibration causes loosening)
+    - [ ] Check wheel attachment (no wobble)
+    - [ ] Inspect cables for wear or damage
+    - [ ] Clean LiDAR lens with microfiber cloth
+    - [ ] Check motor mounting bolts
+    - [ ] Inspect wheel tread for wear
+  </Step>
+
+  <Step title="Software Check">
+    **System health (5 minutes):**
+
+    ```bash
+    # Run health check script
+    ~/scripts/health_check.sh
+
+    # Check disk space
+    df -h
+    # Ensure >20% free space on /
+
+    # Check system logs
+    journalctl -p err -since "1 week ago"
+    ```
+  </Step>
+
+  <Step title="Battery Maintenance">
+    **LiPo care:**
+
+    - [ ] Check cell voltages balanced (±0.1V)
+    - [ ] Inspect battery for swelling/damage
+    - [ ] Clean battery terminals (isopropyl alcohol)
+    - [ ] Test voltage under load (should not drop >0.5V)
+
+    **Battery health test:**
+    ```bash
+    # Measure voltage at rest
+    # Run motors at 50% for 30 seconds
+    # Measure voltage under load
+    # Voltage drop >0.5V = battery degraded
+    ```
+  </Step>
+</Steps>
+
+### Monthly (Deep Maintenance)
+
+<Steps>
+  <Step title="Complete Cleaning">
+    **Thorough cleaning (30 minutes):**
+
+    1. **Power off** robot completely
+    2. Remove dust with compressed air:
+       - Motor vents
+       - LiDAR housing
+       - PCB (if accessible)
+       - Raspberry Pi heatsink
+    3. Clean wheels:
+       - Remove debris (hair, dirt)
+       - Check for flat spots
+       - Inspect tread wear
+    4. Clean connectors:
+       - USB ports (compressed air)
+       - Power connectors (dry brush)
+       - Motor connectors (contact cleaner)
+  </Step>
+
+  <Step title="Component Inspection">
+    **Detailed check:**
+
+    - [ ] **Motors:**
+      - No excessive play in shaft
+      - Smooth rotation (no grinding)
+      - No overheating during operation
+      - Encoder wires secure
+
+    - [ ] **Electronics:**
+      - No burnt smell or discoloration
+      - Capacitors not bulging
+      - Solder joints intact
+      - Heat sinks firmly attached
+
+    - [ ] **Mechanical:**
+      - Wheel bearings smooth
+      - Mounting brackets not cracked
+      - Standoffs tight
+      - Cable ties secure
+  </Step>
+
+  <Step title="Sensor Calibration">
+    **Verify accuracy:**
+
+    ```bash
+    # IMU calibration check
+    ros2 run mecanum_description imu_test
+    # Expected: Angular velocity ≈ 0 when stationary
+
+    # Odometry calibration
+    # Drive 5m forward, measure actual distance
+    # Error should be <5%
+
+    # LiDAR alignment
+    # Check 0° points forward in RViz
+    ```
+  </Step>
+
+  <Step title="Software Updates">
+    **System updates:**
+
+    ```bash
+    # Update OS (Ubuntu)
+    sudo apt update
+    sudo apt upgrade
+
+    # Update ROS2 packages
+    cd ~/ros2_ws
+    rosdep update
+    rosdep install --from-paths src --ignore-src -r -y
+
+    # Rebuild packages
+    colcon build
+
+    # Reboot
+    sudo reboot
+    ```
+
+    <Warning>
+      **Test After Updates:** Always test complete system after software updates. Updates may change behavior.
+    </Warning>
+  </Step>
+</Steps>
+
+### Quarterly (Every 3 Months)
+
+<Steps>
+  <Step title="Component Replacement">
+    **Replace wear items:**
+
+    - [ ] Battery (if capacity &lt;80% of original)
+    - [ ] Wheels (if tread worn >50%)
+    - [ ] Motor brushes (if motors have brushes)
+    - [ ] Cooling fan (if noisy or failing)
+    - [ ] microSD card backup (prevent corruption)
+  </Step>
+
+  <Step title="Firmware Update">
+    **ESP32 firmware:**
+
+    ```bash
+    # Check for firmware updates
+    cd ~/esp32_firmware
+    git pull
+
+    # Rebuild and upload
+    pio run -t upload
+
+    # Test motor control after update
+    ```
+  </Step>
+
+  <Step title="Full System Test">
+    **Comprehensive validation:**
+
+    1. Run full navigation test suite (see Testing guide)
+    2. Stress test: 1 hour continuous operation
+    3. Battery runtime test
+    4. Sensor accuracy verification
+    5. Emergency stop test
+  </Step>
+</Steps>
+
+## Component-Specific Maintenance
+
+### Motors & Wheels
+
+**Inspection:**
+
+```bash
+# Check motor current draw
+# Upload test firmware with current sensing
+# Normal: 0.5-1.0A per motor during steady motion
+# High: >2.0A sustained = motor or gearbox issue
+```
+
+**Maintenance:**
+
+<CardGroup cols={2}>
+  <Card title="Brushed DC Motors" icon="gear">
+    **Every 3-6 months:**
+    - Replace carbon brushes (if worn <3mm)
+    - Clean commutator (isopropyl alcohol)
+    - Lubricate bearings (light machine oil)
+    - Check shaft alignment
+  </Card>
+
+  <Card title="Mecanum Wheels" icon="circle-notch">
+    **Monthly:**
+    - Remove debris from rollers
+    - Check roller rotation (all should spin freely)
+    - Inspect for flat spots or cracks
+    - Verify mounting bolts tight
+  </Card>
+</CardGroup>
+
+**Wheel Replacement:**
+
+**Symptoms indicating replacement needed:**
+- Excessive vibration
+- Uneven wear (>2mm difference)
+- Flat spots
+- Cracked or missing rollers
+- Squeaking (lubrication doesn't help)
+
+**Procedure:**
+1. Power off robot
+2. Remove wheel mounting screws (usually 4× M3)
+3. Disconnect encoder if embedded in wheel
+4. Install new wheel (check orientation!)
+5. Recalibrate odometry (wheel radius may differ slightly)
+
+### LiDAR (RPLIDAR A1M8)
+
+**Cleaning (weekly):**
+
+```
+1. Power off robot
+2. Gently wipe lens with microfiber cloth
+3. Remove dust from motor housing (compressed air)
+4. Check USB cable connection (reseat if loose)
+5. Power on, verify scan quality in RViz
+```
+
+**Troubleshooting:**
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Noisy scans (many outliers) | Dirty lens | Clean lens thoroughly |
+| Reduced range (<8m) | Lens dirty or LED degraded | Clean lens; if no improvement, LED failing (replace unit) |
+| Motor not spinning | Power issue or motor failure | Check 5V supply; if OK, motor failed (replace unit) |
+| Erratic rotations | Motor bearing worn | Replace LiDAR unit |
+
+**Calibration check:**
+
+```bash
+# Launch LiDAR
+ros2 launch mecanum_description lidar.launch.py
+
+# Check scan rate
+ros2 topic hz /scan
+# Expected: 5.3-5.7 Hz
+
+# Check data quality
+ros2 topic echo /scan --field ranges | head -n 100
+# Most values should be in range [0.15, 12.0]
+# >10% 'inf' values = problem
+```
+
+### IMU (ICM-20948)
+
+**Calibration (monthly):**
+
+```bash
+# Run calibration routine
+ros2 run mecanum_description imu_calibration
+
+# Follow prompts:
+# 1. Place robot stationary for 10 seconds
+# 2. Rotate robot in figure-8 pattern (magnetometer cal)
+
+# Save calibration to config
+```
+
+**Validation:**
+
+```bash
+# Test stationary readings
+ros2 topic echo /imu/data
+
+# Expected when stationary:
+# linear_acceleration: (0, 0, 9.8)  # Gravity in Z
+# angular_velocity: (0, 0, 0)       # No rotation
+
+# Tolerance: ±0.5 m/s² for accel, ±0.05 rad/s for gyro
+```
+
+**Common issues:**
+
+- **Drift during rotation:** Magnetometer interference (keep away from motors/wires)
+- **Z-axis incorrect:** Mounting orientation wrong (check URDF)
+- **Noisy readings:** Loose mounting (vibration), reseat firmly
+
+### Raspberry Pi
+
+**Temperature monitoring:**
+
+```bash
+# Check CPU temperature
+vcgencmd measure_temp
+
+# Expected: <70°C during operation
+# Warning: >75°C (throttling may occur)
+# Critical: >80°C (system protection shutdown)
+```
+
+**Cooling:**
+
+- **No heatsink:** Add heatsink + thermal paste (5-10°C reduction)
+- **With heatsink:** Add 5V fan (10-15°C reduction)
+- **High temps:** Check airflow not blocked
+
+**SD Card health:**
+
+```bash
+# Check disk health
+sudo smartctl -a /dev/mmcblk0
+
+# Check for errors
+sudo dmesg | grep -i "mmc\|sd"
+
+# Backup SD card (quarterly)
+sudo dd if=/dev/mmcblk0 of=~/backup_$(date +%Y%m%d).img bs=4M status=progress
+```
+
+<Warning>
+  **SD Card Lifespan:** microSD cards have limited write cycles. Expect replacement every 1-2 years with heavy use.
+</Warning>
+
+### Battery (LiPo)
+
+**Health check:**
+
+```bash
+# Check cell voltages (use LiPo checker or multimeter)
+# For 3S battery (3 cells):
+Cell 1: X.XXV
+Cell 2: X.XXV
+Cell 3: X.XXV
+
+# Balanced: All within ±0.1V
+# Unbalanced: >0.1V difference → rebalance or replace
+```
+
+**Storage:**
+
+- **Short-term (<1 week):** Store fully charged
+- **Long-term (>1 week):** Discharge to storage voltage (3.8V/cell = 11.4V for 3S)
+- **Always:** Store in LiPo-safe bag in cool, dry place
+- **Never:** Store in hot car, near flammables, or fully discharged
+
+**Replacement criteria:**
+
+- Swelling (puffy appearance)
+- Capacity <80% of original (shorter runtime)
+- Voltage drops quickly under load
+- Any cell <3.0V (over-discharged = damaged)
+- Physical damage (puncture, dents)
+
+**Safe disposal:**
+
+1. Discharge completely (connect to load until 0V)
+2. Submerge in salt water for 24 hours (neutralizes lithium)
+3. Dispose at battery recycling center (NOT regular trash)
+
+## Preventive Maintenance
+
+### Extend Component Lifespan
+
+**Motors:**
+- Avoid stalling (high current damages motors)
+- Limit acceleration (gentler on gearbox)
+- Keep cool (good airflow)
+
+**Electronics:**
+- Use proper voltage regulation (no voltage spikes)
+- ESD protection (ground yourself before handling)
+- Keep dry (moisture causes corrosion)
+
+**Sensors:**
+- Avoid shocks (accelerometers sensitive to drops)
+- Clean regularly (dust degrades performance)
+- Secure mounting (vibration loosens connections)
+
+**Software:**
+- Regular backups (weekly for active development)
+- Log rotation (prevent disk fill)
+- Update regularly (security patches)
+
+### Common Wear Items
+
+**Replacement schedule:**
+
+| Item | Expected Lifespan | Signs of Wear |
+|------|-------------------|---------------|
+| **Battery (LiPo)** | 1-2 years | Reduced runtime, swelling |
+| **Wheels** | 6-12 months | Uneven wear, flat spots |
+| **Motor brushes** | 500-1000 hours | Reduced power, sparking |
+| **LiDAR** | 3-5 years | Reduced range, noisy scans |
+| **SD Card** | 1-2 years | File corruption, boot failures |
+| **Bearings** | 2-3 years | Grinding noise, resistance |
+
+## Troubleshooting Guide
+
+### Degraded Performance
+
+**Symptom: Robot slower than usual**
+
+<Steps>
+  <Step title="Check Battery">
+    ```bash
+    # Measure voltage
+    # Expected: 11.5-12.6V (3S LiPo)
+    # Low: <11.5V (discharge or degraded)
+
+    # Load test: Run motors, check voltage drop
+    # Healthy: <0.5V drop
+    # Weak: >1.0V drop
+    ```
+  </Step>
+
+  <Step title="Check Motor Current">
+    ```bash
+    # If you have current sensing:
+    # Normal: 0.5-1.5A per motor during motion
+    # High: >2.0A sustained
+
+    # High current = increased friction or binding
+    ```
+  </Step>
+
+  <Step title="Inspect Wheels">
+    - Remove and spin each wheel by hand
+    - Should rotate freely with minimal resistance
+    - Grinding/resistance = bearing issue or debris
+  </Step>
+
+  <Step title="Check Software">
+    ```bash
+    # Verify velocity limits not reduced
+    ros2 param get /controller_server FollowPath.max_vel_x
+
+    # Check CPU usage
+    top
+    # High CPU may slow system
+    ```
+  </Step>
+</Steps>
+
+**Symptom: Navigation accuracy decreased**
+
+<Steps>
+  <Step title="Recalibrate Odometry">
+    ```bash
+    # Test forward motion accuracy
+    # Command: 5.0m
+    # Measure actual distance
+    # Adjust wheel radius if error >5%
+    ```
+  </Step>
+
+  <Step title="Check IMU">
+    ```bash
+    # Verify IMU readings
+    ros2 topic echo /imu/data
+
+    # Recalibrate if drifting
+    ros2 run mecanum_description imu_calibration
+    ```
+  </Step>
+
+  <Step title="Verify LiDAR">
+    ```bash
+    # Check scan quality
+    rviz2
+    # Add LaserScan
+
+    # Clean lens if noisy
+    # Check alignment (0° forward)
+    ```
+  </Step>
+</Steps>
+
+### Intermittent Failures
+
+**Symptom: Robot sometimes freezes or crashes**
+
+1. **Check connections:**
+   - Reseat all USB connections
+   - Check power connections tight
+   - Verify no loose wires
+
+2. **Monitor temperature:**
+   ```bash
+   vcgencmd measure_temp
+   # >80°C = overheating (add cooling)
+   ```
+
+3. **Check logs:**
+   ```bash
+   journalctl -xe
+   # Look for segfaults, memory errors
+   ```
+
+4. **Test power supply:**
+   - Voltage stable under load?
+   - Current capacity sufficient?
+   - Voltage regulator not overheating?
+
+5. **SD card issues:**
+   ```bash
+   # Check for corruption
+   sudo fsck /dev/mmcblk0p2
+
+   # Backup and reformat if frequent crashes
+   ```
+
+## Documentation & Records
+
+### Maintenance Log
+
+**Keep track of all maintenance:**
+
+```markdown
+# Maintenance Log: Mecanum Robot
+
+## 2024-03-15
+- Cleaned LiDAR lens
+- Tightened all screws (vibration loosening)
+- Battery voltage: 12.4V (healthy)
+- Odometry test: 5.0m commanded, 5.1m measured (2% error, acceptable)
+
+## 2024-03-22
+- Replaced front-left wheel (flat spot developed)
+- Recalibrated odometry: wheel_radius 0.050 → 0.051
+- Updated ESP32 firmware to v1.2
+- Full system test: All passed
+
+## 2024-04-01
+- Deep cleaning (monthly)
+- IMU recalibration
+- Software updates (Ubuntu, ROS2 packages)
+- Battery cycle count: 150 (estimate 200-300 remaining)
+```
+
+### Configuration Backups
+
+**Backup critical configs:**
+
+```bash
+# Backup script
+#!/bin/bash
+BACKUP_DIR=~/backups/$(date +%Y%m%d)
+mkdir -p $BACKUP_DIR
+
+# ROS2 configs
+cp -r ~/ros2_ws/src/mecanum_description/config $BACKUP_DIR/
+
+# ESP32 firmware
+cp -r ~/esp32_firmware $BACKUP_DIR/
+
+# Maps
+cp ~/ros2_ws/src/mecanum_description/maps/* $BACKUP_DIR/
+
+# Create archive
+tar -czf mecanum_backup_$(date +%Y%m%d).tar.gz $BACKUP_DIR
+
+echo "Backup complete: mecanum_backup_$(date +%Y%m%d).tar.gz"
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Final Demo Preparation"
+    icon="video"
+    href="/wp5-integration/final-demo"
+  >
+    Prepare for final demonstration
+  </Card>
+
+  <Card
+    title="Troubleshooting"
+    icon="life-ring"
+    href="/troubleshooting/hardware"
+  >
+    Solve hardware issues
+  </Card>
+
+  <Card
+    title="Performance Optimization"
+    icon="gauge"
+    href="/wp5-integration/performance-optimization"
+  >
+    Maintain optimal performance
+  </Card>
+
+  <Card
+    title="Component Specifications"
+    icon="microchip"
+    href="/reference/hardware/components"
+  >
+    Reference specifications
+  </Card>
+</CardGroup>
+
+## References
+
+[1] LiPo Battery Care: https://rogershobbycenter.com/lipoguide
+[2] DC Motor Maintenance: https://www.machinedesign.com/motors-drives/article/21832047/basics-of-dc-motor-maintenance
+[3] Raspberry Pi Cooling: https://www.raspberrypi.com/documentation/computers/raspberry-pi.html#cooling

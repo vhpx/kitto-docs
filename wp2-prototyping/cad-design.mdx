@@ -1,0 +1,443 @@
+---
+title: "CAD Design Guide"
+description: "Complete guide to designing the Mecanum robot chassis and assembly in CAD software"
+---
+
+## Overview
+
+Computer-Aided Design (CAD) allows you to create accurate 3D models of your robot before building it. This saves time, money, and prevents costly mistakes during assembly.
+
+<Note>
+  **Recommended Software:** Fusion 360 (free for students) or SolidWorks (university license)
+  **Alternative:** FreeCAD (free, open-source)
+</Note>
+
+## Design Workflow
+
+<Steps>
+  <Step title="Define Requirements">
+    List all components, dimensions, and constraints from simulation and component datasheets
+  </Step>
+
+  <Step title="Sketch Base Plate">
+    Create main chassis platform with mounting holes
+  </Step>
+
+  <Step title="Add Motor Mounts">
+    Design or import motor mounting brackets
+  </Step>
+
+  <Step title="Position Components">
+    Place all electronics, sensors, battery in assembly
+  </Step>
+
+  <Step title="Check Clearances">
+    Verify no interference between parts, adequate cable routing space
+  </Step>
+
+  <Step title="Refine and Detail">
+    Add fasteners, wire management, access panels
+  </Step>
+
+  <Step title="Generate Outputs">
+    Export STL for 3D printing, create technical drawings, finalize BOM
+  </Step>
+</Steps>
+
+## Key Dimensions
+
+Based on your MATLAB simulation and component sizes:
+
+### Robot Footprint
+
+```
+Suggested dimensions (adjust for your design):
+- Wheelbase (L): 300mm (front-rear distance)
+- Track Width (W): 250mm (left-right distance)
+- Overall length: ~350mm (including wheel protrusion)
+- Overall width: ~300mm
+- Height: ~150-200mm (accommodate battery + electronics)
+```
+
+### Component Clearances
+
+- **Wheel clearance:** 5-10mm from chassis edges
+- **Motor shaft alignment:** Critical! Must be precise for Mecanum wheels
+- **Electronics spacing:** 10mm minimum between boards for airflow
+- **Battery access:** Easy removal without disassembly
+- **Cable routing:** 15-20mm channels or space
+
+## Design Guide by Component
+
+### 1. Base Chassis Plate
+
+**Material Options:**
+- **3D Printed PLA/PETG:** Quick, customizable, adequate strength
+- **Laser-cut Acrylic:**  Flat, precise, good for electronics mounting
+- **Aluminum sheet:** Strong, professional, requires machining
+
+**Design Considerations:**
+```
+Thickness: 3-5mm (3D print) or 5mm (acrylic)
+Mounting holes: M3 or M4 throughout
+Corner radius: 5-10mm (reduce stress concentration)
+Weight: Keep under 500g if possible
+```
+
+**Fusion 360 Tutorial - Base Plate:**
+```
+1. Create new component: "Base Plate"
+2. Create sketch on XY plane
+3. Draw rectangle: 300mm × 250mm
+4. Fillet corners: 10mm radius
+5. Extrude: 4mm thickness
+6. Add mounting holes using Rectangular Pattern:
+   - Hole size: 3.2mm (for M3 screws)
+   - Spacing: 20mm grid
+   - Counterbore if needed for flush fitment
+```
+
+<img
+  src="/images/cad-base-plate-example.png"
+  alt="Base chassis plate with mounting holes"
+  caption="Example base plate design with grid of M3 mounting holes"
+/>
+
+### 2. Motor Mounts
+
+**Critical Requirements:**
+- Precise hole spacing matching motor face
+- Rigid mounting (no flex during operation)
+- Proper shaft alignment (perpendicular to chassis)
+- Encoder wire routing clearance
+
+**Design Approach:**
+```
+Option A: L-bracket style
+- Vertical plate mounts to motor
+- Horizontal plate mounts to chassis
+- Simple, easy to print
+
+Option B: Integrated standoff
+- Motor face mounts flush to bracket
+- Bracket elevates motor above chassis
+- Better wire routing, cleaner look
+
+Recommended: Use Option B with 4× M3 holes matching motor
+```
+
+**Fusion 360 - Motor Mount:**
+```
+1. Measure your DC motor:
+   - Body diameter: typically 37mm
+   - Mounting hole pattern: e.g., 4× M3 on 30mm PCD
+   - Shaft position and diameter
+
+2. Create sketch with motor hole pattern
+3. Add mounting tabs to chassis (M3 holes, 40mm spacing)
+4. Extrude with adequate thickness (4-5mm walls)
+5. Add shaft clearance hole
+6. Fillet edges for strength
+```
+
+<Warning>
+  **Critical:** Motor shaft must be perfectly perpendicular to chassis! Any misalignment causes Mecanum wheel malfunction and excessive wear.
+</Warning>
+
+### 3. Wheel Assembly
+
+**Mecanum Wheel Considerations:**
+- Wheels come in pairs: Left-hand and Right-hand rollers
+- Typical sizes: 60mm, 80mm, 100mm diameter
+- Hub bore: Check your wheel's bore diameter and shaft diameter
+- Coupling: May need adapter or set-screw hub
+
+**Mounting:**
+```
+1. Motor shaft → Coupling/hub → Wheel
+2. Ensure wheel can't slide off (set screw, retaining clip)
+3. Check wheel doesn't rub chassis at full rotation
+4. Minimum 5mm clearance all around
+```
+
+**Importing Commercial Wheels:**
+Many suppliers provide CAD models (STEP or STL):
+- Check manufacturer website
+- GrabCAD library
+- Or model simplified version yourself
+
+### 4. Electronics Mounting
+
+**ESP32:**
+- Mount on standoffs (M2.5 or M3, height: 10-15mm)
+- Access to USB port for programming
+- Ventilation for heat dissipation
+
+**Motor Drivers (4× IBT-2):**
+- Can get hot! Mount with airflow
+- Short wires to motors (minimize EMI)
+- Accessible for debugging
+- Consider stacking or side-mounting
+
+**Raspberry Pi:**
+- Standard mounting: 4× M2.5 holes, 58mm × 49mm spacing
+- Access to all ports (USB, Ethernet, HDMI, GPIO)
+- microSD card accessible
+- Active cooling recommended (small fan or heatsink)
+
+**IMU (ICM-20948):**
+- Rigid mounting (no vibration)
+- Centered on robot for best results
+- I2C wire length: keep under 300mm
+
+**LiDAR (A1M8):**
+- Top-mounted, elevated above chassis
+- 360° clear view (no obstructions)
+- Stable mounting (no wobble)
+- Height: 100-150mm above ground
+
+### 5. Power System
+
+**Battery Placement:**
+- Low and centered (improve stability, CG)
+- Secured with straps or cage (prevent movement)
+- Easy access for charging/replacement
+- Consider LiPo safety bag
+
+**Power Distribution:**
+- Centralized bus or PCB for distribution
+- Fuse holders accessible
+- Clear labeling of voltages (12V, 5V, GND)
+
+## Bill of Materials (BOM)
+
+Your CAD model helps generate accurate BOM:
+
+### BOM Structure
+
+| Part Number | Description | Qty | Material/Supplier | Unit Cost | Notes |
+|-------------|-------------|-----|-------------------|-----------|-------|
+| BP-001 | Base Plate | 1 | 3D Print PLA | - | STL provided |
+| MM-001 | Motor Mount | 4 | 3D Print PETG | - | STL provided |
+| MW-001 | Mecanum Wheel 100mm | 4 | AndyMark #am-3655 | $25 | Left+Right pairs |
+| FS-M3-10 | M3×10mm Socket Head Screw | 20 | McMaster-Carr | $0.10 | Stainless |
+| FS-M3-NUT | M3 Hex Nut | 20 | McMaster-Carr | $0.05 | Stainless |
+| ... | ... | ... | ... | ... | ... |
+
+**Categories to include:**
+- Structural (chassis, mounts, standoffs)
+- Fasteners (screws, nuts, washers, spacers)
+- Electronics (see hardware BOM)
+- Wiring (cables, connectors, heat shrink)
+- Miscellaneous (velcro, zip ties, adhesive)
+
+<Tip>
+  **Spares:** Order 10-20% extra fasteners and connectors. They're cheap and you WILL drop some!
+</Tip>
+
+## Assembly Planning
+
+### Assembly Sequence
+
+Document step-by-step assembly:
+
+```
+1. Prepare base plate
+2. Install motor mounts (4×)
+3. Mount motors to brackets
+4. Attach wheels to motor shafts
+5. Install electronics standoffs
+6. Mount ESP32
+7. Mount motor drivers
+8. Mount Raspberry Pi
+9. Mount IMU
+10. Install LiDAR tower/mount
+11. Wire power distribution
+12. Connect signal wires
+13. Secure battery
+14. Cable management (zip ties)
+15. Final inspection
+```
+
+### Exploded View
+
+Create exploded assembly view in CAD:
+- Shows how parts fit together
+- Useful for documentation and assembly instructions
+- In Fusion 360: Right-click assembly → "Create Exploded View"
+
+## 3D Printing Guidelines
+
+<Warning>
+  **Reminder:** Maximum **2 prints per group**. Make them count!
+</Warning>
+
+### Pre-Print Checklist
+
+- [ ] All parts fit within printer build volume (check dimensions)
+- [ ] Wall thickness ≥ 2mm (structural parts)
+- [ ] No unsupported overhangs >45° (or add supports)
+- [ ] Mounting holes sized for post-printing (3.2mm for M3 tapping)
+- [ ] Parts oriented for optimal strength (layer direction matters!)
+- [ ] STL exported without errors
+
+### Print Settings (Recommended)
+
+```
+Material: PLA or PETG
+Layer Height: 0.2mm (good balance speed/quality)
+Infill: 20-30% (structural parts), 10-15% (cosmetic)
+Wall Thickness: 3-4 perimeters
+Top/Bottom Layers: 4-5 layers
+Supports: Only if needed (add manually in slicer)
+Brim/Raft: Use brim for better bed adhesion
+```
+
+### Post-Processing
+
+- **Cleanup:** Remove supports, clean holes with drill bit
+- **Hole tapping:** Tap M3 holes for threads (or use heat-set inserts)
+- **Surface finish:** Sand if needed (start 220 grit → 400 grit)
+- **Assembly test:** Dry-fit before final assembly
+
+## Technical Drawing
+
+Create 2D engineering drawing showing:
+
+- **Top view:** Overall dimensions, mounting hole locations
+- **Side view:** Heights, clearances
+- **Detail views:** Motor mounts, critical features
+- **Dimensions:** All key measurements
+- **Notes:** Materials, tolerances, special instructions
+
+**In Fusion 360:**
+```
+1. Create new drawing: Right-click design → "Create Drawing"
+2. Insert base view (Top, Front, Right)
+3. Add dimensions
+4. Add section views if needed
+5. Export as PDF
+```
+
+## CAD Resources
+
+### Learning Resources
+
+- **Fusion 360:**
+  - Official tutorials: https://www.autodesk.com/learning
+  - YouTube: "Product Design Online"
+  - Practice files: "Fusion 360 for Beginners"
+
+- **SolidWorks:**
+  - University tutorials (check your course portal)
+  - YouTube: "SolidWorks Tutorial for Beginners"
+
+- **FreeCAD:**
+  - Official wiki: https://wiki.freecad.org/
+  - YouTube: "Maker Tales" FreeCAD tutorials
+
+### CAD Model Libraries
+
+- **GrabCAD:** Free CAD models (motors, electronics, fasteners)
+- **McMaster-Carr:** Downloadable CAD for all hardware
+- **TraceParts:** Large library of commercial components
+- **Manufacturer websites:** Often provide STEP files
+
+### Useful Tools
+
+- **Fastener calculators:** Proper hole sizing for tapped vs clearance
+- **Tolerance calculators:** Fit types (slide, press, clearance)
+- **Stress analysis:** Fusion 360 and SolidWorks have built-in FEA
+
+## Common CAD Mistakes
+
+<AccordionGroup>
+  <Accordion title="Forgetting print orientation" icon="arrow-rotate-right">
+    **Problem:** Part designed flat won't print well in that orientation
+
+    **Fix:** Consider layer strength. Mount holes perpendicular to loads, critical features oriented for minimal supports
+  </Accordion>
+
+  <Accordion title="Too-tight tolerances" icon="arrows-left-right">
+    **Problem:** 3D prints have ±0.2mm tolerance, parts don't fit
+
+    **Fix:** Add 0.3-0.5mm clearance for sliding fits, test fit before final print
+  </Accordion>
+
+  <Accordion title="Weak thin walls" icon="stroopwafel">
+    **Problem:** 1mm walls crack under load
+
+    **Fix:** Minimum 2-3mm for structural parts, use ribs/gussets for reinforcement
+  </Accordion>
+
+  <Accordion title="No wire routing" icon="circle-exclamation">
+    **Problem:** Wires interfere with movement, look messy
+
+    **Fix:** Design channels, clips, or conduits in CAD. Plan cable paths early!
+  </Accordion>
+
+  <Accordion title="Inaccessible screws" icon="screwdriver">
+    **Problem:** Can't reach screws for assembly/disassembly
+
+    **Fix:** Check tool access (hex key, screwdriver). Add access holes or chamfers
+  </Accordion>
+</AccordionGroup>
+
+## Tips for Success
+
+<CardGroup cols={2}>
+  <Card title="Start Simple" icon="shapes">
+    Begin with basic box, add complexity gradually. Don't try perfect design first iteration.
+  </Card>
+
+  <Card title="Use Parameters" icon="sliders">
+    Parametric design lets you easily adjust dimensions (wheelbase, track width) and update entire model.
+  </Card>
+
+  <Card title="Real Measurements" icon="ruler">
+    Measure components with calipers! Datasheets sometimes have errors or tolerance ranges.
+  </Card>
+
+  <Card title="Learn from Others" icon="users">
+    Study existing Mecanum robot designs online (GrabCAD, Thingiverse, research papers).
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="PCB Design"
+    icon="microchip"
+    href="/wp2-prototyping/pcb-design"
+  >
+    Design electrical connections and wiring
+  </Card>
+  <Card
+    title="Mechanical Assembly"
+    icon="wrench"
+    href="/wp2-prototyping/mechanical-assembly"
+  >
+    Assembly guide and integration
+  </Card>
+  <Card
+    title="Hardware Specs"
+    icon="book"
+    href="/reference/hardware/motors-encoders"
+  >
+    Component dimensions for CAD modeling
+  </Card>
+  <Card
+    title="Fusion 360 Guide"
+    icon="cube"
+    href="/reference/software/fusion360-solidworks"
+  >
+    Software installation and tips
+  </Card>
+</CardGroup>
+
+## References
+
+[1] Fusion 360 Student Download: https://www.autodesk.com/education/home
+[2] GrabCAD Library: https://grabcad.com/library
+[3] McMaster-Carr (CAD models): https://www.mcmaster.com/

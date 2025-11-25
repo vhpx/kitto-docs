@@ -1,0 +1,703 @@
+---
+title: 'ROS2 Packages'
+description: 'Creating and organizing ROS2 packages for the mecanum robot project'
+icon: 'box'
+---
+
+## Overview
+
+A **ROS2 package** is the fundamental unit of software organization in ROS2. Packages contain nodes, launch files, configuration files, and other resources needed for specific robot functionality. For the mecanum robot, you'll create multiple packages to organize different subsystems.
+
+<CardGroup cols={2}>
+  <Card title="Modular Design" icon="cubes">
+    Separate packages for description, control, navigation, etc.
+  </Card>
+  <Card title="Reusability" icon="recycle">
+    Share packages across projects and with the community
+  </Card>
+</CardGroup>
+
+---
+
+## Package Structure
+
+### Typical ROS2 Python Package
+
+```
+mecanum_control/
+├── package.xml          # Package metadata and dependencies
+├── setup.py             # Python build configuration
+├── setup.cfg            # Python install configuration
+├── resource/            # Package marker file
+│   └── mecanum_control
+├── mecanum_control/     # Python source code
+│   ├── __init__.py
+│   ├── motor_controller.py
+│   ├── encoder_reader.py
+│   └── velocity_controller.py
+├── launch/              # Launch files
+│   ├── control.launch.py
+│   └── teleop.launch.py
+├── config/              # Configuration YAML files
+│   ├── motor_params.yaml
+│   └── pid_gains.yaml
+└── test/                # Unit tests
+    ├── test_motor_controller.py
+    └── test_encoder_reader.py
+```
+
+### Typical ROS2 C++ Package
+
+```
+mecanum_control_cpp/
+├── package.xml
+├── CMakeLists.txt       # C++ build configuration
+├── include/             # Header files
+│   └── mecanum_control_cpp/
+│       ├── motor_controller.hpp
+│       └── pid_controller.hpp
+├── src/                 # C++ source files
+│   ├── motor_controller.cpp
+│   ├── pid_controller.cpp
+│   └── main.cpp
+├── launch/
+│   └── control.launch.py
+└── config/
+    └── motor_params.yaml
+```
+
+---
+
+## Creating a Package
+
+### Using ros2 pkg create
+
+<Steps>
+  <Step title="Navigate to Workspace">
+    ```bash
+    cd ~/ros2_ws/src  # Or your workspace location
+    ```
+  </Step>
+
+  <Step title="Create Python Package">
+    ```bash
+    ros2 pkg create --build-type ament_python \
+      --node-name motor_controller \
+      mecanum_control
+
+    # Options:
+    # --build-type: ament_python (Python) or ament_cmake (C++)
+    # --node-name: Creates sample node file
+    # Package name: mecanum_control
+    ```
+
+    This creates the package directory with boilerplate files
+  </Step>
+
+  <Step title="Add Dependencies (Optional)">
+    ```bash
+    ros2 pkg create --build-type ament_python \
+      --dependencies rclpy geometry_msgs sensor_msgs \
+      mecanum_control
+
+    # Automatically adds dependencies to package.xml
+    ```
+  </Step>
+
+  <Step title="Build Package">
+    ```bash
+    cd ~/ros2_ws
+    colcon build --packages-select mecanum_control
+
+    # Source the workspace
+    source install/setup.bash
+    ```
+  </Step>
+
+  <Step title="Verify Package">
+    ```bash
+    ros2 pkg list | grep mecanum_control
+    # Should show: mecanum_control
+
+    ros2 run mecanum_control motor_controller
+    # Runs the sample node
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Package Metadata (package.xml)
+
+The `package.xml` file defines package information and dependencies:
+
+```xml title="package.xml"
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <!-- Package name (must match directory name) -->
+  <name>mecanum_control</name>
+  <version>1.0.0</version>
+
+  <!-- Package description -->
+  <description>Motor control package for mecanum wheel robot</description>
+
+  <!-- Maintainer info -->
+  <maintainer email="s1234567@student.rmit.edu.au">Your Name</maintainer>
+  <license>MIT</license>
+
+  <!-- Build tool -->
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <!-- Runtime dependencies -->
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+
+  <!-- Test dependencies -->
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
+```
+
+**Dependency types:**
+- `<buildtool_depend>`: Build tools (ament_python, ament_cmake)
+- `<build_depend>`: Needed to build package (compile-time)
+- `<exec_depend>`: Needed to run package (runtime)
+- `<test_depend>`: Needed for testing only
+- `<depend>`: Needed for both build and runtime (shorthand)
+
+---
+
+## Setup Files
+
+### setup.py (Python Packages)
+
+```python title="setup.py"
+from setuptools import setup
+import os
+from glob import glob
+
+package_name = 'mecanum_control'
+
+setup(
+    name=package_name,
+    version='1.0.0',
+    packages=[package_name],
+    data_files=[
+        # Install package marker
+        ('share/ament_index/resource_index/packages',
+            ['resource/' + package_name]),
+
+        # Install package.xml
+        ('share/' + package_name, ['package.xml']),
+
+        # Install launch files
+        (os.path.join('share', package_name, 'launch'),
+            glob('launch/*.launch.py')),
+
+        # Install config files
+        (os.path.join('share', package_name, 'config'),
+            glob('config/*.yaml')),
+    ],
+    install_requires=['setuptools'],
+    zip_safe=True,
+    maintainer='Your Name',
+    maintainer_email='s1234567@student.rmit.edu.au',
+    description='Motor control for mecanum robot',
+    license='MIT',
+    tests_require=['pytest'],
+    entry_points={
+        'console_scripts': [
+            # Executable name = package.module:function
+            'motor_controller = mecanum_control.motor_controller:main',
+            'encoder_reader = mecanum_control.encoder_reader:main',
+            'velocity_controller = mecanum_control.velocity_controller:main',
+        ],
+    },
+)
+```
+
+**Key sections:**
+- `packages`: Python modules to install
+- `data_files`: Non-Python files (launch, config, URDF)
+- `entry_points`: Executable nodes that can be run with `ros2 run`
+
+### setup.cfg (Python Packages)
+
+```ini title="setup.cfg"
+[develop]
+script_dir=$base/lib/mecanum_control
+
+[install]
+install_scripts=$base/lib/mecanum_control
+```
+
+This tells setuptools where to install executables.
+
+---
+
+## Mecanum Robot Package Organization
+
+### Recommended Package Structure
+
+```
+~/ros2_ws/src/
+├── mecanum_description/         # URDF, meshes, robot model
+│   ├── urdf/
+│   │   ├── mecanum_robot.urdf.xacro
+│   │   ├── mecanum_wheels.xacro
+│   │   └── sensors.xacro
+│   ├── meshes/
+│   │   ├── chassis.stl
+│   │   └── wheel.stl
+│   └── launch/
+│       └── display.launch.py
+│
+├── mecanum_control/             # Motor control and hardware interface
+│   ├── mecanum_control/
+│   │   ├── motor_controller.py
+│   │   ├── encoder_reader.py
+│   │   └── hardware_interface.py
+│   ├── config/
+│   │   ├── mecanum_controllers.yaml
+│   │   └── pid_gains.yaml
+│   └── launch/
+│       └── control.launch.py
+│
+├── mecanum_localization/        # EKF, odometry, IMU fusion
+│   ├── config/
+│   │   └── ekf.yaml
+│   └── launch/
+│       └── localization.launch.py
+│
+├── mecanum_navigation/          # Nav2 configuration
+│   ├── config/
+│   │   ├── nav2_params.yaml
+│   │   ├── costmap_common.yaml
+│   │   └── planner_params.yaml
+│   ├── maps/
+│   │   ├── lab_map.yaml
+│   │   └── lab_map.pgm
+│   └── launch/
+│       ├── navigation.launch.py
+│       └── slam.launch.py
+│
+└── mecanum_bringup/             # Top-level launch files
+    └── launch/
+        ├── robot.launch.py       # Launch all systems
+        ├── simulation.launch.py  # Gazebo simulation
+        └── real_robot.launch.py  # Hardware robot
+```
+
+**Package purposes:**
+- **mecanum_description:** Robot physical model (URDF, meshes)
+- **mecanum_control:** Low-level motor control
+- **mecanum_localization:** Sensor fusion and odometry
+- **mecanum_navigation:** Autonomous navigation configuration
+- **mecanum_bringup:** Master launch files to start entire system
+
+---
+
+## Creating a Custom Node
+
+### Example: Motor Controller Node
+
+<Steps>
+  <Step title="Create Python File">
+    ```bash
+    touch ~/ros2_ws/src/mecanum_control/mecanum_control/motor_controller.py
+    chmod +x ~/ros2_ws/src/mecanum_control/mecanum_control/motor_controller.py
+    ```
+  </Step>
+
+  <Step title="Write Node Code">
+    ```python title="motor_controller.py"
+    #!/usr/bin/env python3
+    import rclpy
+    from rclpy.node import Node
+    from geometry_msgs.msg import Twist
+    from std_msgs.msg import Float32MultiArray
+
+    class MotorController(Node):
+        def __init__(self):
+            super().__init__('motor_controller')
+
+            # Subscribe to velocity commands
+            self.cmd_vel_sub = self.create_subscription(
+                Twist,
+                '/cmd_vel',
+                self.cmd_vel_callback,
+                10
+            )
+
+            # Publish motor speeds to ESP32
+            self.motor_pub = self.create_publisher(
+                Float32MultiArray,
+                '/motor_speeds',
+                10
+            )
+
+            # Robot parameters
+            self.wheel_radius = 0.05  # meters
+            self.wheelbase = 0.20     # meters
+
+            self.get_logger().info('Motor controller started')
+
+        def cmd_vel_callback(self, msg):
+            # Extract velocity components
+            vx = msg.linear.x
+            vy = msg.linear.y
+            omega = msg.angular.z
+
+            # Inverse kinematics for mecanum wheels
+            wheel_speeds = self.inverse_kinematics(vx, vy, omega)
+
+            # Publish to ESP32
+            motor_msg = Float32MultiArray()
+            motor_msg.data = wheel_speeds
+            self.motor_pub.publish(motor_msg)
+
+            self.get_logger().debug(
+                f'Speeds: FL={wheel_speeds[0]:.2f} FR={wheel_speeds[1]:.2f} '
+                f'RL={wheel_speeds[2]:.2f} RR={wheel_speeds[3]:.2f}'
+            )
+
+        def inverse_kinematics(self, vx, vy, omega):
+            # Mecanum wheel inverse kinematics
+            r = self.wheel_radius
+            l = self.wheelbase / 2
+
+            w_fl = (1/r) * (vx - vy - l * omega)
+            w_fr = (1/r) * (vx + vy + l * omega)
+            w_rl = (1/r) * (vx + vy - l * omega)
+            w_rr = (1/r) * (vx - vy + l * omega)
+
+            return [w_fl, w_fr, w_rl, w_rr]
+
+    def main(args=None):
+        rclpy.init(args=args)
+        node = MotorController()
+
+        try:
+            rclpy.spin(node)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            node.destroy_node()
+            rclpy.shutdown()
+
+    if __name__ == '__main__':
+        main()
+    ```
+  </Step>
+
+  <Step title="Register Node in setup.py">
+    ```python title="setup.py"
+    entry_points={
+        'console_scripts': [
+            'motor_controller = mecanum_control.motor_controller:main',
+        ],
+    },
+    ```
+  </Step>
+
+  <Step title="Build and Run">
+    ```bash
+    cd ~/ros2_ws
+    colcon build --packages-select mecanum_control
+    source install/setup.bash
+
+    # Run the node
+    ros2 run mecanum_control motor_controller
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Building Packages
+
+### colcon Build System
+
+```bash
+# Build all packages in workspace
+cd ~/ros2_ws
+colcon build
+
+# Build specific package
+colcon build --packages-select mecanum_control
+
+# Build with verbose output
+colcon build --event-handlers console_direct+
+
+# Build in parallel (faster)
+colcon build --parallel-workers 4
+
+# Clean build
+rm -rf build/ install/ log/
+colcon build
+```
+
+### After Building
+
+```bash
+# Source the workspace (required after every build)
+source ~/ros2_ws/install/setup.bash
+
+# Add to ~/.bashrc for automatic sourcing
+echo "source ~/ros2_ws/install/setup.bash" >> ~/.bashrc
+```
+
+<Warning>
+If you modify `setup.py`, `package.xml`, or add new files, you **must rebuild**:
+
+```bash
+colcon build --packages-select mecanum_control
+source install/setup.bash
+```
+</Warning>
+
+---
+
+## Package Dependencies
+
+### Adding Dependencies
+
+<Tabs>
+  <Tab title="Runtime Dependencies">
+    Edit `package.xml`:
+
+    ```xml
+    <exec_depend>geometry_msgs</exec_depend>
+    <exec_depend>sensor_msgs</exec_depend>
+    <exec_depend>nav2_msgs</exec_depend>
+    ```
+
+    No rebuild needed for pure runtime dependencies
+  </Tab>
+
+  <Tab title="Python Import Dependencies">
+    Edit `package.xml` and `setup.py`:
+
+    ```xml title="package.xml"
+    <exec_depend>rclpy</exec_depend>
+    <exec_depend>numpy</exec_depend>
+    ```
+
+    ```python title="setup.py"
+    install_requires=['setuptools', 'numpy'],
+    ```
+  </Tab>
+
+  <Tab title="System Dependencies">
+    Install via apt (not in package.xml):
+
+    ```bash
+    sudo apt install python3-numpy python3-scipy
+    ```
+
+    Document in README.md for users
+  </Tab>
+</Tabs>
+
+### Checking Dependencies
+
+```bash
+# Show package dependencies
+ros2 pkg xml mecanum_control
+
+# Check if all dependencies are installed
+rosdep install --from-paths src --ignore-src -r -y
+```
+
+---
+
+## Package Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Naming Conventions" icon="tag">
+    - Use lowercase with underscores: `mecanum_control`
+    - Descriptive names: `mecanum_navigation` not `nav`
+    - Suffix purpose: `_description`, `_control`, `_bringup`
+    - Avoid generic names: `robot`, `control`, `utils`
+  </Card>
+
+  <Card title="Package Scope" icon="crosshairs">
+    - One package = one logical subsystem
+    - Keep packages focused and cohesive
+    - Separate configuration from code
+    - Group related launch files together
+  </Card>
+
+  <Card title="Documentation" icon="book">
+    - Add README.md to each package
+    - Document dependencies and usage
+    - Include example launch commands
+    - Explain configuration parameters
+  </Card>
+
+  <Card title="Version Control" icon="git-alt">
+    - `.gitignore` build artifacts:
+      ```
+      build/
+      install/
+      log/
+      ```
+    - Commit package.xml and setup.py
+    - Tag releases (v1.0.0, v2.0.0)
+  </Card>
+</CardGroup>
+
+---
+
+## Workspace Overlays
+
+ROS2 supports **workspace overlays** for extending functionality:
+
+```bash
+# Base ROS2 installation
+/opt/ros/jazzy/
+
+# Your workspace (overlays base)
+~/ros2_ws/
+
+# Sourcing order matters!
+source /opt/ros/jazzy/setup.bash     # First: base ROS2
+source ~/ros2_ws/install/setup.bash  # Second: your packages
+
+# Packages in ~/ros2_ws/ override /opt/ros/jazzy/
+```
+
+**Use case:** Modify standard packages (e.g., custom Nav2 parameters)
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Package not found after building">
+    **Symptoms:** `Package 'mecanum_control' not found`
+
+    **Solutions:**
+    1. Re-source workspace:
+       ```bash
+       source ~/ros2_ws/install/setup.bash
+       ```
+
+    2. Verify package built successfully:
+       ```bash
+       ls ~/ros2_ws/install/mecanum_control/
+       ```
+
+    3. Check package name matches directory:
+       ```bash
+       # In package.xml and directory name
+       <name>mecanum_control</name>
+       ```
+  </Accordion>
+
+  <Accordion title="Node executable not found">
+    **Symptoms:** `Executable 'motor_controller' not found`
+
+    **Solutions:**
+    1. Verify `entry_points` in `setup.py`:
+       ```python
+       entry_points={
+           'console_scripts': [
+               'motor_controller = mecanum_control.motor_controller:main',
+           ],
+       },
+       ```
+
+    2. Rebuild package:
+       ```bash
+       colcon build --packages-select mecanum_control --symlink-install
+       source install/setup.bash
+       ```
+
+    3. Check Python file has `main()` function:
+       ```python
+       def main(args=None):
+           # ...
+       ```
+  </Accordion>
+
+  <Accordion title="Import errors in Python nodes">
+    **Symptoms:** `ModuleNotFoundError: No module named 'numpy'`
+
+    **Solutions:**
+    1. Add dependency to `package.xml`:
+       ```xml
+       <exec_depend>python3-numpy</exec_depend>
+       ```
+
+    2. Install system dependency:
+       ```bash
+       sudo apt install python3-numpy
+       ```
+
+    3. Use rosdep to install all dependencies:
+       ```bash
+       rosdep install --from-paths src --ignore-src -r -y
+       ```
+  </Accordion>
+
+  <Accordion title="Changes not reflected after rebuild">
+    **Solutions:**
+    1. Always re-source after building:
+       ```bash
+       source install/setup.bash
+       ```
+
+    2. Use `--symlink-install` for faster iteration:
+       ```bash
+       colcon build --symlink-install
+       # Python changes don't require rebuild (only new files do)
+       ```
+
+    3. For C++ or setup.py changes, clean build:
+       ```bash
+       rm -rf build/ install/
+       colcon build
+       ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Launch Files" icon="rocket" href="/reference/ros2/launch-files">
+    Start multiple nodes with a single command
+  </Card>
+
+  <Card title="Parameters" icon="sliders" href="/wp4-ros2/setup/ros2-basics">
+    Configure nodes with YAML parameter files
+  </Card>
+
+  <Card title="Custom Messages" icon="envelope">
+    Create custom ROS2 message types (advanced)
+  </Card>
+
+  <Card title="Testing" icon="vial">
+    Write unit tests for ROS2 nodes (pytest)
+  </Card>
+</CardGroup>
+
+---
+
+## References
+
+- [ROS2 Packages](https://docs.ros.org/en/jazzy/Tutorials/Beginner-Client-Libraries/Creating-Your-First-ROS2-Package.html)
+- [ament_python Documentation](https://docs.ros.org/en/jazzy/How-To-Guides/Ament-CMake-Python-Documentation.html)
+- [colcon Documentation](https://colcon.readthedocs.io/)
+- [ROS2 Package Structure](https://docs.ros.org/en/jazzy/Tutorials/Beginner-Client-Libraries/Creating-A-Workspace/Creating-A-Workspace.html)

@@ -1,0 +1,624 @@
+---
+title: "SLAM Toolbox"
+description: "Create maps using SLAM Toolbox for autonomous navigation"
+---
+
+## Overview
+
+**SLAM** (Simultaneous Localization and Mapping) builds a map while simultaneously tracking robot position within that map. SLAM Toolbox is the recommended SLAM solution for ROS2.
+
+<Note>
+  **Why SLAM?** Corrects odometry drift using map landmarks. Essential for long-term autonomous operation.
+</Note>
+
+## SLAM Toolbox Features
+
+<CardGroup cols={2}>
+  <Card title="Mapping Modes" icon="map">
+    - **Synchronous:** Real-time mapping
+    - **Asynchronous:** Offline processing
+    - **Localization:** Localize in existing map
+  </Card>
+
+  <Card title="Loop Closure" icon="rotate">
+    Detects when robot returns to known location, corrects accumulated drift.
+  </Card>
+
+  <Card title="Lifelong Mapping" icon="infinity">
+    Update map over multiple sessions, handle dynamic environments.
+  </Card>
+
+  <Card title="Map Serialization" icon="floppy-disk">
+    Save/load maps in multiple formats (PGM, serialized pose graph).
+  </Card>
+</CardGroup>
+
+## Installation
+
+```bash
+# Install SLAM Toolbox
+sudo apt install ros-jazzy-slam-toolbox
+```
+
+## Configuration
+
+### Configuration File
+
+**File:** `config/slam_toolbox.yaml`
+
+```yaml
+slam_toolbox:
+  ros__parameters:
+    # Plugin params
+    solver_plugin: solver_plugins::CeresSolver
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: SCHUR_JACOBI
+    ceres_trust_strategy: LEVENBERG_MARQUARDT
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+    ceres_loss_function: None
+
+    # ROS Parameters
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_link
+    scan_topic: /scan
+    mode: mapping  # mapping, localization
+
+    # if you'd like to immediately start continuing a map at a given pose
+    # or at the dock, but they are mutually exclusive, if pose is given
+    # will use pose
+    #map_file_name: /path/to/my_map
+    #map_start_pose: [0.0, 0.0, 0.0]
+    #map_start_at_dock: true
+
+    debug_logging: false
+    throttle_scans: 1
+    transform_publish_period: 0.02  # 50Hz (matches control loop)
+    map_update_interval: 5.0        # Update map every 5 seconds
+    resolution: 0.05                # 5cm per pixel
+    max_laser_range: 12.0           # RPLIDAR A1M8 max: 12m
+    minimum_time_interval: 0.5      # Min time between scans
+    transform_timeout: 0.2
+    tf_buffer_duration: 30.0
+    stack_size_to_use: 40000000  # program needs a larger stack size to serialize large maps
+
+    # General Parameters
+    use_scan_matching: true
+    use_scan_barycenter: true
+    minimum_travel_distance: 0.2    # Move 20cm before adding scan
+    minimum_travel_heading: 0.2     # Rotate 0.2rad (~11°) before adding scan
+    scan_buffer_size: 10
+    scan_buffer_maximum_scan_distance: 10.0
+    link_match_minimum_response_fine: 0.1
+    link_scan_maximum_distance: 1.5
+    loop_search_maximum_distance: 3.0
+    do_loop_closing: true           # Enable loop closure
+    loop_match_minimum_chain_size: 10
+    loop_match_maximum_variance_coarse: 3.0
+    loop_match_minimum_response_coarse: 0.35
+    loop_match_minimum_response_fine: 0.45
+
+    # Correlation Parameters - Correlation Parameters
+    correlation_search_space_dimension: 0.5
+    correlation_search_space_resolution: 0.01
+    correlation_search_space_smear_deviation: 0.1
+
+    # Loop Closure Parameters
+    loop_search_space_dimension: 8.0
+    loop_search_space_resolution: 0.05
+    loop_search_space_smear_deviation: 0.03
+
+    # Scan Matcher Parameters
+    distance_variance_penalty: 0.5
+    angle_variance_penalty: 1.0
+
+    fine_search_angle_offset: 0.00349
+    coarse_search_angle_offset: 0.349
+    coarse_angle_resolution: 0.0349
+    minimum_angle_penalty: 0.9
+    minimum_distance_penalty: 0.5
+    use_response_expansion: true
+```
+
+### Launch File
+
+**File:** `launch/slam.launch.py`
+
+```python
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition, UnlessCondition
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch_ros.actions import Node
+from launch_ros.substitutions import FindPackageShare
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+
+def generate_launch_description():
+    # Paths
+    pkg_share = FindPackageShare('mecanum_description').find('mecanum_description')
+    slam_params = PathJoinSubstitution([pkg_share, 'config', 'slam_toolbox.yaml'])
+
+    # Arguments
+    use_sim_time = LaunchConfiguration('use_sim_time')
+    slam_params_file = LaunchConfiguration('slam_params_file')
+
+    declare_use_sim_time_argument = DeclareLaunchArgument(
+        'use_sim_time',
+        default_value='false',
+        description='Use simulation/Gazebo clock')
+
+    declare_slam_params_file_cmd = DeclareLaunchArgument(
+        'slam_params_file',
+        default_value=slam_params,
+        description='Full path to slam_toolbox config file')
+
+    # Start SLAM Toolbox (Synchronous mode)
+    start_sync_slam_toolbox_node = Node(
+        package='slam_toolbox',
+        executable='sync_slam_toolbox_node',
+        name='slam_toolbox',
+        output='screen',
+        parameters=[
+            slam_params_file,
+            {'use_sim_time': use_sim_time}
+        ],
+    )
+
+    # Alternatively: Asynchronous mode (better for slower computers)
+    start_async_slam_toolbox_node = Node(
+        package='slam_toolbox',
+        executable='async_slam_toolbox_node',
+        name='slam_toolbox',
+        output='screen',
+        parameters=[
+            slam_params_file,
+            {'use_sim_time': use_sim_time}
+        ],
+        condition=UnlessCondition(LaunchConfiguration('use_sync', default='true'))
+    )
+
+    ld = LaunchDescription()
+
+    ld.add_action(declare_use_sim_time_argument)
+    ld.add_action(declare_slam_params_file_cmd)
+    ld.add_action(start_sync_slam_toolbox_node)
+    # ld.add_action(start_async_slam_toolbox_node)  # Uncomment for async mode
+
+    return ld
+```
+
+## Complete System Launch
+
+**File:** `launch/robot_slam.launch.py`
+
+```python
+from launch import LaunchDescription
+from launch.actions import IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import PathJoinSubstitution
+from launch_ros.substitutions import FindPackageShare
+
+def generate_launch_description():
+    # Include robot control (motors, odometry, EKF)
+    robot_control = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('mecanum_description'),
+                'launch',
+                'robot_full.launch.py'  # Control + Localization
+            ])
+        ])
+    )
+
+    # Include LiDAR
+    lidar = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('mecanum_description'),
+                'launch',
+                'lidar.launch.py'
+            ])
+        ])
+    )
+
+    # Include SLAM
+    slam = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('mecanum_description'),
+                'launch',
+                'slam.launch.py'
+            ])
+        ])
+    )
+
+    return LaunchDescription([
+        robot_control,
+        lidar,
+        slam,
+    ])
+```
+
+**Usage:**
+```bash
+ros2 launch mecanum_description robot_slam.launch.py
+```
+
+## Mapping Procedure
+
+<Steps>
+  <Step title="Launch System">
+    ```bash
+    ros2 launch mecanum_description robot_slam.launch.py
+    ```
+
+    **Check nodes running:**
+    ```bash
+    ros2 node list
+    # Should see /slam_toolbox
+    ```
+  </Step>
+
+  <Step title="Launch RViz">
+    ```bash
+    rviz2
+    ```
+
+    **Configure RViz:**
+    1. Fixed Frame: `map`
+    2. Add displays:
+       - **Map:** Topic `/map`
+       - **LaserScan:** Topic `/scan`
+       - **RobotModel:** Shows robot
+       - **TF:** Shows coordinate frames
+       - **Odometry:** Topics `/odometry/filtered` (green), `/mecanum_drive_controller/odom` (red)
+  </Step>
+
+  <Step title="Drive Robot">
+    **Terminal:**
+    ```bash
+    ros2 run teleop_twist_keyboard teleop_twist_keyboard
+    ```
+
+    **Mapping tips:**
+    - **Slow speed:** 0.3 m/s max (more accurate scans)
+    - **Overlap scans:** Revisit areas for loop closure
+    - **Cover all areas:** Drive through entire environment
+    - **Avoid open spaces:** LiDAR needs features (walls, objects)
+  </Step>
+
+  <Step title="Monitor Map Quality">
+    **In RViz, watch for:**
+    - Map building in real-time (gray = unknown, white = free, black = obstacle)
+    - Loop closure events (map suddenly adjusts when revisiting area)
+    - No major drift (robot model stays aligned with map)
+
+    **Good map indicators:**
+    - Walls are straight, continuous lines
+    - Rooms are closed shapes
+    - Features align when revisited
+  </Step>
+
+  <Step title="Save Map">
+    **Once satisfied with map:**
+
+    **Method 1: RViz Panel**
+    - Panels → SlamToolboxPlugin
+    - Click "Serialize Map"
+    - Save to: `~/maps/my_map.posegraph`
+
+    **Method 2: Service call**
+    ```bash
+    ros2 service call /slam_toolbox/serialize_map slam_toolbox/srv/SerializePoseGraph "{filename: '/home/user/maps/my_map'}"
+    ```
+
+    **Also save occupancy grid (for Nav2):**
+    ```bash
+    ros2 run nav2_map_server map_saver_cli -f ~/maps/my_map
+    ```
+    Creates:
+    - `my_map.pgm` (image)
+    - `my_map.yaml` (metadata)
+  </Step>
+</Steps>
+
+## RViz Configuration
+
+**Save RViz config for mapping:**
+
+1. Configure all displays as above
+2. Add **SlamToolboxPlugin** panel:
+   - Panels → Add New Panel → SlamToolboxPlugin
+3. Save config: File → Save Config As → `rviz/slam.rviz`
+
+**Launch with config:**
+```python
+Node(
+    package='rviz2',
+    executable='rviz2',
+    arguments=['-d', PathJoinSubstitution([pkg_share, 'rviz', 'slam.rviz'])]
+)
+```
+
+## Understanding SLAM Toolbox
+
+### TF Frames
+
+**Before SLAM:**
+```
+odom → base_link  (from EKF)
+```
+
+**With SLAM:**
+```
+map → odom → base_link
+```
+
+- `map → odom`: Corrects long-term drift (published by SLAM Toolbox)
+- `odom → base_link`: Local smooth motion (published by EKF)
+
+### Loop Closure
+
+**What is loop closure?**
+- Robot returns to previously mapped area
+- SLAM recognizes location (scan matching)
+- Corrects accumulated drift by adjusting `map → odom` transform
+
+**Example:**
+1. Robot drives in circle (odometry drifts 30cm)
+2. Returns to start
+3. SLAM recognizes starting area (loop closure!)
+4. Adjusts map to close the loop (drift corrected)
+
+<img
+  src="/images/loop-closure.png"
+  alt="Loop closure correcting odometry drift"
+  caption="Before loop closure (left): drift visible. After (right): loop closed, drift corrected"
+/>
+
+### Occupancy Grid
+
+**Map representation:**
+- **Grid:** 2D array of cells
+- **Cell value:**
+  - 0: Free space (white)
+  - 100: Occupied (black)
+  - -1: Unknown (gray)
+
+**Resolution:** 5cm/pixel (default)
+
+**Size:** Grows dynamically as robot explores
+
+## Tuning SLAM Toolbox
+
+### Scan Matching Sensitivity
+
+```yaml
+# How far robot must move before adding scan to map
+minimum_travel_distance: 0.2    # meters (default)
+minimum_travel_heading: 0.2     # radians (~11°)
+```
+
+**Lower values:**
+- More scans added → denser map
+- Slower processing, larger map file
+
+**Higher values:**
+- Fewer scans → faster, smaller map
+- Might miss small features
+
+### Loop Closure Threshold
+
+```yaml
+loop_match_minimum_response_fine: 0.45  # 0.0-1.0
+
+# Higher = stricter (fewer false loop closures)
+# Lower = lenient (more loop closures, risk of false positives)
+```
+
+**Tuning:**
+- Start with 0.45 (default)
+- If false loop closures (map distorts) → Increase to 0.5-0.55
+- If no loop closures (drift accumulates) → Decrease to 0.4
+
+### Max Laser Range
+
+```yaml
+max_laser_range: 12.0  # meters
+```
+
+- RPLIDAR A1M8 max: 12m
+- If noisy at max range → Reduce to 10m
+- Shorter range = more reliable scans
+
+## Mapping Strategies
+
+### Grid Exploration
+
+<img
+  src="/images/mapping-strategy-grid.png"
+  alt="Grid mapping pattern"
+  caption="Systematic grid coverage ensures complete mapping"
+/>
+
+**Pattern:**
+1. Start at one corner
+2. Drive straight rows (like mowing lawn)
+3. Turn at ends, overlap previous rows
+4. Revisit starting area for loop closure
+
+**Pros:** Complete coverage
+**Cons:** Slow, tedious
+
+### Perimeter First
+
+1. Drive around perimeter (walls)
+2. Then fill interior
+3. Creates outer boundary first (good reference)
+
+**Pros:** Fast initial map
+**Cons:** Interior might have gaps
+
+### Spiral Out
+
+1. Start at center
+2. Spiral outward
+3. Natural loop closure as spiral completes
+
+**Pros:** Continuous loop closure
+**Cons:** Requires open center
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="No map appearing in RViz" icon="map">
+    **Debug:**
+    1. Check `/map` topic published:
+       ```bash
+       ros2 topic echo /map --once
+       ```
+
+    2. Check SLAM Toolbox node running:
+       ```bash
+       ros2 node list
+       # Should see /slam_toolbox
+       ```
+
+    3. Check LiDAR data:
+       ```bash
+       ros2 topic echo /scan
+       # Should see LaserScan messages
+       ```
+
+    4. Check Fixed Frame in RViz: Must be `map`
+  </Accordion>
+
+  <Accordion title="Map drifts / distorts" icon="wave-sine">
+    **Causes:**
+    - Poor odometry (calibrate wheels)
+    - Too fast motion (scans blur)
+    - False loop closures
+
+    **Solutions:**
+    - Improve odometry calibration
+    - Reduce robot speed during mapping
+    - Increase `loop_match_minimum_response_fine`
+  </Accordion>
+
+  <Accordion title="No loop closure detected" icon="circle-xmark">
+    **Symptoms:** Drift accumulates, map doesn't correct
+
+    **Causes:**
+    - Threshold too high
+    - Environment too similar (featureless)
+    - Not enough overlap when revisiting
+
+    **Solutions:**
+    - Decrease `loop_match_minimum_response_fine` to 0.4
+    - Drive slower for better scans
+    - Revisit areas directly (exact path overlap)
+  </Accordion>
+
+  <Accordion title="SLAM node crashes" icon="explosion">
+    **Causes:**
+    - Insufficient memory
+    - Large map size
+    - Corrupted scan data
+
+    **Solutions:**
+    - Increase `stack_size_to_use`
+    - Use async mode instead of sync
+    - Check LiDAR for bad scans (range errors)
+  </Accordion>
+
+  <Accordion title="Map quality poor (fuzzy walls)" icon="eye-low-vision">
+    **Causes:**
+    - Robot moving too fast
+    - Vibration during scanning
+    - LiDAR mounting unstable
+
+    **Solutions:**
+    - Reduce mapping speed (&lt;0.3 m/s)
+    - Ensure LiDAR rigidly mounted
+    - Check for wheel wobble
+  </Accordion>
+</AccordionGroup>
+
+## Localization in Existing Map
+
+Once map created, switch to **localization mode**:
+
+### Localization Config
+
+**File:** `config/slam_toolbox_localization.yaml`
+
+```yaml
+slam_toolbox:
+  ros__parameters:
+    mode: localization  # Changed from mapping
+
+    # Provide existing map
+    map_file_name: /home/user/maps/my_map.posegraph
+    map_start_at_dock: true
+
+    # Rest same as mapping config
+    # ...
+```
+
+### Localization Launch
+
+```python
+Node(
+    package='slam_toolbox',
+    executable='localization_slam_toolbox_node',
+    name='slam_toolbox',
+    parameters=[localization_params],
+)
+```
+
+**Usage:**
+- Map is loaded (not built)
+- Robot localizes itself within map
+- `map → odom` updated for continuous correction
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Map Server"
+    icon="server"
+    href="/wp4-ros2/mapping/map-server"
+  >
+    Save and load maps for navigation
+  </Card>
+
+  <Card
+    title="Cartographer"
+    icon="map-location-dot"
+    href="/wp4-ros2/mapping/cartographer"
+  >
+    Alternative SLAM solution (Google Cartographer)
+  </Card>
+
+  <Card
+    title="Navigation"
+    icon="route"
+    href="/wp4-ros2/navigation/nav2-intro"
+  >
+    Use map for autonomous path planning
+  </Card>
+
+  <Card
+    title="LiDAR Setup"
+    icon="radar"
+    href="/wp4-ros2/sensors/lidar-setup"
+  >
+    Configure RPLIDAR for optimal performance
+  </Card>
+</CardGroup>
+
+## References
+
+[1] SLAM Toolbox: https://github.com/SteveMacenski/slam_toolbox
+[2] SLAM Toolbox Docs: https://slam-toolbox.readthedocs.io/
+[3] ROS2 SLAM Tutorial: https://docs.ros.org/en/jazzy/Tutorials/Advanced/SLAM.html

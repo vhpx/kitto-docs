@@ -1,0 +1,579 @@
+---
+title: "DC Motor Specifications"
+description: "Complete specifications and wiring for JGA25-370 DC motors with encoders"
+---
+
+## Overview
+
+The robot uses **four DC geared motors with quadrature encoders**. The recommended motor is the **JGA25-370 12V 333RPM** with built-in Hall-effect encoder, providing good balance of speed, torque, and position feedback.
+
+<Note>
+  **Key Features:** 12V operation, 333 RPM no-load speed, 1:19 gearbox ratio, 209 PPR encoder output, affordable ($15-20 each).
+</Note>
+
+## Motor Specifications
+
+### JGA25-370 (Recommended)
+
+**Base motor: RS-370 series brushed DC motor**
+
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| **Rated Voltage** | 12V DC | Matches 3S LiPo (11.1V nominal) |
+| **Operating Voltage** | 6-12V | Lower voltage = lower speed/torque |
+| **No-Load Speed** | 333 RPM | At gearbox output shaft |
+| **No-Load Current** | 80-150 mA | Depends on voltage |
+| **Rated Speed** | 250-280 RPM | Under nominal load |
+| **Rated Torque** | 0.6-0.8 Nm | At rated speed |
+| **Stall Torque** | 0.8-1.0 Nm | Maximum torque (don't sustain!) |
+| **Stall Current** | 2-3A | Dangerous if sustained >1 second |
+| **Gearbox Ratio** | 1:19 | 19:1 reduction |
+| **Motor Diameter** | 25mm | JGA25 series |
+| **Motor Length** | 37mm | Body only |
+| **Total Length** | 70mm | Including gearbox |
+| **Shaft Diameter** | 4mm or 6mm | Match to wheel bore |
+| **Shaft Length** | 10-15mm | Protruding from gearbox |
+| **Weight** | ~100g | Per motor |
+
+### Encoder Specifications
+
+**Hall-effect quadrature encoder** (built-in):
+
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| **Type** | Hall-effect | Non-contact, reliable |
+| **Channels** | 2 (A, B) | Quadrature encoding |
+| **PPR (motor shaft)** | 11 pulses per revolution | At motor shaft (before gearbox) |
+| **PPR (output shaft)** | 209 pulses per revolution | 11 × 19 (gearbox ratio) |
+| **Voltage** | 5V | Requires 5V supply |
+| **Current** | ~10 mA | Low power |
+| **Output** | Digital (HIGH/LOW) | 0V/5V logic levels |
+| **Cable** | 6-wire | 2× motor power, 3× encoder (VCC, A, B, GND) |
+
+**Resolution calculation:**
+```
+Full resolution = 4 × PPR = 4 × 209 = 836 counts per revolution
+(4× from quadrature decoding: both edges of both channels)
+```
+
+**Position accuracy:**
+```
+Angular resolution = 360° / 836 = 0.43° per count
+Linear resolution (60mm wheel) = π × 0.06 / 836 = 0.225 mm per count
+```
+
+## Motor Performance Curves
+
+### Speed vs. Torque
+
+**At 12V:**
+
+```
+Torque (Nm)    Speed (RPM)    Current (A)
+0.0            333 (no-load)  0.15
+0.2            300            0.5
+0.4            270            0.8
+0.6            240            1.2
+0.8 (rated)    210            1.5
+1.0 (stall)    0              2.5-3.0
+```
+
+**Key points:**
+- Speed drops linearly with load
+- At stall (0 RPM): Maximum torque but dangerous current
+- Operating range: 0.2-0.6 Nm for efficiency
+
+### Efficiency vs. Load
+
+| Torque (Nm) | Efficiency | Notes |
+|-------------|-----------|-------|
+| 0.1 | 40% | Light load, wasted energy |
+| 0.3 | 70% | Good efficiency |
+| 0.5 | 75% | Peak efficiency |
+| 0.7 | 70% | Starting to drop |
+| 1.0 | 0% | Stall (no output, all heat) |
+
+**Optimal operating point:** 0.4-0.6 Nm (~60-70% rated torque)
+
+## Wiring Diagram
+
+### Motor + Encoder Connections
+
+**6-wire cable:**
+
+| Wire Color | Function | Connection |
+|------------|----------|------------|
+| **Red** | Motor + | To H-bridge OUT1 |
+| **Black** | Motor - | To H-bridge OUT2 |
+| **Yellow** | Encoder VCC | To 5V (ESP32 VIN or buck converter) |
+| **Green** | Encoder A | To ESP32 GPIO (e.g., 34) |
+| **Blue** | Encoder B | To ESP32 GPIO (e.g., 35) |
+| **White** | Encoder GND | To GND |
+
+<Warning>
+  **Voltage Levels:**
+  - **Motor:** 12V (from main battery via H-bridge)
+  - **Encoder:** 5V (separate 5V rail, NOT 12V!)
+
+  Connecting encoder to 12V will destroy it!
+</Warning>
+
+### Complete Motor Wiring (4 motors)
+
+```
+                    ESP32 (3.3V/5V)
+                          │
+           ┌──────────────┼──────────────┐
+           │              │              │
+    Motor FL          Motor FR      Motor RL, RR...
+           │              │              │
+     ┌─────┴─────┐  ┌─────┴─────┐
+     │   Encoder │  │   Encoder │
+     │           │  │           │
+     │ VCC  5V ──┼──┼── 5V Rail (Buck converter)
+     │ A    →34  │  │   →36     GPIO (ESP32)
+     │ B    →35  │  │   →39     GPIO
+     │ GND  GND ─┼──┼── GND
+     └───────────┘  └───────────┘
+
+           │              │
+     ┌─────┴─────┐  ┌─────┴─────┐
+     │ H-Bridge  │  │ H-Bridge  │
+     │  (IBT-2)  │  │  (IBT-2)  │
+     │           │  │           │
+     │ OUT1  →───┼──┼→ Motor +  (Red wire)
+     │ OUT2  →───┼──┼→ Motor -  (Black wire)
+     │ 12V  ─────┼──┼→ 12V (Battery)
+     │ GND  ─────┼──┼→ GND
+     │ PWM  ←ESP │  │   ←ESP    GPIO (e.g., 4, 16)
+     │ DIR  ←ESP │  │   ←ESP    GPIO (e.g., 23, 18)
+     └───────────┘  └───────────┘
+```
+
+## H-Bridge Driver (IBT-2 / BTS7960)
+
+**One IBT-2 module controls 2 motors** (need 2 total for 4 motors)
+
+### IBT-2 Specifications
+
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| **Chip** | BTS7960 | Infineon high-power H-bridge |
+| **Max Current** | 43A | Per channel |
+| **Continuous Current** | 30A | With heatsinking |
+| **Operating Voltage** | 5.5-27V | Matches 3S LiPo perfectly |
+| **Logic Voltage** | 3.3V or 5V compatible | ESP32 3.3V works |
+| **PWM Frequency** | Up to 25 kHz | Recommended: 20 kHz |
+| **Efficiency** | >95% | Very low losses |
+| **Size** | 50mm × 30mm | Compact |
+| **Price** | $5-10 | Per module |
+
+### IBT-2 Pinout
+
+**Per motor (2 motors per IBT-2):**
+
+| Pin | Function | Connection |
+|-----|----------|------------|
+| **VCC** | Logic power | 5V or 3.3V |
+| **GND** | Ground | Common GND |
+| **RPWM** | Forward PWM | ESP32 GPIO (e.g., 4) |
+| **LPWM** | Reverse PWM | ESP32 GPIO (e.g., 23) or GND |
+| **R_EN** | Right enable | 5V or 3.3V (always on) |
+| **L_EN** | Left enable | 5V or 3.3V (always on) |
+| **VMS** | Motor power | 12V (from battery) |
+| **GND** | Motor power GND | Battery GND |
+| **OUT1/OUT2** | Motor outputs | To motor red/black |
+
+**Simplified control (sign-magnitude):**
+
+```cpp
+// Option 1: Use both RPWM and LPWM (bidirectional control)
+// Forward: RPWM = speed, LPWM = 0
+// Backward: RPWM = 0, LPWM = speed
+
+// Option 2: Use RPWM only + 2 direction pins
+// Tie LPWM to GND
+// Use 2 digital pins for H-bridge control (not standard IBT-2)
+```
+
+**Recommended wiring for ESP32:**
+
+```cpp
+// Motor control pins
+#define MOTOR_FL_PWM  4    // RPWM
+#define MOTOR_FL_DIR1 23   // R_EN (HIGH = forward)
+#define MOTOR_FL_DIR2 19   // L_EN (HIGH = reverse)
+
+// Control logic:
+void setMotorSpeed(int speed) {
+  // speed: -255 to +255
+  if (speed >= 0) {
+    // Forward
+    ledcWrite(MOTOR_FL_PWM_CHANNEL, speed);
+    digitalWrite(MOTOR_FL_DIR1, HIGH);
+    digitalWrite(MOTOR_FL_DIR2, LOW);
+  } else {
+    // Reverse
+    ledcWrite(MOTOR_FL_PWM_CHANNEL, abs(speed));
+    digitalWrite(MOTOR_FL_DIR1, LOW);
+    digitalWrite(MOTOR_FL_DIR2, HIGH);
+  }
+}
+```
+
+## Motor Calculations
+
+### Wheel Speed to Motor RPM
+
+**Given:**
+- Wheel diameter: 60mm = 0.06m
+- Desired robot speed: 0.5 m/s
+
+**Calculate motor RPM:**
+
+```
+Wheel circumference = π × D = 3.14159 × 0.06 = 0.188 m
+
+Wheel RPS = robot_speed / circumference
+          = 0.5 / 0.188 = 2.66 revolutions/second
+
+Wheel RPM = 2.66 × 60 = 159 RPM
+
+Motor RPM = 159 RPM (close to rated 250 RPM, good!)
+```
+
+**Conclusion:** 333 RPM motor perfect for 0.4-0.6 m/s robot speed with 60mm wheels.
+
+### Torque Requirements
+
+**Estimate required torque per motor:**
+
+**Given:**
+- Robot mass: 3 kg
+- Wheel radius: 0.03 m
+- Desired acceleration: 1 m/s²
+
+**Torque per wheel:**
+
+```
+Force per wheel = (mass × accel) / 4 wheels
+                = (3 kg × 1 m/s²) / 4
+                = 0.75 N
+
+Torque = Force × radius
+       = 0.75 N × 0.03 m
+       = 0.0225 Nm
+
+Add 50% safety margin = 0.034 Nm per motor
+```
+
+**Plus friction, incline, etc. → ~0.2-0.4 Nm typical**
+
+**Motor rated torque: 0.6-0.8 Nm ✓ (sufficient with margin)**
+
+### Current Draw
+
+**Per motor:**
+
+| Condition | Current (A) | Total (4 motors) | Notes |
+|-----------|-------------|------------------|-------|
+| **No-load** | 0.15 | 0.6 A | Idling |
+| **Light load** | 0.5 | 2.0 A | Slow motion |
+| **Normal operation** | 1.0 | 4.0 A | Typical navigation |
+| **Heavy acceleration** | 1.5 | 6.0 A | Max acceleration |
+| **Stall (DANGER)** | 2.5-3.0 | 10-12 A | Emergency stop required |
+
+**Power draw:**
+```
+Power = Voltage × Current
+      = 12V × 4A (typical) = 48W
+      = 12V × 6A (peak) = 72W
+```
+
+**Battery capacity:**
+```
+Runtime = Battery_mAh / Current_mA
+        = 5000 mAh / 4000 mA = 1.25 hours (theoretical)
+        = ~45-60 minutes (realistic with Nav2 overhead)
+```
+
+## Encoder Decoding
+
+### Quadrature Encoding Explained
+
+**Two channels (A and B) 90° out of phase:**
+
+```
+Channel A: ___┌─┐___┌─┐___┌─┐___┌─┐
+Channel B: _____┌─┐___┌─┐___┌─┐___┌─┐
+
+Direction:
+  Forward: A leads B (A rises before B)
+  Reverse: B leads A (B rises before A)
+```
+
+**Resolution modes:**
+- **1× resolution:** Count rising edges of A only = 11 PPR × 19 = 209 counts/rev
+- **2× resolution:** Count both edges of A = 418 counts/rev
+- **4× resolution:** Count both edges of A and B = 836 counts/rev (full quadrature)
+
+### ESP32 Encoder Interrupt Code
+
+**Example implementation:**
+
+```cpp
+// Encoder variables
+volatile long encoder_count = 0;
+volatile int last_encoded = 0;
+
+// Encoder pins
+#define ENCODER_A 34
+#define ENCODER_B 35
+
+// ISR (Interrupt Service Routine)
+void IRAM_ATTR encoder_ISR() {
+  int MSB = digitalRead(ENCODER_A);  // Most significant bit
+  int LSB = digitalRead(ENCODER_B);  // Least significant bit
+
+  int encoded = (MSB << 1) | LSB;  // Combine into 2-bit value
+  int sum = (last_encoded << 2) | encoded;  // Combine with previous state
+
+  // Determine direction based on state transition
+  if (sum == 0b1101 || sum == 0b0100 || sum == 0b0010 || sum == 0b1011) {
+    encoder_count++;  // Forward
+  } else if (sum == 0b1110 || sum == 0b0111 || sum == 0b0001 || sum == 0b1000) {
+    encoder_count--;  // Reverse
+  }
+
+  last_encoded = encoded;
+}
+
+void setup() {
+  pinMode(ENCODER_A, INPUT_PULLUP);
+  pinMode(ENCODER_B, INPUT_PULLUP);
+
+  attachInterrupt(digitalPinToInterrupt(ENCODER_A), encoder_ISR, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_B), encoder_ISR, CHANGE);
+}
+
+void loop() {
+  // Read encoder count
+  long count = encoder_count;
+
+  // Convert to angle (radians)
+  float angle = (count / 836.0) * 2.0 * PI;  // 836 counts/rev for 4× resolution
+
+  // Convert to distance (meters, 60mm wheel)
+  float distance = (count / 836.0) * (PI * 0.06);
+
+  Serial.printf("Count: %ld, Angle: %.2f rad, Distance: %.3f m\n", count, angle, distance);
+  delay(100);
+}
+```
+
+## Motor Calibration
+
+### Direction Calibration
+
+**Verify all motors rotate correct direction:**
+
+```cpp
+void testMotorDirection() {
+  // Test each motor individually
+  setMotorSpeed(MOTOR_FL, 50);  // 50% forward
+  delay(2000);
+  setMotorSpeed(MOTOR_FL, 0);   // Stop
+  delay(1000);
+
+  // If motor rotates backward when commanded forward:
+  // Option 1: Swap motor wires (red ↔ black)
+  // Option 2: Invert direction in software (multiply PWM by -1)
+}
+```
+
+**Standard convention:**
+- **Positive PWM:** Forward (robot moves forward)
+- **Negative PWM:** Backward
+
+### Encoder Direction Calibration
+
+**Verify encoder counts increase when motor goes forward:**
+
+```cpp
+void testEncoderDirection() {
+  encoder_count = 0;  // Reset
+
+  setMotorSpeed(MOTOR_FL, 50);  // Forward
+  delay(2000);
+  setMotorSpeed(MOTOR_FL, 0);   // Stop
+
+  Serial.print("Encoder count after forward motion: ");
+  Serial.println(encoder_count);
+
+  // Expected: Positive count (e.g., +500)
+  // If negative: Swap encoder A ↔ B wires
+}
+```
+
+### Velocity Measurement
+
+**Calculate motor velocity (rad/s):**
+
+```cpp
+float getMotorVelocity() {
+  static long last_count = 0;
+  static unsigned long last_time = 0;
+
+  long current_count = encoder_count;
+  unsigned long current_time = millis();
+
+  long delta_count = current_count - last_count;
+  float delta_time = (current_time - last_time) / 1000.0;  // seconds
+
+  last_count = current_count;
+  last_time = current_time;
+
+  // Velocity in radians/second
+  float velocity = (delta_count / 836.0) * (2.0 * PI) / delta_time;
+
+  return velocity;
+}
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Motor doesn't spin" icon="gear">
+    **Check:**
+    1. Motor power connected (12V to H-bridge)
+    2. PWM signal generated (oscilloscope or LED test)
+    3. H-bridge enable pins HIGH
+    4. Motor not stalled (remove load, test)
+
+    **Test:**
+    - Connect motor directly to 12V battery (bypass H-bridge)
+    - Should spin → H-bridge issue
+    - Doesn't spin → motor faulty
+  </Accordion>
+
+  <Accordion title="Motor spins wrong direction" icon="rotate">
+    **Fix:**
+    - **Hardware:** Swap motor red/black wires
+    - **Software:** Invert PWM sign:
+      ```cpp
+      motor_pwm = -motor_pwm;  // Invert
+      ```
+  </Accordion>
+
+  <Accordion title="Encoder not counting" icon="hashtag">
+    **Debug:**
+    ```cpp
+    // Print raw encoder pin states
+    Serial.print("A: "); Serial.print(digitalRead(ENCODER_A));
+    Serial.print(" B: "); Serial.println(digitalRead(ENCODER_B));
+
+    // Manually rotate motor, watch for changes
+    ```
+
+    **Common issues:**
+    - Encoder not powered (check 5V supply)
+    - Interrupt not attached
+    - Wrong pins (use interrupt-capable GPIOs)
+    - Encoder damaged
+  </Accordion>
+
+  <Accordion title="Encoder counts erratically" icon="wave-square">
+    **Causes:**
+    - Electrical noise (PWM interference)
+    - Loose connections
+    - Motor generates EMI
+
+    **Solutions:**
+    - Add 100nF capacitor between encoder A/B and GND (close to ESP32)
+    - Twist encoder wires together (reduces EMI pickup)
+    - Route encoder wires away from motor power wires
+    - Add RC filter: 1kΩ resistor + 100nF capacitor on each encoder line
+  </Accordion>
+
+  <Accordion title="Motor overheating" icon="temperature-high">
+    **Causes:**
+    - Sustained stall current
+    - Motor overloaded (too much weight)
+    - PWM frequency too low (&lt;1 kHz)
+
+    **Solutions:**
+    - Reduce load (lighter robot)
+    - Increase PWM frequency (20 kHz)
+    - Add current limiting in software
+    - Check motor not mechanically jammed
+  </Accordion>
+
+  <Accordion title="H-bridge overheating" icon="fire">
+    **Solutions:**
+    - Add heatsink to BTS7960 chip
+    - Improve airflow
+    - Reduce motor current (lighter load, lower acceleration)
+    - Check for short circuit
+  </Accordion>
+</AccordionGroup>
+
+## Alternative Motors
+
+### Other Options
+
+| Motor Model | RPM | Torque | PPR | Price | Notes |
+|-------------|-----|--------|-----|-------|-------|
+| **JGA25-370 (333 RPM)** | 333 | 0.8 Nm | 209 | $15-20 | **Recommended** |
+| JGA25-370 (200 RPM) | 200 | 1.2 Nm | 209 | $18-22 | Slower, more torque |
+| JGA25-370 (500 RPM) | 500 | 0.5 Nm | 209 | $15-20 | Faster, less torque |
+| 37mm Gearmotor | 200 | 1.5 Nm | 200 | $20-25 | Larger, heavier |
+| N20 Micro Motor | 300 | 0.15 Nm | 100 | $8-12 | Weaker (for small robots) |
+
+**Selection criteria:**
+- **RPM:** Match to desired robot speed (0.4-0.6 m/s → 250-350 RPM with 60mm wheels)
+- **Torque:** At least 2× calculated requirement for safety margin
+- **Encoder:** Higher PPR = better position accuracy (>100 PPR recommended)
+- **Voltage:** Match to battery (12V for 3S LiPo)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Motor Driver Setup"
+    icon="microchip"
+    href="/wp3-embedded/motor-driver"
+  >
+    IBT-2 H-bridge wiring and control
+  </Card>
+
+  <Card
+    title="Motor Control Code"
+    icon="code"
+    href="/wp3-embedded/dc-motor-control"
+  >
+    Complete motor control implementation
+  </Card>
+
+  <Card
+    title="LiDAR Specifications"
+    icon="radar"
+    href="/reference/hardware/lidar"
+  >
+    RPLIDAR A1M8 details
+  </Card>
+
+  <Card
+    title="Power System"
+    icon="battery-full"
+    href="/reference/hardware/power"
+  >
+    Complete power system design
+  </Card>
+</CardGroup>
+
+## References
+
+[1] JGA25-370 Datasheet: (Varies by manufacturer, check supplier)
+[2] BTS7960 H-Bridge Datasheet: https://www.infineon.com/dgdl/bts7960.pdf
+[3] Quadrature Encoder Guide: https://www.pjrc.com/teensy/td_libs_Encoder.html
+[4] Motor Control Theory: https://www.ti.com/lit/an/slva959/slva959.pdf

@@ -1,0 +1,438 @@
+---
+title: "ESP32 Basics"
+description: "Complete guide to ESP32 pinout, capabilities, and GPIO configuration"
+---
+
+## Overview
+
+The ESP32 is a powerful, low-cost microcontroller with built-in WiFi and Bluetooth. Understanding its capabilities and pin configuration is essential for successful robot development.
+
+## ESP32 Specifications
+
+### Key Features
+
+- **Processor:** Dual-core Xtensa 32-bit LX6 @ 240MHz
+- **Memory:** 520KB SRAM, 4MB Flash (typical)
+- **Connectivity:** WiFi 802.11 b/g/n, Bluetooth 4.2 + BLE
+- **GPIO:** 34 programmable pins
+- **ADC:** 2× 12-bit SAR ADCs (18 channels)
+- **DAC:** 2× 8-bit DACs
+- **PWM:** 16 channels
+- **Interfaces:** UART, SPI, I2C, I2S, CAN
+- **Operating Voltage:** 3.0-3.6V (typically 3.3V)
+- **Input Voltage:** 5V via USB or VIN pin
+
+<img
+  src="/images/esp32-devkit-pinout.png"
+  alt="ESP32 DevKit pinout diagram"
+  caption="ESP32-DevKitC V4 pinout showing all GPIO pins and their functions"
+/>
+
+## Pinout Reference
+
+### Safe GPIO Pins (Recommended for Use)
+
+These pins are safe to use without issues:
+
+| GPIO | Functions | Notes |
+|------|-----------|-------|
+| GPIO 4 | Digital I/O, ADC2_0 | ✅ Safe |
+| GPIO 5 | Digital I/O | ✅ Safe, VSPI CS |
+| GPIO 12 | Digital I/O, ADC2_5 | ⚠️ Pull-down at boot |
+| GPIO 13 | Digital I/O, ADC2_4 | ✅ Safe |
+| GPIO 14 | Digital I/O, ADC2_6 | ✅ Safe |
+| GPIO 15 | Digital I/O, ADC2_3 | ✅ Safe |
+| GPIO 16 | Digital I/O | ✅ Safe, UART2 RX |
+| GPIO 17 | Digital I/O | ✅ Safe, UART2 TX |
+| GPIO 18 | Digital I/O | ✅ Safe, VSPI CLK |
+| GPIO 19 | Digital I/O | ✅ Safe, VSPI MISO |
+| GPIO 21 | Digital I/O | ✅ Safe, I2C SDA |
+| GPIO 22 | Digital I/O | ✅ Safe, I2C SCL |
+| GPIO 23 | Digital I/O | ✅ Safe, VSPI MOSI |
+| GPIO 25 | Digital I/O, DAC1, ADC2_8 | ✅ Safe |
+| GPIO 26 | Digital I/O, DAC2, ADC2_9 | ✅ Safe |
+| GPIO 27 | Digital I/O, ADC2_7 | ✅ Safe |
+| GPIO 32 | Digital I/O, ADC1_4 | ✅ Safe |
+| GPIO 33 | Digital I/O, ADC1_5 | ✅ Safe |
+
+### Input-Only Pins
+
+These pins can ONLY be used as inputs:
+
+| GPIO | Notes |
+|------|-------|
+| GPIO 34 | Input only, ADC1_6 |
+| GPIO 35 | Input only, ADC1_7 |
+| GPIO 36 (VP) | Input only, ADC1_0 |
+| GPIO 39 (VN) | Input only, ADC1_3 |
+
+<Note>
+  **Use Case:** Input-only pins are perfect for reading sensors or buttons. Use them for encoder inputs to save output-capable pins.
+</Note>
+
+### Pins to AVOID
+
+<Warning>
+  **Do NOT use these pins** unless you know what you're doing:
+</Warning>
+
+| GPIO | Reason |
+|------|--------|
+| GPIO 0 | Boot mode selection, pulled HIGH, pull LOW to enter flash mode |
+| GPIO 1 | UART0 TX (USB serial) - used for programming |
+| GPIO 2 | Boot mode, must be LOW at boot, connected to LED on many boards |
+| GPIO 3 | UART0 RX (USB serial) - used for programming |
+| GPIO 6-11 | Connected to SPI flash (DO NOT USE!) |
+
+## Pin Configuration for Our Robot
+
+### Recommended Pin Assignments
+
+```cpp
+// Motor Driver PWM Outputs
+#define MOTOR1_RPWM  4
+#define MOTOR1_LPWM  16
+#define MOTOR2_RPWM  17
+#define MOTOR2_LPWM  18
+#define MOTOR3_RPWM  19
+#define MOTOR3_LPWM  21
+#define MOTOR4_RPWM  22
+#define MOTOR4_LPWM  23
+
+// Motor Encoders (using input-capable pins)
+#define ENC1_A  32
+#define ENC1_B  33
+#define ENC2_A  25
+#define ENC2_B  26
+#define ENC3_A  27
+#define ENC3_B  14
+#define ENC4_A  12
+#define ENC4_B  13
+
+// I2C for IMU
+#define SDA_PIN  21  // Default I2C SDA
+#define SCL_PIN  22  // Default I2C SCL
+
+// Optional: Status LED
+#define STATUS_LED  2  // Built-in LED
+
+// Optional: Emergency Stop Button
+#define ESTOP_BTN  15
+```
+
+<Tip>
+  **Document Your Pins:** Create a `pins.h` header file with all pin definitions. This makes it easy to change pin assignments later.
+</Tip>
+
+## GPIO Functions
+
+### Digital I/O
+
+```cpp
+// Set pin as output
+pinMode(LED_PIN, OUTPUT);
+digitalWrite(LED_PIN, HIGH);  // 3.3V
+digitalWrite(LED_PIN, LOW);   // 0V
+
+// Set pin as input
+pinMode(BUTTON_PIN, INPUT_PULLUP);  // Enable internal pull-up
+int state = digitalRead(BUTTON_PIN);
+```
+
+### PWM Output
+
+ESP32 has 16 independent PWM channels with high resolution:
+
+```cpp
+// Configure PWM
+int channel = 0;       // PWM channel (0-15)
+int frequency = 5000;  // 5kHz
+int resolution = 8;    // 8-bit (0-255)
+
+ledcSetup(channel, frequency, resolution);
+ledcAttachPin(MOTOR_PIN, channel);
+
+// Set duty cycle
+ledcWrite(channel, 128);  // 50% duty cycle (128/255)
+```
+
+**PWM Parameters:**
+- **Frequency:** 1-40MHz (typically 1-20kHz for motors)
+- **Resolution:** 1-16 bits (higher res = lower max frequency)
+- **Duty Cycle:** 0 = 0%, 255 = 100% (for 8-bit)
+
+### Analog Input (ADC)
+
+ESP32 has two ADC units:
+
+```cpp
+// Read analog value (0-4095 for 12-bit ADC)
+int value = analogRead(ANALOG_PIN);
+
+// Convert to voltage (0-3.3V)
+float voltage = value * (3.3 / 4095.0);
+
+// Set ADC resolution (9-12 bits)
+analogReadResolution(12);  // Default
+
+// Set ADC attenuation (voltage range)
+analogSetAttenuation(ADC_11db);  // 0-3.3V range
+```
+
+**ADC Limitations:**
+- ADC2 cannot be used with WiFi!
+- Non-linear, especially at extremes
+- Use ADC1 pins when using WiFi
+
+### I2C Communication
+
+```cpp
+#include <Wire.h>
+
+void setup() {
+  Wire.begin(SDA_PIN, SCL_PIN);  // Initialize I2C
+  Wire.setClock(400000);         // 400kHz fast mode
+}
+
+// I2C Scanner
+void scanI2C() {
+  for (byte address = 1; address < 127; address++) {
+    Wire.beginTransmission(address);
+    byte error = Wire.endTransmission();
+    
+    if (error == 0) {
+      Serial.print("I2C device found at 0x");
+      if (address < 16) Serial.print("0");
+      Serial.println(address, HEX);
+    }
+  }
+}
+```
+
+### Interrupts
+
+ESP32 supports interrupts on all GPIO pins:
+
+```cpp
+volatile long encoderCount = 0;
+
+void IRAM_ATTR encoderISR() {
+  encoderCount++;
+}
+
+void setup() {
+  pinMode(ENCODER_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_PIN), 
+                  encoderISR, RISING);
+}
+```
+
+**Interrupt Modes:**
+- `RISING` - Trigger on LOW to HIGH transition
+- `FALLING` - Trigger on HIGH to LOW transition
+- `CHANGE` - Trigger on any change
+- `LOW` - Trigger while pin is LOW (not recommended)
+- `HIGH` - Trigger while pin is HIGH (not recommended)
+
+<Warning>
+  **ISR Rules:**
+  - Keep ISR functions SHORT and FAST
+  - No `delay()`, `Serial.print()`, or heavy processing
+  - Use `volatile` for variables accessed in ISR
+  - Add `IRAM_ATTR` to keep ISR in RAM (faster)
+</Warning>
+
+## Power Considerations
+
+### Power Supply Options
+
+1. **USB (5V):**
+   - Convenient for programming
+   - Limited current (~500mA)
+   - **Don't power motors from USB!**
+
+2. **VIN Pin (5-12V):**
+   - Regulated down to 3.3V on-board
+   - Can provide more current
+   - Still limited for motors
+
+3. **3.3V Pin:**
+   - Direct 3.3V supply
+   - Bypass internal regulator
+   - Max ~600mA from on-board regulator
+
+**For Our Robot:**
+- ESP32: Powered from 5V USB or VIN
+- Motors: Separate 12V power supply
+- **Common Ground:** Connect ESP32 GND to motor power GND
+
+### Current Limits
+
+| Pin | Max Current | Notes |
+|-----|-------------|-------|
+| Single GPIO | 40mA | Don't exceed! |
+| All GPIO combined | 200mA | Total for all pins |
+| 3.3V regulator | ~600mA | On-board LDO |
+
+<Warning>
+  **Never** drive motors, relays, or high-power devices directly from GPIO! Use motor drivers, MOSFETs, or relays.
+</Warning>
+
+## WiFi and Bluetooth
+
+### WiFi Basics
+
+```cpp
+#include <WiFi.h>
+
+void setup() {
+  WiFi.begin("SSID", "password");
+  
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  
+  Serial.println("\nConnected!");
+  Serial.println(WiFi.localIP());
+}
+```
+
+### Bluetooth Serial
+
+```cpp
+#include <BluetoothSerial.h>
+
+BluetoothSerial SerialBT;
+
+void setup() {
+  SerialBT.begin("ESP32_Robot");  // Bluetooth device name
+  Serial.println("Bluetooth started");
+}
+
+void loop() {
+  if (SerialBT.available()) {
+    char c = SerialBT.read();
+    Serial.write(c);
+  }
+}
+```
+
+<Note>
+  **WiFi vs Bluetooth:** WiFi uses more power but has longer range and higher bandwidth. Bluetooth is lower power and good for short-range control.
+</Note>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="ESP32 won't boot / endless restart" icon="rotate">
+    **Causes:**
+    - GPIO 0 pulled LOW
+    - GPIO 2 pulled HIGH
+    - Power supply insufficient
+    - Code crashes immediately
+
+    **Solutions:**
+    - Check boot pins (0, 2)
+    - Use stable power supply
+    - Upload minimal test code
+    - Monitor Serial for error messages
+  </Accordion>
+
+  <Accordion title="GPIO not working" icon="plug">
+    **Solutions:**
+    - Check if pin is input-only
+    - Avoid GPIO 6-11 (flash pins)
+    - Verify pin isn't used by WiFi (ADC2)
+    - Check pinMode() correctly set
+  </Accordion>
+
+  <Accordion title="ADC readings incorrect" icon="chart-line">
+    **Solutions:**
+    - Use ADC1 pins (ADC2 conflicts with WiFi)
+    - Calibrate ADC (non-linear)
+    - Add smoothing/filtering
+    - Check voltage range (0-3.3V)
+  </Accordion>
+
+  <Accordion title="I2C device not found" icon="magnifying-glass">
+    **Solutions:**
+    - Run I2C scanner
+    - Check SDA/SCL wiring
+    - Verify pull-up resistors (4.7kΩ)
+    - Try lower clock speed (100kHz)
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Pin Planning" icon="map">
+    - Plan pin assignments before wiring
+    - Group related pins (all motor PWM together)
+    - Document in code and schematic
+    - Leave some pins unassigned for future expansion
+  </Card>
+
+  <Card title="Voltage Levels" icon="bolt">
+    - ESP32 is 3.3V logic (NOT 5V tolerant on most pins!)
+    - Use level shifters for 5V devices
+    - Check sensor/module voltage compatibility
+  </Card>
+
+  <Card title="Power Management" icon="battery-half">
+    - Separate power domains (logic vs motors)
+    - Common ground essential
+    - Add bulk capacitors near ESP32
+    - Monitor power consumption
+  </Card>
+
+  <Card title="Code Organization" icon="code">
+    - Define pins in header file
+    - Use meaningful names
+    - Comment pin purposes
+    - Test pins individually before integration
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Motor Driver Guide"
+    icon="gears"
+    href="/wp3-embedded/motor-driver"
+  >
+    Learn to interface with IBT-2
+  </Card>
+
+  <Card
+    title="DC Motor Control"
+    icon="rotate"
+    href="/wp3-embedded/dc-motor-control"
+  >
+    Implement motor control with PID
+  </Card>
+
+  <Card
+    title="IMU Integration"
+    icon="compass"
+    href="/wp3-embedded/imu-integration"
+  >
+    Connect and read IMU sensor
+  </Card>
+
+  <Card
+    title="Hardware Reference"
+    icon="book"
+    href="/reference/hardware/esp32"
+  >
+    Detailed ESP32 specifications
+  </Card>
+</CardGroup>
+
+## References
+
+[1] ESP32 Datasheet: https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf
+[2] ESP32 Pinout Reference: https://randomnerdtutorials.com/esp32-pinout-reference-gpios/
+[3] ESP32 Arduino Core: https://github.com/espressif/arduino-esp32

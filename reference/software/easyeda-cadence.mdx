@@ -1,0 +1,607 @@
+---
+title: 'EasyEDA & Cadence OrCAD'
+description: 'PCB design software for creating electrical schematics and circuit boards'
+icon: 'microchip'
+---
+
+## Overview
+
+Printed Circuit Board (PCB) design tools are used in WP2 to create electrical schematics and design custom circuit boards for the mecanum robot. This course recommends **EasyEDA** (web-based, beginner-friendly, free) with **Cadence OrCAD** as an advanced alternative for students with prior PCB design experience.
+
+<CardGroup cols={2}>
+  <Card title="EasyEDA" icon="browser">
+    Free, cloud-based, easy to learn, integrated with JLCPCB manufacturing
+  </Card>
+  <Card title="Cadence OrCAD" icon="microchip">
+    Industry-standard, powerful simulation, professional-grade features
+  </Card>
+</CardGroup>
+
+<Note>
+**Recommendation:** Use **EasyEDA** for this project. It's sufficient for simple power distribution and wiring diagrams, and integrates seamlessly with PCB manufacturers.
+</Note>
+
+---
+
+## EasyEDA (Recommended)
+
+### Getting Started
+
+<Steps>
+  <Step title="Create Account">
+    Visit [easyeda.com](https://easyeda.com/)
+
+    Click **Sign Up** and create free account (or use Google/GitHub login)
+
+    <Tip>
+    EasyEDA is entirely web-based—no installation required!
+    </Tip>
+  </Step>
+
+  <Step title="Access EasyEDA Editor">
+    Click **EDA → Schematic** or **Go to Editor**
+
+    Interface loads in browser (works on Chrome, Firefox, Edge)
+  </Step>
+
+  <Step title="Create New Project">
+    **File → New → Project**
+
+    Name: `mecanum_robot_pcb`
+
+    Click **Save**
+  </Step>
+</Steps>
+
+### Interface Overview
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ File Edit View Place Route Tools Window           [?] [×]│  Menu Bar
+├──┬────────────────────────────────────────────────────┬──┤
+│ W│                                                    │L │
+│ i│         Canvas (Schematic / PCB View)             │i │
+│ r│                                                    │b │
+│ i│                                                    │s │
+│ n│                                                    │  │
+│ g│                                                    │  │
+│  │                                                    │  │
+├──┴────────────────────────────────────────────────────┴──┤
+│ [Schematic] [PCB] [Simulation]    Layers: Top | Bottom  │  Bottom Bar
+└──────────────────────────────────────────────────────────┘
+```
+
+**Key components:**
+- **Canvas (center):** Schematic or PCB layout workspace
+- **Wiring Toolbar (left):** Components, wires, labels
+- **Libraries Panel (right):** Search and place components
+- **Bottom Tabs:** Switch between Schematic, PCB, and Simulation views
+- **Layers Panel:** Manage copper layers, silkscreen, and soldermask
+
+---
+
+## Creating a Schematic
+
+### Workflow Overview
+
+<Steps>
+  <Step title="Place Components">
+    1. Click **Libraries** icon (right panel)
+    2. Search for component (e.g., "ESP32", "voltage regulator")
+    3. Click component → **Place** → Click on canvas to position
+
+    **Essential components for robot:**
+    - ESP32-WROOM-32 DevKit
+    - LM2596 buck converter (12V → 5V)
+    - Fuses (10A for motor power)
+    - Terminal blocks (battery input, motor output)
+    - Capacitors (100nF, 10µF for decoupling)
+  </Step>
+
+  <Step title="Draw Connections">
+    **Wiring toolbar → Wire (W)**
+
+    Click starting pin → Click ending pin to connect
+
+    <Tip>
+    Use **Net Labels** (Ctrl+L) for long-distance connections to avoid messy wires
+    </Tip>
+  </Step>
+
+  <Step title="Add Power Rails">
+    **Place → Power Port**
+
+    Common symbols:
+    - **VCC / +12V:** Battery positive
+    - **+5V:** Buck converter output
+    - **+3.3V:** ESP32 regulator output
+    - **GND:** Ground (common reference)
+
+    Place power symbols, then connect with wires
+  </Step>
+
+  <Step title="Annotate Components">
+    Components auto-assigned designators (R1, C1, U1, etc.)
+
+    Add values by double-clicking component:
+    - **Resistors:** "10kΩ"
+    - **Capacitors:** "100nF"
+    - **ICs:** Part number (e.g., "LM2596")
+  </Step>
+
+  <Step title="Electrical Rules Check (ERC)">
+    **Tools → ERC (Electrical Rules Check)**
+
+    Verifies:
+    - No unconnected pins
+    - No power rail conflicts
+    - Correct component connections
+
+    Fix any errors/warnings before proceeding to PCB
+  </Step>
+</Steps>
+
+### Example: Power Distribution Circuit
+
+```
+Battery Input (3S LiPo, 11.1V)
+    │
+    ├─ Fuse (10A)
+    │     │
+    │     ├─ Terminal Block → Motor Controllers (12V rail)
+    │     │
+    │     └─ LM2596 Buck Converter (12V → 5V, 3A)
+    │           │
+    │           ├─ Raspberry Pi (5V, 2.5A)
+    │           ├─ LiDAR (5V, 0.5A)
+    │           └─ ESP32 (via onboard 3.3V regulator)
+    │
+    └─ GND (common ground)
+```
+
+**Schematic symbols:**
+```
+┌─────────────────────────────────────────────────┐
+│  +12V                                           │
+│    ├─[FUSE 10A]─┬─ Motor Power Out            │
+│    │             │                              │
+│    │          ┌──┴──┐                          │
+│    │          │LM2596│  +5V                     │
+│    └─────────►│  IN  OUT├──┬─ Raspberry Pi     │
+│               │  GND │    ├─ LiDAR             │
+│               └──────┘    └─ ESP32 (5V → 3.3V) │
+│                 │                               │
+│                GND                              │
+└─────────────────────────────────────────────────┘
+```
+
+---
+
+## Designing a PCB (Optional)
+
+<Warning>
+For this course, **custom PCB fabrication is optional**. Most students use perfboard or breadboard for wiring. Only design a custom PCB if you have prior experience or extra time.
+</Warning>
+
+If you choose to design a PCB:
+
+<Steps>
+  <Step title="Convert Schematic to PCB">
+    Click **Convert to PCB** button (top toolbar)
+
+    EasyEDA imports footprints and nets automatically
+  </Step>
+
+  <Step title="Arrange Components">
+    Drag components to logical positions:
+    - Large components (connectors) near board edges
+    - Group related circuits (power, ESP32, sensors)
+    - Keep signal paths short
+  </Step>
+
+  <Step title="Route Traces">
+    **Track (T):** Draw copper traces connecting pads
+
+    **Width guidelines:**
+    - **Power traces (12V, 5V):** 1.5mm+ (high current)
+    - **Signal traces (GPIO, I2C):** 0.3-0.5mm
+    - **Ground pour:** Flood fill with copper
+
+    <Tip>
+    Use **Auto Router** for quick routing, then manually fix critical traces
+    </Tip>
+  </Step>
+
+  <Step title="Add Ground Plane">
+    **Tools → Copper Area**
+
+    Draw polygon covering board → Assign to **GND** net
+
+    Ground plane reduces noise and improves heat dissipation
+  </Step>
+
+  <Step title="Design Rule Check (DRC)">
+    **Tools → Design Rule Check**
+
+    Validates:
+    - Trace width and spacing
+    - Clearance to board edges
+    - No overlapping components
+
+    Fix errors before manufacturing
+  </Step>
+
+  <Step title="Order PCB (via JLCPCB)">
+    **Fabrication → Generate Gerber**
+
+    Exports ZIP file with manufacturing data
+
+    Upload to [jlcpcb.com](https://jlcpcb.com/) for pricing:
+    - 5× PCBs: ~$2 USD + shipping
+    - Lead time: 2-5 days production + shipping
+  </Step>
+</Steps>
+
+---
+
+## EasyEDA Features
+
+### Component Libraries
+
+EasyEDA has extensive built-in libraries:
+
+| Category | Search Examples |
+|----------|-----------------|
+| **Microcontrollers** | ESP32, STM32, Arduino Nano |
+| **Power Management** | LM2596, AMS1117, L7805 |
+| **Sensors** | MPU6050, BMP280, DHT22 |
+| **Connectors** | Terminal block, JST-XH, USB-C |
+| **Passives** | Resistors, capacitors, LEDs |
+
+**Can't find a part?**
+1. Search LCSC (EasyEDA's component database)
+2. Import from SnapEDA or SymbolStock
+3. Create custom symbol/footprint (advanced)
+
+### Simulation (SPICE)
+
+EasyEDA supports basic circuit simulation:
+
+<Steps>
+  <Step title="Add Simulation Components">
+    Use **Simulation** library parts (marked with ⚡ icon)
+  </Step>
+
+  <Step title="Configure Simulation">
+    **Simulate → New Simulation**
+
+    Choose analysis type:
+    - **DC Sweep:** Test voltage/current ranges
+    - **Transient:** Time-domain analysis
+    - **AC Analysis:** Frequency response
+  </Step>
+
+  <Step title="Run and View Results">
+    Click **Run** → View voltage/current waveforms
+
+    Useful for validating power supply ripple, filter responses
+  </Step>
+</Steps>
+
+<Note>
+Simulation is **optional** for this project but useful for understanding power distribution
+</Note>
+
+### Exporting Schematics
+
+```bash
+# Export formats
+File → Export
+├─ PDF (for documentation)
+├─ PNG/SVG (for reports)
+├─ Gerber (for PCB manufacturing)
+└─ Netlist (for other EDA tools)
+```
+
+---
+
+## Cadence OrCAD (Advanced)
+
+### Installation (RMIT Students)
+
+<Steps>
+  <Step title="Access RMIT Software Portal">
+    Visit [RMIT Software Download](https://www.rmit.edu.au/students/student-essentials/information-technology/software-for-students)
+
+    Check if **Cadence OrCAD** is available (varies by semester)
+  </Step>
+
+  <Step title="Alternative: Free Version">
+    Download **OrCAD Lite** (free, limited to 2-layer PCBs)
+
+    Visit [orcad.com/products/orcad-lite](https://www.orcad.com/products/orcad-lite)
+  </Step>
+
+  <Step title="Install OrCAD">
+    **Windows only** (no macOS/Linux support)
+
+    Installation size: ~10GB
+  </Step>
+</Steps>
+
+### OrCAD vs. EasyEDA
+
+| Feature | EasyEDA | Cadence OrCAD |
+|---------|---------|---------------|
+| **Cost** | Free | ~$1,500 (or RMIT license) |
+| **Platform** | Web (cross-platform) | Windows only |
+| **Learning Curve** | Easy (1-2 hours) | Steep (weeks) |
+| **Simulation** | Basic SPICE | Advanced PSpice |
+| **PCB Layers** | Unlimited | Lite: 2, Full: Unlimited |
+| **Libraries** | Good (LCSC/JLCPCB) | Excellent (industry parts) |
+| **Industry Use** | Hobbyist, startups | Aerospace, automotive |
+| **Collaboration** | Easy (cloud) | File-based (harder) |
+
+**When to use OrCAD:**
+- Complex multi-layer PCBs (6+ layers)
+- Advanced signal integrity analysis
+- Professional projects requiring industry tools
+- **Not recommended for this course** (overkill for simple power boards)
+
+---
+
+## Wiring Diagrams (Alternative to PCB)
+
+Most students create **wiring diagrams** instead of custom PCBs, using:
+- **Perfboard / Protoboard:** Solder connections manually
+- **Breadboard:** Temporary prototyping (not recommended for final robot)
+- **Terminal blocks:** Connect wires to power rails
+
+### Creating Wiring Diagrams in EasyEDA
+
+<Steps>
+  <Step title="Draw Schematic">
+    Use same schematic approach as PCB design
+
+    Focus on clear labeling and logical grouping
+  </Step>
+
+  <Step title="Add Wire Colors">
+    Double-click wires → Change color:
+    - **Red:** +12V, +5V, +3.3V (power)
+    - **Black:** GND (ground)
+    - **Yellow/Green:** Signal wires (GPIO, I2C, serial)
+  </Step>
+
+  <Step title="Annotate Connections">
+    Add text labels for:
+    - Pin numbers (e.g., "ESP32 GPIO4")
+    - Wire gauge (e.g., "16 AWG for 12V")
+    - Terminal block numbers
+  </Step>
+
+  <Step title="Export Diagram">
+    **File → Export → PNG** (high resolution for printing)
+
+    Include diagram in WP2 report and use as assembly reference
+  </Step>
+</Steps>
+
+### Example Wiring Diagram
+
+```
+Power Distribution Wiring Diagram:
+
+Battery (3S LiPo 11.1V)
+  ├─[Red 16AWG]─► Fuse (10A) ─► Terminal Block (12V Rail)
+  │                               ├─ Motor Controller 1 (Red)
+  │                               ├─ Motor Controller 2 (Red)
+  │                               └─ Buck Converter IN+ (Red)
+  │
+  └─[Black 16AWG]─► Terminal Block (GND Rail)
+                      ├─ Motor Controller GND (Black)
+                      ├─ Buck Converter GND (Black)
+                      ├─ Raspberry Pi GND (Black)
+                      └─ ESP32 GND (Black)
+
+Buck Converter (LM2596)
+  ├─ OUT+ [Red 18AWG] ─► Raspberry Pi 5V (GPIO Pin 2)
+  └─ OUT- [Black 18AWG] ─► Raspberry Pi GND (GPIO Pin 6)
+```
+
+---
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Schematic Clarity" icon="diagram-project">
+    - Use net labels for long connections
+    - Group related components (power, sensors, motors)
+    - Add notes explaining critical connections
+    - Use color coding (red=power, black=ground)
+  </Card>
+
+  <Card title="Power Design" icon="bolt">
+    - Add fuses on power rails (prevent battery fires!)
+    - Use appropriate wire gauge (see power.mdx)
+    - Include decoupling capacitors (100nF near ICs)
+    - Keep power traces short and thick
+  </Card>
+
+  <Card title="Documentation" icon="book">
+    - Export PDF of final schematic
+    - Include in WP2 report
+    - Add BOM (Bill of Materials) table
+    - Document any deviations from original design
+  </Card>
+
+  <Card title="Safety First" icon="triangle-exclamation">
+    - **Never** bypass fuses (fire hazard!)
+    - Verify polarity before connecting battery
+    - Use heat shrink tubing on soldered connections
+    - Test voltage rails with multimeter before powering electronics
+  </Card>
+</CardGroup>
+
+---
+
+## Common Schematic Symbols
+
+```
+Resistor:      ─▭▭▭─           Fuse:         ─┤├─
+Capacitor:     ─┤├─            LED:          ─▷|─
+Diode:         ─▷|─            Switch:       ─┘ └─
+Transistor:    ─┤►             Battery:      ─||+ ─
+IC:            ┌──┐            GND:          ─┬─  (three lines)
+               │  │                           ⊥
+               └──┘
+Voltage Reg:   ┌────┐          Terminal:     ○──
+   IN ────────►│VREG│OUT                     (circle)
+   GND ───────►└────┘
+```
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Can't find component in EasyEDA library">
+    **Solutions:**
+    1. Search LCSC Parts Library (integrated with EasyEDA)
+    2. Try alternative part numbers (e.g., "LM2596" → "LM2596S")
+    3. Search SnapEDA or PCB Libraries for import
+    4. Create custom symbol (advanced):
+       - **Library → New Part → Create Symbol**
+  </Accordion>
+
+  <Accordion title="Schematic ERC errors: 'Unconnected pins'">
+    **Solutions:**
+    1. Check all component pins have wires or power symbols
+    2. Use **No Connect (X)** flag for unused pins
+    3. Verify power pins connected to VCC/GND nets
+    4. Check for duplicate net names (case-sensitive!)
+  </Accordion>
+
+  <Accordion title="PCB DRC errors: 'Clearance violation'">
+    **Symptoms:** Traces too close to each other or pads
+
+    **Solutions:**
+    1. Increase trace spacing:
+       - **Design → Design Rule → Clearance:** Min 0.2mm
+    2. Move components farther apart
+    3. Re-route traces with more space
+    4. Reduce trace width if space-constrained
+  </Accordion>
+
+  <Accordion title="PCB traces not connecting (ratsnest visible)">
+    **Symptoms:** White/yellow lines (airwires) remain after routing
+
+    **Solutions:**
+    1. Manually route remaining traces (click **Track** tool)
+    2. Use **Auto Router** (may not route 100% successfully)
+    3. Add vias to switch between top/bottom layers
+    4. Check if pads are on correct net (may need re-annotation)
+  </Accordion>
+
+  <Accordion title="Gerber export fails or JLCPCB rejects files">
+    **Solutions:**
+    1. Verify board outline exists:
+       - Must have closed polygon on **Board Outline** layer
+    2. Run DRC before export (fix all errors)
+    3. Use EasyEDA's **JLCPCB Fabrication** button (auto-generates compatible Gerbers)
+    4. Check minimum trace width: 0.15mm (JLCPCB standard)
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Project Deliverables (WP2)
+
+For the course submission, include:
+
+<Steps>
+  <Step title="Schematic Diagram">
+    - Complete electrical schematic (PDF export)
+    - Clearly labeled components with values
+    - Power rails and ground clearly marked
+    - Include in report as Figure
+  </Step>
+
+  <Step title="Wiring Diagram">
+    - Simplified diagram showing physical connections
+    - Color-coded wires (red/black/yellow)
+    - Pin numbers and wire gauges labeled
+    - Use as assembly guide
+  </Step>
+
+  <Step title="Bill of Materials (BOM)">
+    | Component | Quantity | Part Number | Supplier | Price |
+    |-----------|----------|-------------|----------|-------|
+    | ESP32 DevKit | 1 | ESP32-WROOM-32 | AliExpress | $5 |
+    | Buck Converter | 1 | LM2596 | Jaycar | $8 |
+    | ... | ... | ... | ... | ... |
+
+    Export from EasyEDA: **BOM → Export CSV**
+  </Step>
+
+  <Step title="Assembly Notes">
+    Document any:
+    - Component substitutions (e.g., used LM2596S instead of LM2596)
+    - Wiring modifications from original design
+    - Troubleshooting steps taken
+  </Step>
+</Steps>
+
+---
+
+## Learning Resources
+
+<CardGroup cols={2}>
+  <Card title="EasyEDA Tutorial" icon="book" href="https://docs.easyeda.com/en/Tutorial/Introduction/index.html">
+    Official documentation and video tutorials
+  </Card>
+
+  <Card title="PCB Design Basics" icon="video" href="https://www.youtube.com/watch?v=35YuILUlfGs">
+    YouTube: Phil's Lab - PCB design fundamentals
+  </Card>
+
+  <Card title="Power Supply Design" icon="bolt" href="https://www.ti.com/lit/an/slva372c/slva372c.pdf">
+    Texas Instruments app note on buck converters
+  </Card>
+
+  <Card title="EasyEDA Community" icon="users" href="https://forum.easyeda.com/">
+    Ask questions and share designs
+  </Card>
+</CardGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="PCB Design Tutorial" icon="microchip" href="/wp2-prototyping/pcb-design">
+    Step-by-step electrical design for the robot
+  </Card>
+
+  <Card title="Power System" icon="battery-full" href="/reference/hardware/power">
+    Understand battery, voltage regulation, and safety
+  </Card>
+
+  <Card title="CAD Design" icon="cube" href="/reference/software/fusion360-solidworks">
+    Design mechanical chassis to mount electronics
+  </Card>
+
+  <Card title="ESP32 Wiring" icon="microchip" href="/reference/hardware/esp32">
+    ESP32 pinout and connection diagrams
+  </Card>
+</CardGroup>
+
+---
+
+## References
+
+- [EasyEDA Documentation](https://docs.easyeda.com/)
+- [JLCPCB PCB Manufacturing](https://jlcpcb.com/)
+- [LCSC Electronics Components](https://www.lcsc.com/)
+- [Cadence OrCAD](https://www.orcad.com/)
+- [Electronics Tutorials](https://www.electronics-tutorials.ws/)

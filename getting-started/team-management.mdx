@@ -1,0 +1,611 @@
+---
+title: "Team Management"
+description: "Best practices for group work, team contracts, and collaboration in Engineering Design 3"
+---
+
+## Overview
+
+Engineering Design 3 is a **team-based project** requiring 5-6 members from different engineering programs. Effective teamwork is crucial for success and is part of your assessment. This guide helps you establish productive team dynamics from day one.
+
+## Team Formation
+
+### Team Size and Composition
+
+- **Size:** 5-6 members per team
+- **Diversity:** Members from different programs (mechanical, electrical, software, etc.)
+- **Benefit:** Each member brings unique skills and perspectives
+
+<Tip>
+  **Pro Tip:** A diverse team is stronger! Electrical engineering students might excel at PCB design, while software engineers lead ROS2 implementation. Mechanical engineers can focus on CAD and assembly.
+</Tip>
+
+### Finding Team Members
+
+<Steps>
+  <Step title="Attend First Week Classes">
+    Most teams form during the first week. Introduce yourself and your strengths.
+  </Step>
+
+  <Step title="Join Course Forum/Discord">
+    Many students find teammates through online course channels.
+  </Step>
+
+  <Step title="Skills Assessment">
+    Share your skills openly:
+    - Programming (C++, Python, MATLAB)
+    - CAD/mechanical design
+    - Electronics/PCB design
+    - Linux/ROS2 experience
+    - Project management
+  </Step>
+
+  <Step title="Set Expectations">
+    Discuss time commitment and grade expectations early.
+  </Step>
+</Steps>
+
+## Team Contract
+
+A **team contract** is a required deliverable in your project proposal. It establishes ground rules and expectations.
+
+### Essential Elements
+
+Your team contract should include:
+
+<AccordionGroup>
+  <Accordion title="1. Meeting Schedule" icon="calendar">
+    **Mandatory:**
+    - **Regular Meeting Time:** Fixed weekly schedule (e.g., Friday 1:30 PM)
+    - **Duration:** Minimum 30 minutes
+    - **Location:** Specify (on-campus, online, hybrid)
+    - **Attendance Policy:** Consequences for missing meetings
+
+    **Example:**
+    ```
+    Team meetings: Every Friday at 1:30 PM, Engineering Building Room 205
+    Duration: 30-60 minutes
+    Attendance: Mandatory unless notified 24h in advance
+    ```
+  </Accordion>
+
+  <Accordion title="2. Communication Protocol" icon="comments">
+    **Define:**
+    - Primary communication channel (Discord, WhatsApp, Slack, Teams)
+    - Expected response time (e.g., within 24 hours)
+    - Emergency contact method
+    - File sharing platform (Google Drive, GitHub, OneDrive)
+
+    **Example:**
+    ```
+    Primary: Discord #eeet2610-team-alpha
+    Response time: Within 24 hours on weekdays
+    File sharing: GitHub + Google Drive
+    Emergency: Direct phone call
+    ```
+  </Accordion>
+
+  <Accordion title="3. Participation Requirements" icon="hand">
+    **Each member must:**
+    - Verbally contribute at least 5 minutes during meetings
+    - Present current work, challenges, and upcoming tasks
+    - Complete assigned tasks by agreed deadlines
+    - Review and provide feedback on others' work
+
+    **Example:**
+    ```
+    Each member will:
+    - Speak for minimum 5 minutes per meeting
+    - Submit work 24h before deadlines for team review
+    - Review pull requests within 48 hours
+    - Attend all tutorial sessions unless excused
+    ```
+  </Accordion>
+
+  <Accordion title="4. Task Distribution" icon="list-check">
+    **Guidelines:**
+    - Tasks must be split fairly among members
+    - Each person should have independent and collaborative tasks
+    - Responsibilities should match skills when possible
+    - Workload should be roughly equal
+
+    **Example Roles:**
+    - **Project Manager:** Coordinates meetings, tracks deadlines
+    - **Mechanical Lead:** CAD design, 3D printing, assembly
+    - **Electronics Lead:** PCB design, wiring, power management
+    - **Embedded Systems Lead:** ESP32 programming, PID control
+    - **ROS2 Lead (2 people):** ROS2 setup, SLAM, navigation
+    - **Documentation Lead:** Report writing, video editing
+  </Accordion>
+
+  <Accordion title="5. Decision Making" icon="scale-balanced">
+    **Define how decisions are made:**
+    - Consensus (everyone agrees)
+    - Majority vote (50%+ agreement)
+    - Lead decision with team input
+    - Escalation to instructor for deadlock
+
+    **Example:**
+    ```
+    Major decisions (design changes, component orders): Majority vote
+    Minor decisions (meeting times, task allocation): Consensus
+    Conflicts: Discussion → Vote → Instructor mediation if needed
+    ```
+  </Accordion>
+
+  <Accordion title="6. Conflict Resolution" icon="handshake">
+    **Process:**
+    1. Direct communication between involved parties
+    2. Team discussion during meeting
+    3. Mediation by project manager
+    4. Escalation to instructor during office hours
+
+    **Example:**
+    ```
+    Step 1: Talk privately to resolve issue
+    Step 2: Bring to team meeting if unresolved
+    Step 3: Instructor consultation during office hours
+    Documentation: Log conflict and resolution in meeting minutes
+    ```
+  </Accordion>
+
+  <Accordion title="7. Consequences for Non-Compliance" icon="triangle-exclamation">
+    **Define penalties for:**
+    - Missing meetings without notice
+    - Not completing assigned tasks
+    - Poor quality work
+    - Lack of communication
+
+    **Example:**
+    ```
+    First offense: Verbal warning in meeting
+    Second offense: Written warning in meeting minutes
+    Third offense: Report to instructor (may affect individual grade)
+    Severe cases: Buy coffee for the team as an act of forgiveness
+    ```
+
+    <Note>
+      **Important:** Consequences must be reasonable and fair. The goal is accountability, not punishment.
+    </Note>
+  </Accordion>
+
+  <Accordion title="8. Signatures and Dates" icon="signature">
+    **Required:**
+    - All team members must sign and date the contract
+    - Include in project proposal appendix
+    - Refer to contract when issues arise
+
+    **Example:**
+    ```
+    Agreed and signed:
+    Alice Chen - 02/15/2024 [Signature]
+    Bob Kumar - 02/15/2024 [Signature]
+    Charlie Lee - 02/15/2024 [Signature]
+    ...
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Sample Team Contract Template
+
+```markdown
+# Team [Name] - EEET2610 Contract
+
+## Team Members
+1. [Name] - [Student ID] - [Program] - [Role]
+2. [Name] - [Student ID] - [Program] - [Role]
+...
+
+## Meeting Schedule
+- Time: Every [Day] at [Time]
+- Location: [Place or Online Link]
+- Duration: [X] minutes minimum
+- Attendance: Mandatory unless notified 24h advance
+
+## Communication
+- Primary Channel: [Discord/WhatsApp/etc.]
+- Response Time: Within 24 hours
+- File Sharing: [Google Drive/GitHub]
+
+## Participation Standards
+- Each member speaks minimum 5 minutes per meeting
+- Complete assigned tasks on time
+- Review others' work constructively
+- Attend tutorial sessions
+
+## Work Distribution
+- Tasks assigned based on skills and workload balance
+- Each member has independent responsibilities
+- Collaborative work on integration tasks
+
+## Decision Making
+- Major decisions: Majority vote (4/6)
+- Minor decisions: Consensus
+- Conflicts: Discussion → Vote → Instructor
+
+## Consequences
+- First offense: Verbal warning
+- Second offense: Written in minutes
+- Third offense: Instructor notification
+- Alternative: Buy team coffee ☕
+
+## Signatures
+[Names and signatures with dates]
+```
+
+## Meeting Best Practices
+
+### Before the Meeting
+
+<Steps>
+  <Step title="Set Agenda">
+    Share meeting agenda 24 hours before
+    - Topics to discuss
+    - Decisions needed
+    - Presentations required
+  </Step>
+
+  <Step title="Prepare Updates">
+    Each member prepares:
+    - What I completed since last meeting
+    - Current challenges/blockers
+    - Next tasks and timeline
+  </Step>
+
+  <Step title="Review Materials">
+    Read shared documents or code before meeting
+  </Step>
+</Steps>
+
+### During the Meeting
+
+<CardGroup cols={2}>
+  <Card title="Assign Roles" icon="users">
+    - **Facilitator:** Keeps meeting on track
+    - **Timekeeper:** Ensures we stay on schedule
+    - **Note-taker:** Records minutes
+    - **Rotate these roles each week**
+  </Card>
+
+  <Card title="Follow Structure" icon="list-ol">
+    1. Check-in (5 min): Quick round table
+    2. Updates (15 min): Everyone shares progress
+    3. Discussion (10 min): Solve problems together
+    4. Action items (5 min): Assign next tasks
+    5. Next meeting (2 min): Confirm time/place
+  </Card>
+</CardGroup>
+
+<Tip>
+  **5-Minute Participation Rule:** This ensures everyone contributes. Silent members may not be engaged or may feel unheard. Encourage quiet members to share!
+</Tip>
+
+### After the Meeting
+
+<Steps>
+  <Step title="Distribute Minutes">
+    Send meeting notes within 24 hours including:
+    - Attendees
+    - Key decisions made
+    - Action items with assigned owners and deadlines
+    - Next meeting time
+  </Step>
+
+  <Step title="Update Task Tracker">
+    Update shared task list or project board (Trello, Notion, GitHub Projects)
+  </Step>
+
+  <Step title="Individual Work">
+    Each member works on assigned tasks
+    - Regular progress updates in communication channel
+    - Ask for help early if blocked
+  </Step>
+</Steps>
+
+## Common Team Problems and Solutions
+
+<AccordionGroup>
+  <Accordion title="Problem: Team member not contributing" icon="user-slash">
+    **Signs:**
+    - Missing meetings repeatedly
+    - Not completing assigned tasks
+    - No communication or updates
+
+    **Solutions:**
+    1. **Private conversation:** Ask if they're facing challenges (personal, workload, understanding)
+    2. **Redistribute tasks:** Maybe task doesn't match their skills
+    3. **Set clear deadlines:** Specific, achievable milestones
+    4. **Document issues:** Keep meeting minutes showing pattern
+    5. **Instructor consultation:** As last resort during office hours
+
+    <Warning>
+      Don't wait until the end of semester! Address issues early when there's time to improve.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="Problem: Disagreement on technical approach" icon="code-branch">
+    **Example:** Team split on using Arduino IDE vs VSCode/PlatformIO
+
+    **Solutions:**
+    1. **List pros/cons:** Create comparison table
+    2. **Prototype both:** Quick test with each approach
+    3. **Expert input:** Ask instructor or tutor during tutorial
+    4. **Vote:** If no clear winner, use majority vote
+    5. **Document decision:** Record why choice was made
+  </Accordion>
+
+  <Accordion title="Problem: Unequal workload distribution" icon="scale-unbalanced">
+    **Signs:**
+    - Some members working 10+ hours, others &lt;2 hours
+    - Resentment building in team
+    - Quality suffering due to overload
+
+    **Solutions:**
+    1. **Track time:** Use simple time log for 1-2 weeks
+    2. **Visualize work:** Create task board showing who's doing what
+    3. **Rebalance:** Redistribute tasks mid-project
+    4. **Parallel work:** Break large tasks into parallel subtasks
+    5. **Skills training:** Help less experienced members upskill
+  </Accordion>
+
+  <Accordion title="Problem: Poor communication" icon="comment-slash">
+    **Signs:**
+    - Missed deadlines due to misunderstanding
+    - Duplicate work
+    - Surprises during meetings
+
+    **Solutions:**
+    1. **Structured updates:** Daily/twice-weekly async updates in channel
+    2. **Shared documents:** Living Google Doc with current status
+    3. **Git commits:** Descriptive commit messages
+    4. **Quick standups:** 5-min sync before work sessions
+    5. **Over-communicate:** Better to share too much than too little
+  </Accordion>
+
+  <Accordion title="Problem: Last-minute rushes" icon="clock">
+    **Signs:**
+    - Working all night before deadlines
+    - Rushed, low-quality work
+    - Stress and burnout
+
+    **Solutions:**
+    1. **Internal deadlines:** Set team deadlines 1 week before official
+    2. **Incremental progress:** Small weekly milestones
+    3. **Buffer time:** Account for unexpected issues
+    4. **Early integration:** Don't wait until last minute to combine subsystems
+    5. **Start early:** Order components and begin work immediately
+  </Accordion>
+</AccordionGroup>
+
+## Task Distribution Strategies
+
+### Work Package Assignment
+
+Assign work packages based on skills and interest:
+
+| Work Package | Recommended Skills | Team Members |
+|--------------|-------------------|--------------|
+| WP1: MATLAB Simulation | MATLAB, Math, Kinematics | 1-2 members |
+| WP2: CAD Design | Mechanical design, 3D modeling | 1-2 members |
+| WP2: PCB Design | Electronics, circuit design | 1 member |
+| WP3: Embedded Control | C/C++, microcontrollers | 1-2 members |
+| WP4: ROS2 Setup & URDF | Linux, Python, XML | 1 member |
+| WP4: ROS2 Navigation | ROS2, algorithms, Python/C++ | 2 members |
+| WP5: Integration | Everyone (collaborative) | All members |
+| Documentation & Reports | Strong writing, organization | 1-2 members + reviews from all |
+
+<Note>
+  **Overlap is good!** Two people working on complex work packages (WP4) provides redundancy and knowledge sharing.
+</Note>
+
+### Parallel vs Sequential Work
+
+Some tasks can be done in parallel, others must be sequential:
+
+**Parallel (Weeks 1-6):**
+- Person A: MATLAB simulation (WP1)
+- Person B: CAD design (WP2)
+- Person C: PCB design (WP2)
+- Person D: ESP32 environment setup (WP3)
+- Person E: ROS2 environment setup (WP4)
+
+**Sequential (Weeks 7-10):**
+- Hardware must be built before testing
+- ROS2 packages build on each other (URDF → Control → Localization → SLAM → Nav)
+- Integration requires all subsystems ready
+
+## Collaboration Tools
+
+### Recommended Toolstack
+
+<CardGroup cols={2}>
+  <Card title="Communication" icon="message">
+    **Discord** (recommended) or **Microsoft Teams**
+    - Channels for each work package
+    - File sharing
+    - Voice/video calls
+    - Screen sharing
+  </Card>
+
+  <Card title="Version Control" icon="code-branch">
+    **GitHub** (required)
+    - Code repositories
+    - Version history
+    - Branching for features
+    - Pull request reviews
+  </Card>
+
+  <Card title="Documentation" icon="file">
+    **Google Docs** or **Overleaf** (LaTeX)
+    - Collaborative report writing
+    - Real-time editing
+    - Comment and suggestion mode
+  </Card>
+
+  <Card title="Task Management" icon="list-check">
+    **Trello**, **Notion**, or **GitHub Projects**
+    - Kanban boards
+    - Task assignments
+    - Deadline tracking
+  </Card>
+
+  <Card title="File Sharing" icon="folder">
+    **Google Drive** or **OneDrive**
+    - Large files (CAD, videos)
+    - Datasheets and references
+    - Meeting minutes
+  </Card>
+
+  <Card title="Scheduling" icon="calendar">
+    **Google Calendar** or **When2Meet**
+    - Shared team calendar
+    - Meeting scheduling
+    - Deadline reminders
+  </Card>
+</CardGroup>
+
+### Git Workflow for Teams
+
+<Steps>
+  <Step title="Repository Structure">
+    Create organized repositories:
+    ```
+    eeet2610-team-alpha/
+    ├── wp1-matlab/           # MATLAB simulation
+    ├── wp2-cad/              # CAD files
+    ├── wp2-pcb/              # PCB schematics
+    ├── wp3-firmware/         # ESP32 code
+    ├── wp4-ros2/             # ROS2 packages
+    ├── docs/                 # Documentation
+    └── README.md             # Project overview
+    ```
+  </Step>
+
+  <Step title="Branching Strategy">
+    - `main`: Stable, working code
+    - `develop`: Integration branch
+    - `feature/motor-control`: Individual features
+    - `fix/encoder-bug`: Bug fixes
+
+    Merge to main only when tested!
+  </Step>
+
+  <Step title="Commit Best Practices">
+    - Frequent commits (every significant change)
+    - Descriptive messages: "Add PID controller for left motor" not "Update code"
+    - Push regularly to back up work
+  </Step>
+
+  <Step title="Pull Requests">
+    - Create PR for major changes
+    - Request team review
+    - Discuss and improve code together
+  </Step>
+</Steps>
+
+## Weekly Meeting Checklist
+
+Use this template for your weekly meetings:
+
+```markdown
+# Team [Name] - Meeting [Number]
+Date: [DD/MM/YYYY]
+Time: [HH:MM - HH:MM]
+Location: [Place]
+
+## Attendees
+- [x] Member 1
+- [x] Member 2
+- [ ] Member 3 (absent - notified)
+...
+
+## Agenda
+1. Quick check-in (5 min)
+2. Progress updates (15 min)
+3. Blocker discussion (10 min)
+4. Task assignment (5 min)
+5. Next steps (5 min)
+
+## Progress Updates
+
+### [Member 1]
+- Completed: [Task 1, Task 2]
+- Challenges: [Issue description]
+- Next: [Upcoming task]
+
+### [Member 2]
+...
+
+## Decisions Made
+- [Decision 1]: [Rationale]
+- [Decision 2]: [Rationale]
+
+## Action Items
+| Task | Assigned To | Deadline | Status |
+|------|------------|----------|--------|
+| [Task description] | [Name] | [Date] | Not started |
+...
+
+## Next Meeting
+- Date: [DD/MM/YYYY]
+- Time: [HH:MM]
+- Agenda items: [Preview]
+```
+
+## Instructor Support
+
+When to contact the instructor:
+
+<AccordionGroup>
+  <Accordion title="Tutorial Sessions" icon="chalkboard-user">
+    **Purpose:** Technical questions and team mediation
+    - Ask technical questions about work packages
+    - Request objective feedback on team dynamics
+    - Get guidance on design decisions
+    - Other teams present can provide additional perspectives
+  </Accordion>
+
+  <Accordion title="Office Hours" icon="door-open">
+    **Purpose:** Private discussions and conflict resolution
+    - Escalate serious team conflicts
+    - Discuss individual grade concerns
+    - Get personalized project advice
+    - Issues logged in meeting minutes
+  </Accordion>
+
+  <Accordion title="Email" icon="envelope">
+    **Purpose:** Administrative questions
+    - Deadline extensions (with valid reason)
+    - Clarification on assignment requirements
+    - Submission issues
+  </Accordion>
+</AccordionGroup>
+
+<Warning>
+  **Don't suffer in silence!** If team issues arise, address them early. Instructors can help mediate and adjust grades for non-contributing members if documented properly.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card
+    title="Course Overview"
+    icon="book-open"
+    href="/getting-started/course-overview"
+  >
+    Review course structure and deliverables
+  </Card>
+  <Card
+    title="Project Proposal"
+    icon="file-pen"
+    href="/getting-started/project-proposal"
+  >
+    Start your project proposal with team contract
+  </Card>
+  <Card
+    title="Prerequisites"
+    icon="list-check"
+    href="/getting-started/prerequisites"
+  >
+    Ensure team covers all required skills
+  </Card>
+</CardGroup>

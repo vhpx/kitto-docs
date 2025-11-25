@@ -1,0 +1,602 @@
+---
+title: "Behavior Trees"
+description: "Customize Nav2 navigation logic using Behavior Trees"
+---
+
+## Overview
+
+**Behavior Trees (BT)** provide flexible decision-making for robot navigation. Nav2 uses BTs to coordinate planning, control, and recovery behaviors.
+
+<Note>
+  **Behavior Trees** are more flexible than state machines, allowing easy modification of navigation logic without code changes.
+</Note>
+
+## What is a Behavior Tree?
+
+**Hierarchical structure** of nodes that execute in sequence:
+
+```
+Root
+├── Sequence (execute children in order)
+│   ├── Action 1
+│   ├── Action 2
+│   └── Fallback (try alternatives if fail)
+│       ├── Action 3
+│       └── Action 4 (backup)
+└── Parallel (execute simultaneously)
+    ├── Action 5
+    └── Action 6
+```
+
+### Node Types
+
+<CardGroup cols={3}>
+  <Card title="Action" icon="play">
+    Execute behavior (e.g., compute path, follow path)
+    - Returns: Success, Failure, Running
+  </Card>
+
+  <Card title="Condition" icon="circle-check">
+    Check state (e.g., goal reached, path blocked)
+    - Returns: Success or Failure
+  </Card>
+
+  <Card title="Control" icon="sitemap">
+    Organize children (Sequence, Fallback, Parallel)
+  </Card>
+
+  <Card title="Decorator" icon="sparkles">
+    Modify child behavior (Retry, Invert, Delay)
+  </Card>
+</CardGroup>
+
+## Default Nav2 Behavior Tree
+
+**File:** `navigate_to_pose_w_replanning_and_recovery.xml`
+
+```xml
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <RecoveryNode number_of_retries="6" name="NavigateRecovery">
+
+      <!-- Main navigation sequence -->
+      <PipelineSequence name="NavigateWithReplanning">
+
+        <!-- Compute path to goal -->
+        <RateController hz="1.0">
+          <RecoveryNode number_of_retries="1" name="ComputePathToPose">
+            <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
+            <ClearEntireCostmap name="ClearGlobalCostmap-Context" service_name="global_costmap/clear_entirely_global_costmap"/>
+          </RecoveryNode>
+        </RateController>
+
+        <!-- Follow the computed path -->
+        <RecoveryNode number_of_retries="1" name="FollowPath">
+          <FollowPath path="{path}" controller_id="FollowPath"/>
+          <ClearEntireCostmap name="ClearLocalCostmap-Context" service_name="local_costmap/clear_entirely_local_costmap"/>
+        </RecoveryNode>
+
+      </PipelineSequence>
+
+      <!-- Recovery behaviors if navigation fails -->
+      <ReactiveFallback name="RecoveryFallback">
+        <GoalUpdated/>
+        <SequenceStar name="RecoveryActions">
+          <ClearEntireCostmap name="ClearLocalCostmap-Subtree" service_name="local_costmap/clear_entirely_local_costmap"/>
+          <ClearEntireCostmap name="ClearGlobalCostmap-Subtree" service_name="global_costmap/clear_entirely_global_costmap"/>
+          <Spin spin_dist="1.57"/>
+          <Wait wait_duration="5"/>
+          <BackUp backup_dist="0.30" backup_speed="0.05"/>
+        </SequenceStar>
+      </ReactiveFallback>
+
+    </RecoveryNode>
+  </BehaviorTree>
+</root>
+```
+
+### How It Works
+
+1. **ComputePathToPose:** Plan global path
+   - If fails → Clear global costmap, retry
+
+2. **FollowPath:** Execute path with local planner
+   - If fails → Clear local costmap, retry
+
+3. **If still failing (after retries):**
+   - Clear both costmaps
+   - Spin in place (clear area)
+   - Wait 5 seconds
+   - Backup
+   - Retry from step 1
+
+4. **Retry up to 6 times** before giving up
+
+## Custom Behavior Trees
+
+### Simple Navigate (No Recovery)
+
+**File:** `navigate_simple.xml`
+
+```xml
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <PipelineSequence name="NavigateSimple">
+
+      <!-- Plan path (no retry) -->
+      <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
+
+      <!-- Follow path (no retry) -->
+      <FollowPath path="{path}" controller_id="FollowPath"/>
+
+    </PipelineSequence>
+  </BehaviorTree>
+</root>
+```
+
+**Use case:** Testing, simple environments, fast failure needed
+
+### Navigate with Replanning
+
+**Continuous replanning** for dynamic environments:
+
+```xml
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <PipelineSequence name="NavigateWithReplanning">
+
+      <!-- Replan every 1 second -->
+      <RateController hz="1.0">
+        <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
+      </RateController>
+
+      <!-- Follow latest path -->
+      <FollowPath path="{path}" controller_id="FollowPath"/>
+
+    </PipelineSequence>
+  </BehaviorTree>
+</root>
+```
+
+**Benefit:** Adapts to moving obstacles
+
+### Navigate Through Poses (Waypoints)
+
+**Visit multiple waypoints in sequence:**
+
+```xml
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <RecoveryNode number_of_retries="1" name="NavigateThroughPoses">
+
+      <PipelineSequence name="NavigateWithReplanning">
+        <RateController hz="1.0">
+          <RecoveryNode number_of_retries="1" name="ComputePathThroughPoses">
+            <ComputePathThroughPoses goals="{goals}" path="{path}" planner_id="GridBased"/>
+            <ClearEntireCostmap name="ClearGlobalCostmap-Context" service_name="global_costmap/clear_entirely_global_costmap"/>
+          </RecoveryNode>
+        </RateController>
+
+        <RecoveryNode number_of_retries="1" name="FollowPath">
+          <FollowPath path="{path}" controller_id="FollowPath"/>
+          <ClearEntireCostmap name="ClearLocalCostmap-Context" service_name="local_costmap/clear_entirely_local_costmap"/>
+        </RecoveryNode>
+      </PipelineSequence>
+
+      <!-- Recovery behaviors -->
+      <ReactiveFallback name="RecoveryFallback">
+        <GoalUpdated/>
+        <RoundRobin name="RecoveryActions">
+          <Sequence name="ClearingActions">
+            <ClearEntireCostmap name="ClearLocalCostmap-Subtree" service_name="local_costmap/clear_entirely_local_costmap"/>
+            <ClearEntireCostmap name="ClearGlobalCostmap-Subtree" service_name="global_costmap/clear_entirely_global_costmap"/>
+          </Sequence>
+          <Spin spin_dist="1.57"/>
+          <Wait wait_duration="5"/>
+          <BackUp backup_dist="0.30" backup_speed="0.05"/>
+        </RoundRobin>
+      </ReactiveFallback>
+
+    </RecoveryNode>
+  </BehaviorTree>
+</root>
+```
+
+## BT Nodes Reference
+
+### Navigation Actions
+
+**ComputePathToPose**
+```xml
+<ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
+```
+- Calls planner server to compute path
+- Input: goal (PoseStamped)
+- Output: path (nav_msgs/Path)
+
+**FollowPath**
+```xml
+<FollowPath path="{path}" controller_id="FollowPath"/>
+```
+- Calls controller server to follow path
+- Input: path
+- Output: cmd_vel commands
+
+**ComputePathThroughPoses**
+```xml
+<ComputePathThroughPoses goals="{goals}" path="{path}" planner_id="GridBased"/>
+```
+- Plans path through multiple waypoints
+- Input: goals (array of PoseStamped)
+
+### Recovery Actions
+
+**Spin**
+```xml
+<Spin spin_dist="1.57"/>
+```
+- Rotates robot in place
+- `spin_dist`: Radians to rotate (1.57 = 90°, 3.14 = 180°)
+
+**BackUp**
+```xml
+<BackUp backup_dist="0.30" backup_speed="0.05"/>
+```
+- Moves robot backward
+- `backup_dist`: Distance (meters)
+- `backup_speed`: Speed (m/s)
+
+**Wait**
+```xml
+<Wait wait_duration="5"/>
+```
+- Waits for specified time (seconds)
+
+**ClearEntireCostmap**
+```xml
+<ClearEntireCostmap service_name="local_costmap/clear_entirely_local_costmap"/>
+```
+- Clears all obstacles from costmap
+
+**ClearCostmapExceptRegion**
+```xml
+<ClearCostmapExceptRegion service_name="local_costmap/clear_except_region" reset_distance="1.0"/>
+```
+- Clears costmap except area around robot
+
+### Control Flow Nodes
+
+**Sequence**
+```xml
+<Sequence>
+  <Action1/>
+  <Action2/>
+  <Action3/>
+</Sequence>
+```
+- Executes children in order
+- Fails if any child fails
+
+**Fallback**
+```xml
+<Fallback>
+  <Action1/>    <!-- Try this first -->
+  <Action2/>    <!-- If fails, try this -->
+  <Action3/>    <!-- Last resort -->
+</Fallback>
+```
+- Tries children until one succeeds
+
+**Parallel**
+```xml
+<Parallel>
+  <Action1/>    <!-- Execute simultaneously -->
+  <Action2/>
+</Parallel>
+```
+- Executes children concurrently
+
+**RecoveryNode**
+```xml
+<RecoveryNode number_of_retries="3">
+  <MainAction/>
+  <RecoveryAction/>
+</RecoveryNode>
+```
+- Tries main action
+- If fails, runs recovery, then retries main
+
+### Decorators
+
+**RateController**
+```xml
+<RateController hz="1.0">
+  <Action/>
+</RateController>
+```
+- Limits execution rate
+
+**RetryUntilSuccessful**
+```xml
+<RetryUntilSuccessful num_attempts="5">
+  <Action/>
+</RetryUntilSuccessful>
+```
+- Retries until success or max attempts
+
+**Inverter**
+```xml
+<Inverter>
+  <Condition/>
+</Inverter>
+```
+- Inverts result (Success ↔ Failure)
+
+## Loading Custom BT
+
+### Configuration
+
+**In `nav2_params.yaml`:**
+```yaml
+bt_navigator:
+  ros__parameters:
+    use_sim_time: False
+    global_frame: map
+    robot_base_frame: base_link
+    odom_topic: /odometry/filtered
+    bt_loop_duration: 10
+    default_server_timeout: 20
+
+    # Specify custom BT file
+    default_nav_to_pose_bt_xml: /path/to/navigate_simple.xml
+    default_nav_through_poses_bt_xml: /path/to/navigate_waypoints.xml
+
+    # Plugin libraries (for custom BT nodes)
+    plugin_lib_names:
+      - nav2_compute_path_to_pose_action_bt_node
+      - nav2_compute_path_through_poses_action_bt_node
+      - nav2_follow_path_action_bt_node
+      - nav2_spin_action_bt_node
+      - nav2_wait_action_bt_node
+      - nav2_back_up_action_bt_node
+      - nav2_clear_costmap_service_bt_node
+      # Add custom plugins here
+```
+
+### Package Structure
+
+```
+mecanum_description/
+├── behavior_trees/
+│   ├── navigate_simple.xml
+│   ├── navigate_waypoints.xml
+│   └── custom_recovery.xml
+├── config/
+│   └── nav2_params.yaml
+└── ...
+```
+
+### Install BT Files
+
+**In `CMakeLists.txt`:**
+```cmake
+install(DIRECTORY behavior_trees
+  DESTINATION share/${PROJECT_NAME}/)
+```
+
+## Debugging Behavior Trees
+
+### Enable BT Logging
+
+```yaml
+bt_navigator:
+  ros__parameters:
+    # Enable detailed logging
+    debug_logging: true
+```
+
+### Monitor BT State
+
+```bash
+# Watch BT execution
+ros2 topic echo /behavior_tree_log
+```
+
+### Visualize with Groot
+
+**Install Groot:**
+```bash
+sudo apt install ros-jazzy-groot
+```
+
+**Launch:**
+```bash
+# Monitor live BT execution
+groot
+
+# Or record to file
+ros2 bag record /behavior_tree_log -o bt_recording
+```
+
+**Features:**
+- Real-time BT visualization
+- Node status (running, success, failure)
+- Execution flow diagram
+
+## Advanced: Custom BT Nodes
+
+### Create Custom Action
+
+**C++ plugin example:**
+
+```cpp
+#include "behaviortree_cpp_v3/action_node.h"
+#include "nav2_behavior_tree/bt_action_node.hpp"
+
+namespace my_bt_nodes
+{
+
+class CustomAction : public BT::ActionNodeBase
+{
+public:
+  CustomAction(const std::string & xml_tag_name,
+               const BT::NodeConfiguration & conf)
+  : BT::ActionNodeBase(xml_tag_name, conf)
+  {
+  }
+
+  static BT::PortsList providedPorts()
+  {
+    return {
+      BT::InputPort<std::string>("param1", "Description of param1"),
+      BT::OutputPort<bool>("result", "Output result")
+    };
+  }
+
+  BT::NodeStatus tick() override
+  {
+    // Get input
+    std::string param1;
+    getInput("param1", param1);
+
+    // Execute custom logic
+    bool success = doSomething(param1);
+
+    // Set output
+    setOutput("result", success);
+
+    return success ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
+  }
+
+private:
+  bool doSomething(const std::string & param)
+  {
+    // Custom behavior implementation
+    return true;
+  }
+};
+
+}  // namespace my_bt_nodes
+```
+
+### Register Plugin
+
+**In plugin XML:**
+```xml
+<library path="my_bt_nodes">
+  <class name="my_bt_nodes/CustomAction" type="my_bt_nodes::CustomAction" base_class_type="BT::ActionNodeBase">
+    <description>Custom action description</description>
+  </class>
+</library>
+```
+
+### Use in BT
+
+```xml
+<CustomAction param1="value" result="{output_var}"/>
+```
+
+## Example Use Cases
+
+### Patrol Route
+
+```xml
+<root main_tree_to_execute="PatrolRoute">
+  <BehaviorTree ID="PatrolRoute">
+    <Repeat num_cycles="-1">  <!-- Infinite loop -->
+      <Sequence>
+        <NavigateToPose goal="{waypoint1}"/>
+        <Wait wait_duration="5"/>  <!-- Pause at waypoint -->
+        <NavigateToPose goal="{waypoint2}"/>
+        <Wait wait_duration="5"/>
+        <NavigateToPose goal="{waypoint3}"/>
+        <Wait wait_duration="5"/>
+      </Sequence>
+    </Repeat>
+  </BehaviorTree>
+</root>
+```
+
+### Exploration
+
+```xml
+<root main_tree_to_execute="Explore">
+  <BehaviorTree ID="Explore">
+    <Repeat num_cycles="-1">
+      <Sequence>
+        <!-- Select random frontier -->
+        <SelectFrontier goal="{frontier_goal}"/>
+
+        <!-- Navigate to frontier -->
+        <NavigateToPose goal="{frontier_goal}"/>
+
+        <!-- Pause to scan area -->
+        <Spin spin_dist="6.28"/>  <!-- 360° -->
+      </Sequence>
+    </Repeat>
+  </BehaviorTree>
+</root>
+```
+
+### Delivery Mission
+
+```xml
+<root main_tree_to_execute="Delivery">
+  <BehaviorTree ID="Delivery">
+    <Sequence>
+      <!-- Go to pickup location -->
+      <NavigateToPose goal="{pickup_location}"/>
+      <Wait wait_duration="10"/>  <!-- Wait for loading -->
+
+      <!-- Go to delivery location -->
+      <NavigateToPose goal="{delivery_location}"/>
+      <Wait wait_duration="10"/>  <!-- Wait for unloading -->
+
+      <!-- Return to home -->
+      <NavigateToPose goal="{home_location}"/>
+    </Sequence>
+  </BehaviorTree>
+</root>
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Navigation Testing"
+    icon="flask"
+    href="/wp4-ros2/navigation/testing"
+  >
+    Test and validate navigation system
+  </Card>
+
+  <Card
+    title="Waypoint Following"
+    icon="location-dot"
+    href="/reference/ros2/waypoint-follower"
+  >
+    Navigate through multiple waypoints
+  </Card>
+
+  <Card
+    title="Groot Tutorial"
+    icon="tree"
+    href="https://www.behaviortree.dev/groot"
+  >
+    Visual BT editor and debugger
+  </Card>
+
+  <Card
+    title="Nav2 BT Docs"
+    icon="book"
+    href="https://docs.nav2.org/behavior_trees/index.html"
+  >
+    Official Nav2 Behavior Tree documentation
+  </Card>
+</CardGroup>
+
+## References
+
+[1] Behavior Trees: https://www.behaviortree.dev/
+[2] Nav2 BT Navigator: https://docs.nav2.org/configuration/packages/configuring-bt-navigator.html
+[3] BT.CPP Library: https://github.com/BehaviorTree/BehaviorTree.CPP

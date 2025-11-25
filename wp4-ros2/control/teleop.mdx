@@ -1,0 +1,624 @@
+---
+title: "Teleop Control"
+description: "Control Mecanum robot with keyboard teleoperation"
+---
+
+## Overview
+
+Teleoperation (teleop) allows manual control of the robot using keyboard or joystick. This is essential for:
+- Testing motor control
+- Initial robot setup
+- Emergency manual override
+- Data collection for mapping
+
+<Note>
+  **Testing milestone:** If teleop works, your full control stack (ros2_control → hardware interface → ESP32 → motors) is functional!
+</Note>
+
+## Teleoperation Methods
+
+<CardGroup cols={3}>
+  <Card title="Keyboard" icon="keyboard">
+    **teleop_twist_keyboard**
+    - Built-in ROS2 package
+    - WASD or arrow keys
+    - Simple, no hardware needed
+  </Card>
+
+  <Card title="Joystick" icon="gamepad">
+    **joy / teleop_twist_joy**
+    - Xbox/PS controller
+    - Analog control
+    - Requires USB joystick
+  </Card>
+
+  <Card title="Custom GUI" icon="window">
+    **rqt_robot_steering**
+    - Graphical sliders
+    - Precise velocity input
+    - Good for debugging
+  </Card>
+</CardGroup>
+
+## Method 1: Keyboard Teleop
+
+### Installation
+
+```bash
+# Install teleop_twist_keyboard
+sudo apt install ros-jazzy-teleop-twist-keyboard
+```
+
+### Usage
+
+**Terminal 1:** Launch robot control
+```bash
+ros2 launch mecanum_description robot_control.launch.py
+```
+
+**Terminal 2:** Run teleop
+```bash
+ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args --remap /cmd_vel:=/cmd_vel
+```
+
+### Controls
+
+```
+Reading from the keyboard and publishing to /cmd_vel!
+---------------------------
+Moving around:
+   u    i    o
+   j    k    l
+   m    ,    .
+
+For Mecanum wheels (omnidirectional):
+- i: Forward
+- ,: Backward
+- j: Strafe left
+- l: Strafe right
+- u: Forward + left
+- o: Forward + right
+- m: Backward + left
+- .: Backward + right
+- k: Stop
+
+Rotation:
+- q: Rotate counterclockwise (left)
+- e: Rotate clockwise (right)
+
+Speed control:
+- w/x: Increase/decrease linear velocity
+- a/d: Increase/decrease angular velocity
+- s: Stop (force emergency stop)
+
+CTRL-C to quit
+```
+
+**Default speeds:**
+- Linear: 0.5 m/s
+- Angular: 1.0 rad/s
+
+<Tip>
+  **Keep teleop terminal focused!** Keypresses only register when terminal window is active.
+</Tip>
+
+### Custom Speed Limits
+
+```bash
+# Launch with custom speeds
+ros2 run teleop_twist_keyboard teleop_twist_keyboard \
+  --ros-args \
+  --remap /cmd_vel:=/cmd_vel \
+  -p speed:=0.3 \
+  -p turn:=0.5
+```
+
+**Parameters:**
+- `speed`: Linear velocity (m/s)
+- `turn`: Angular velocity (rad/s)
+
+## Method 2: Joystick Teleop
+
+### Installation
+
+```bash
+# Install joy packages
+sudo apt install ros-jazzy-joy ros-jazzy-teleop-twist-joy
+```
+
+### Setup Joystick
+
+**Connect USB controller, then:**
+
+```bash
+# List joystick devices
+ls /dev/input/js*
+# Expected: /dev/input/js0
+
+# Test joystick
+sudo jstest /dev/input/js0
+# Move sticks, press buttons to see output
+```
+
+### Configuration
+
+**File:** `config/teleop_joy.yaml`
+
+```yaml
+teleop_twist_joy_node:
+  ros__parameters:
+    # Axis mappings (depends on your controller)
+    axis_linear:
+      x: 1  # Left stick vertical (forward/backward)
+      y: 0  # Left stick horizontal (strafe left/right)
+    axis_angular:
+      yaw: 2  # Right stick horizontal (rotate)
+
+    # Scale factors
+    scale_linear:
+      x: 1.0
+      y: 1.0
+    scale_angular:
+      yaw: 1.0
+
+    # Enable button (hold to move, release to stop)
+    enable_button: 0  # Button 0 (typically "A" on Xbox, "X" on PS)
+
+    # Turbo button (hold for faster speed)
+    enable_turbo_button: 1  # Button 1 (typically "B" on Xbox, "Circle" on PS)
+
+    # Require enable button (safety)
+    require_enable_button: true
+```
+
+### Launch Joystick Teleop
+
+```bash
+# Terminal 1: Robot control
+ros2 launch mecanum_description robot_control.launch.py
+
+# Terminal 2: Joy node
+ros2 run joy joy_node
+
+# Terminal 3: Teleop twist joy
+ros2 run teleop_twist_joy teleop_node --ros-args --params-file config/teleop_joy.yaml
+```
+
+**Usage:**
+1. Hold enable button (A/X)
+2. Move left stick → robot moves
+3. Move right stick → robot rotates
+4. Release enable button → robot stops
+
+<Warning>
+  **Dead man's switch:** Enable button acts as safety. Robot only moves when button held. Practice this before first drive!
+</Warning>
+
+## Method 3: GUI Teleop (rqt)
+
+### Installation
+
+```bash
+sudo apt install ros-jazzy-rqt-robot-steering
+```
+
+### Usage
+
+```bash
+# Launch rqt with robot steering plugin
+rqt
+```
+
+**In rqt:**
+1. Plugins → Robot Tools → Robot Steering
+2. Set topic: `/cmd_vel`
+3. Use sliders to control:
+   - Linear X (forward/backward)
+   - Linear Y (strafe left/right)
+   - Angular Z (rotate)
+
+<img
+  src="/images/rqt-robot-steering.png"
+  alt="rqt robot steering plugin"
+  caption="rqt robot steering provides slider-based velocity control"
+/>
+
+**Advantages:**
+- Visual feedback
+- Precise velocity values
+- Good for debugging
+
+## Testing Procedure
+
+### Pre-Flight Checklist
+
+- [ ] Robot on level surface
+- [ ] Battery charged (12V full)
+- [ ] Motors connected correctly
+- [ ] E-stop accessible (unplug battery)
+- [ ] Clear space around robot (2m radius)
+- [ ] ESP32 powered and connected via USB
+- [ ] All ros2_control nodes running
+
+### Test Sequence
+
+<Steps>
+  <Step title="Test 1: Basic Motion">
+    **Objective:** Verify straight-line motion
+
+    1. Launch robot control + teleop
+    2. Press `i` (forward) briefly (~1 second)
+    3. Observe robot moves forward ~0.5m
+
+    **Pass criteria:**
+    - Robot moves forward in straight line
+    - Stops when key released
+    - No unexpected rotation
+  </Step>
+
+  <Step title="Test 2: Directional Control">
+    **Test all directions:**
+
+    | Key | Expected Motion |
+    |-----|-----------------|
+    | `i` | Forward |
+    | `,` | Backward |
+    | `j` | Strafe left |
+    | `l` | Strafe right |
+
+    **Pass criteria:**
+    - Each direction works
+    - Robot moves perpendicular (strafing)
+    - Motion is smooth, not jerky
+  </Step>
+
+  <Step title="Test 3: Rotation">
+    **Objective:** Test in-place rotation
+
+    1. Press `q` (rotate left)
+    2. Robot should rotate counterclockwise
+    3. Press `e` (rotate right)
+    4. Robot should rotate clockwise
+
+    **Pass criteria:**
+    - Robot rotates in place (no translation)
+    - Smooth rotation, no wheel slipping
+    - Stops precisely when key released
+  </Step>
+
+  <Step title="Test 4: Diagonal Motion">
+    **Objective:** Combined translation + rotation
+
+    1. Press `u` (forward + left strafe)
+    2. Press `o` (forward + right strafe)
+    3. Press `m` (backward + left strafe)
+    4. Press `.` (backward + right strafe)
+
+    **Pass criteria:**
+    - Diagonal motion works
+    - Mecanum kinematics correct
+  </Step>
+
+  <Step title="Test 5: Speed Adjustment">
+    **Objective:** Test velocity limits
+
+    1. Press `w` multiple times (increase speed)
+    2. Drive forward (`i`)
+    3. Observe faster motion
+    4. Press `x` (decrease speed)
+    5. Drive forward again
+    6. Observe slower motion
+
+    **Pass criteria:**
+    - Speed changes as expected
+    - Robot doesn't exceed limits (safety)
+  </Step>
+
+  <Step title="Test 6: Emergency Stop">
+    **Objective:** Verify e-stop works
+
+    1. Drive robot forward (`i`)
+    2. While moving, press `k` (stop) OR `s` (force stop)
+    3. Robot should stop immediately
+
+    **Alternate:** Unplug battery → robot stops
+
+    **Pass criteria:**
+    - Robot stops within 0.5 seconds
+    - No coasting or drift
+  </Step>
+</Steps>
+
+### Data Validation
+
+While teleop running, monitor topics:
+
+```bash
+# Terminal 1: Monitor velocity commands
+ros2 topic echo /cmd_vel
+
+# Terminal 2: Monitor joint states
+ros2 topic echo /joint_states
+
+# Terminal 3: Monitor odometry
+ros2 topic echo /mecanum_drive_controller/odom
+```
+
+**Expected behavior:**
+- `/cmd_vel`: Shows Twist messages when keys pressed
+- `/joint_states`: Wheel velocities change
+- `/odom`: Robot pose updates
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Robot doesn't move" icon="robot">
+    **Symptoms:** Keys pressed but robot stationary
+
+    **Debug steps:**
+
+    1. **Check /cmd_vel published:**
+       ```bash
+       ros2 topic echo /cmd_vel
+       # Press 'i' key - should see Twist message
+       ```
+
+    2. **Check controller active:**
+       ```bash
+       ros2 control list_controllers
+       # mecanum_drive_controller should be "active"
+       ```
+
+    3. **Check hardware interface receiving commands:**
+       - Add debug prints in hardware interface `write()`
+       - Verify serial data sent to ESP32
+
+    4. **Check ESP32 receiving:**
+       - Use Serial Monitor to see commands
+       - Verify motor PWM values change
+
+    5. **Check motor power:**
+       - 12V battery connected?
+       - IBT-2 enable pins HIGH?
+  </Accordion>
+
+  <Accordion title="Robot moves wrong direction" icon="arrows-alt">
+    **Symptoms:** Press forward, robot goes left/backward
+
+    **Causes & Solutions:**
+
+    1. **Wheel connected to wrong joint:**
+       - Verify wheel physical position matches URDF joint name
+       - Example: Front-left wheel connected to wheel_FL_joint
+
+    2. **Motor direction inverted:**
+       - In ESP32: Swap RPWM and LPWM for that motor
+       - Or multiply command by -1 in hardware interface
+
+    3. **Encoder direction wrong:**
+       - Swap encoder A/B pins
+       - Or invert encoder count in ESP32 code
+
+    **Test:** Drive straight forward (should move +X direction)
+  </Accordion>
+
+  <Accordion title="Robot drifts or curves" icon="wind">
+    **Symptoms:** Press forward, robot curves instead of straight
+
+    **Causes:**
+
+    1. **Wheel diameter mismatch** (physical vs URDF)
+    2. **Motor PID gains different** between wheels
+    3. **Wheel slippage** (floor too slippery)
+    4. **Battery low** (motors underpowered)
+
+    **Solutions:**
+    - Calibrate wheel diameter in URDF
+    - Tune all motor PIDs to same response
+    - Test on non-slip surface (carpet, rubber mat)
+    - Charge battery (check voltage)
+  </Accordion>
+
+  <Accordion title="Jerky or oscillating motion" icon="wave-square">
+    **Symptoms:** Robot stutters, oscillates
+
+    **Causes:**
+    - PID control loop unstable
+    - Control frequency too low
+    - Velocity commands changing too fast
+
+    **Solutions:**
+
+    1. **Tune PID:**
+       - Reduce Kp (proportional gain)
+       - Increase damping (Kd)
+
+    2. **Increase control rate:**
+       - ESP32: 50Hz minimum
+       - ros2_control: `update_rate: 50` in config
+
+    3. **Filter velocity commands:**
+       ```yaml
+       mecanum_drive_controller:
+         ros__parameters:
+           # Add acceleration limits
+           linear:
+             x:
+               max_acceleration: 1.0  # m/s²
+           angular:
+             z:
+               max_acceleration: 2.0  # rad/s²
+       ```
+  </Accordion>
+
+  <Accordion title="Teleop keys not working" icon="keyboard">
+    **Symptoms:** Pressing keys has no effect
+
+    **Solutions:**
+
+    1. **Terminal not focused:**
+       - Click on teleop terminal window
+       - Ensure it's the active window
+
+    2. **Wrong topic:**
+       - Check teleop publishes to `/cmd_vel`
+       - Verify controller subscribes to `/cmd_vel`
+
+    3. **Node crashed:**
+       ```bash
+       ros2 node list
+       # Should see /teleop_twist_keyboard
+       ```
+
+    4. **NumLock on (arrow keys):**
+       - Turn NumLock off
+       - Use letter keys (i,j,k,l) instead
+  </Accordion>
+</AccordionGroup>
+
+## Advanced: Custom Teleop Node
+
+Create custom teleop for specific behaviors:
+
+```python
+import rclpy
+from rclpy.node import Node
+from geometry_msgs.msg import Twist
+from pynput import keyboard
+
+class CustomTeleop(Node):
+    def __init__(self):
+        super().__init__('custom_teleop')
+        self.publisher = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.linear_speed = 0.5
+        self.angular_speed = 1.0
+        self.current_twist = Twist()
+
+        # Start keyboard listener
+        listener = keyboard.Listener(on_press=self.on_key_press,
+                                      on_release=self.on_key_release)
+        listener.start()
+
+        # Timer to publish at fixed rate
+        self.timer = self.create_timer(0.1, self.publish_twist)
+
+    def on_key_press(self, key):
+        try:
+            if key.char == 'w':
+                self.current_twist.linear.x = self.linear_speed
+            elif key.char == 's':
+                self.current_twist.linear.x = -self.linear_speed
+            elif key.char == 'a':
+                self.current_twist.linear.y = self.linear_speed
+            elif key.char == 'd':
+                self.current_twist.linear.y = -self.linear_speed
+            elif key.char == 'q':
+                self.current_twist.angular.z = self.angular_speed
+            elif key.char == 'e':
+                self.current_twist.angular.z = -self.angular_speed
+        except AttributeError:
+            pass
+
+    def on_key_release(self, key):
+        # Stop on any key release
+        self.current_twist = Twist()
+
+    def publish_twist(self):
+        self.publisher.publish(self.current_twist)
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = CustomTeleop()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+```
+
+## Launch File Integration
+
+**Complete launch file with teleop:**
+
+```python
+from launch import LaunchDescription
+from launch_ros.actions import Node
+from launch.actions import IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import PathJoinSubstitution
+from launch_ros.substitutions import FindPackageShare
+
+def generate_launch_description():
+    # Include robot control launch
+    robot_control = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('mecanum_description'),
+                'launch',
+                'robot_control.launch.py'
+            ])
+        ])
+    )
+
+    # Teleop keyboard
+    teleop = Node(
+        package='teleop_twist_keyboard',
+        executable='teleop_twist_keyboard',
+        name='teleop',
+        prefix='xterm -e',  # Run in separate terminal
+        output='screen'
+    )
+
+    return LaunchDescription([
+        robot_control,
+        teleop,
+    ])
+```
+
+**Usage:**
+```bash
+ros2 launch mecanum_description teleop.launch.py
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Odometry"
+    icon="location-arrow"
+    href="/wp4-ros2/localization/odometry"
+  >
+    Publish robot pose from wheel encoders
+  </Card>
+
+  <Card
+    title="IMU Fusion"
+    icon="compass"
+    href="/wp4-ros2/localization/imu-fusion"
+  >
+    Fuse IMU data with odometry for better accuracy
+  </Card>
+
+  <Card
+    title="LiDAR Setup"
+    icon="radar"
+    href="/wp4-ros2/sensors/lidar-setup"
+  >
+    Configure RPLIDAR for mapping and navigation
+  </Card>
+
+  <Card
+    title="SLAM Mapping"
+    icon="map"
+    href="/wp4-ros2/mapping/slam-toolbox"
+  >
+    Create maps with simultaneous localization and mapping
+  </Card>
+</CardGroup>
+
+## References
+
+[1] teleop_twist_keyboard: http://wiki.ros.org/teleop_twist_keyboard
+[2] teleop_twist_joy: http://wiki.ros.org/teleop_twist_joy
+[3] rqt_robot_steering: http://wiki.ros.org/rqt_robot_steering

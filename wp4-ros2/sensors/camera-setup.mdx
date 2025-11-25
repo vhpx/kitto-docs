@@ -1,0 +1,761 @@
+---
+title: "Camera Setup (Optional)"
+description: "Add camera for visual feedback and computer vision applications"
+---
+
+## Overview
+
+While **not required** for basic navigation, a camera adds visual feedback capabilities for debugging, monitoring, and advanced features like visual SLAM or object detection.
+
+<Note>
+  **Optional Component:** Camera is not mandatory for WP4. Add if you want visual monitoring or plan advanced vision features.
+</Note>
+
+## Camera Options
+
+### Option 1: Raspberry Pi Camera Module
+
+**Raspberry Pi Camera v2 or v3:**
+
+| Parameter | Value |
+|-----------|-------|
+| **Resolution** | 8MP (3280×2464) |
+| **Video** | 1080p30, 720p60 |
+| **Interface** | CSI (Camera Serial Interface) |
+| **FPS** | Up to 90 fps (low res) |
+| **FOV** | 62.2° (H) × 48.8° (V) |
+| **Price** | ~$25-35 |
+| **Pros** | Native RPi support, low latency, no USB bandwidth |
+| **Cons** | Requires CSI cable, fixed lens |
+
+**Best for:** Onboard processing on Raspberry Pi, tight integration
+
+### Option 2: USB Webcam
+
+**Logitech C270 / C920:**
+
+| Parameter | C270 | C920 |
+|-----------|------|------|
+| **Resolution** | 720p | 1080p |
+| **FPS** | 30 | 30 |
+| **Interface** | USB 2.0 | USB 2.0 |
+| **FOV** | 60° | 78° |
+| **Price** | ~$20 | ~$70 |
+| **Pros** | Universal compatibility, easy setup | Better quality, wide FOV |
+| **Cons** | USB bandwidth usage | Higher cost |
+
+**Best for:** Quick setup, flexibility to move between computers
+
+### Option 3: Intel RealSense
+
+**RealSense D435i (Depth Camera):**
+
+| Parameter | Value |
+|-----------|-------|
+| **Type** | RGB-D (color + depth) |
+| **Depth Resolution** | 1280×720 |
+| **RGB Resolution** | 1920×1080 |
+| **FPS** | Up to 90 |
+| **Range** | 0.3m - 10m |
+| **IMU** | Built-in (D435i) |
+| **Price** | ~$200-300 |
+| **Pros** | Depth perception, IMU included, excellent SDK |
+| **Cons** | Expensive, power hungry (1.5W) |
+
+**Best for:** Advanced projects (3D mapping, obstacle detection)
+
+## Recommendation
+
+<Tip>
+  **For EEET2610 Project:** Start with **Raspberry Pi Camera v2** ($25) or **Logitech C270** ($20) for basic monitoring. Only consider RealSense if planning 3D mapping.
+</Tip>
+
+## Hardware Setup
+
+### Raspberry Pi Camera Module
+
+**Connection:**
+
+```
+Raspberry Pi 5/4
+├── CSI Camera Port ──→ Camera ribbon cable
+└── Camera connected (check camera LED)
+```
+
+**Physical Installation:**
+
+<Steps>
+  <Step title="Connect Camera Cable">
+    1. **Power off** Raspberry Pi
+    2. Locate CSI camera port (near HDMI)
+    3. Lift port tab gently
+    4. Insert ribbon cable (blue side toward Ethernet port)
+    5. Press tab down to secure
+  </Step>
+
+  <Step title="Enable Camera">
+    ```bash
+    # Enable camera interface
+    sudo raspi-config
+    # Navigate to: Interface Options → Camera → Enable
+    # Reboot
+    sudo reboot
+    ```
+  </Step>
+
+  <Step title="Test Camera">
+    ```bash
+    # Test camera (legacy method)
+    libcamera-hello
+
+    # Capture test image
+    libcamera-jpeg -o test.jpg
+    # Check test.jpg in current directory
+    ```
+  </Step>
+
+  <Step title="Mount Camera">
+    **Mounting position:**
+    - **Height:** 15-20cm above ground (eye-level view)
+    - **Angle:** Slightly downward (10-15° tilt)
+    - **Location:** Front of robot (forward-facing)
+    - **Stability:** Rigidly mounted (no vibration blur)
+
+    **Mounting options:**
+    - 3D printed bracket
+    - Acrylic standoff mount
+    - Secure with M2.5 screws
+  </Step>
+</Steps>
+
+### USB Webcam
+
+**Connection:**
+
+```
+Raspberry Pi USB Port ──→ USB Webcam
+```
+
+**Testing:**
+
+```bash
+# List video devices
+v4l2-ctl --list-devices
+
+# Should show:
+# USB Camera (usb-xxx):
+#   /dev/video0
+
+# Test camera
+ffplay /dev/video0
+
+# Or capture image
+ffmpeg -f v4l2 -i /dev/video0 -frames 1 test.jpg
+```
+
+## Software Setup
+
+### Installation
+
+```bash
+# Install camera drivers for ROS2
+sudo apt install ros-jazzy-v4l2-camera
+
+# For Raspberry Pi Camera Module
+sudo apt install ros-jazzy-camera-info-manager
+sudo apt install v4l2-utils
+
+# For USB cameras
+sudo apt install ros-jazzy-usb-cam
+
+# Image transport (for compression)
+sudo apt install ros-jazzy-image-transport-plugins
+
+# Image visualization tools
+sudo apt install ros-jazzy-rqt-image-view
+```
+
+### Launch File: Raspberry Pi Camera
+
+**File:** `launch/camera.launch.py`
+
+```python
+from launch import LaunchDescription
+from launch_ros.actions import Node
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
+
+def generate_launch_description():
+    # Arguments
+    camera_name = LaunchConfiguration('camera_name')
+
+    declare_camera_name_cmd = DeclareLaunchArgument(
+        'camera_name',
+        default_value='pi_camera',
+        description='Camera name')
+
+    # Raspberry Pi Camera using libcamera
+    camera_node = Node(
+        package='v4l2_camera',
+        executable='v4l2_camera_node',
+        name=camera_name,
+        parameters=[{
+            'video_device': '/dev/video0',
+            'image_size': [640, 480],  # Resolution
+            'camera_frame_id': 'camera_link',
+            'pixel_format': 'YUYV',
+            'output_encoding': 'rgb8',
+            'framerate': 30.0,
+            'brightness': 0,
+            'contrast': 32,
+            'saturation': 32,
+            'sharpness': 50,
+            'auto_white_balance': True,
+            'auto_exposure': True
+        }],
+        output='screen'
+    )
+
+    return LaunchDescription([
+        declare_camera_name_cmd,
+        camera_node,
+    ])
+```
+
+### Launch File: USB Webcam
+
+**File:** `launch/usb_camera.launch.py`
+
+```python
+from launch import LaunchDescription
+from launch_ros.actions import Node
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
+
+def generate_launch_description():
+    # Arguments
+    video_device = LaunchConfiguration('video_device')
+
+    declare_video_device_cmd = DeclareLaunchArgument(
+        'video_device',
+        default_value='/dev/video0',
+        description='Video device path')
+
+    # USB Camera node
+    usb_cam_node = Node(
+        package='usb_cam',
+        executable='usb_cam_node_exe',
+        name='usb_cam',
+        parameters=[{
+            'video_device': video_device,
+            'framerate': 30.0,
+            'image_width': 640,
+            'image_height': 480,
+            'pixel_format': 'yuyv',
+            'camera_frame_id': 'camera_link',
+            'io_method': 'mmap',
+            'camera_name': 'usb_camera',
+            'camera_info_url': ''
+        }],
+        output='screen'
+    )
+
+    return LaunchDescription([
+        declare_video_device_cmd,
+        usb_cam_node,
+    ])
+```
+
+**Usage:**
+
+```bash
+# Raspberry Pi Camera
+ros2 launch mecanum_description camera.launch.py
+
+# USB Webcam
+ros2 launch mecanum_description usb_camera.launch.py video_device:=/dev/video0
+```
+
+## URDF Integration
+
+**Add camera to robot URDF:**
+
+```xml
+<!-- Camera link -->
+<link name="camera_link">
+  <visual>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <geometry>
+      <box size="0.025 0.090 0.025"/>
+    </geometry>
+    <material name="black"/>
+  </visual>
+
+  <collision>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <geometry>
+      <box size="0.025 0.090 0.025"/>
+    </geometry>
+  </collision>
+
+  <inertial>
+    <mass value="0.003"/>
+    <inertia ixx="0.000001" ixy="0.0" ixz="0.0"
+             iyy="0.000001" iyz="0.0" izz="0.000001"/>
+  </inertial>
+</link>
+
+<!-- Camera joint (front center of robot) -->
+<joint name="camera_joint" type="fixed">
+  <parent link="base_link"/>
+  <child link="camera_link"/>
+  <origin xyz="0.15 0 0.18" rpy="0 0.26 0"/>
+  <!--            x    y   z     r   p   y  -->
+  <!--        Front  Center Height  Tilt down 15° -->
+</joint>
+
+<!-- Camera optical frame (for image projection) -->
+<link name="camera_optical_link"/>
+
+<joint name="camera_optical_joint" type="fixed">
+  <parent link="camera_link"/>
+  <child link="camera_optical_link"/>
+  <!-- Rotate to optical frame convention: X right, Y down, Z forward -->
+  <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}"/>
+</joint>
+```
+
+## Viewing Camera Feed
+
+### Method 1: RViz
+
+**Terminal 1: Launch Camera**
+```bash
+ros2 launch mecanum_description camera.launch.py
+```
+
+**Terminal 2: Launch RViz**
+```bash
+rviz2
+```
+
+**Configure RViz:**
+1. **Fixed Frame:** `base_link`
+2. **Add → Camera**
+   - Topic: `/pi_camera/image_raw` (or `/usb_cam/image_raw`)
+3. **Add → Image**
+   - Topic: `/pi_camera/image_raw`
+
+**Expected:** Live camera feed displayed in RViz
+
+<img
+  src="/images/camera-rviz.png"
+  alt="Camera feed in RViz"
+  caption="Camera visualization in RViz showing robot's forward view"
+/>
+
+### Method 2: rqt_image_view
+
+**Dedicated image viewer:**
+
+```bash
+# Launch camera
+ros2 launch mecanum_description camera.launch.py
+
+# View in separate window
+ros2 run rqt_image_view rqt_image_view
+```
+
+**Select topic:**
+- Dropdown → `/pi_camera/image_raw`
+- Adjustable window size
+- Zoom controls
+
+### Method 3: Command Line Echo
+
+```bash
+# Check image topic
+ros2 topic list | grep image
+
+# View topic info
+ros2 topic info /pi_camera/image_raw
+
+# Expected output:
+# Type: sensor_msgs/msg/Image
+# Publisher count: 1
+# Subscription count: 0
+
+# Echo topic (not useful for images, just verification)
+ros2 topic hz /pi_camera/image_raw
+# Expected: ~30 Hz
+```
+
+## Camera Calibration
+
+**Why calibrate?**
+Camera calibration corrects lens distortion for accurate measurements.
+
+### Calibration Procedure
+
+<Steps>
+  <Step title="Print Calibration Pattern">
+    **Download checkerboard:**
+    - Pattern: 8×6 checkerboard
+    - Square size: 25mm
+    - Print on A4 paper
+    - Mount on flat surface
+
+    Link: http://wiki.ros.org/camera_calibration/Tutorials/MonocularCalibration
+  </Step>
+
+  <Step title="Run Calibration">
+    ```bash
+    # Install calibration tool
+    sudo apt install ros-jazzy-camera-calibration
+
+    # Run calibration
+    ros2 run camera_calibration cameracalibrator \
+      --size 8x6 \
+      --square 0.025 \
+      --ros-args \
+      -r image:=/pi_camera/image_raw \
+      -r camera:=/pi_camera
+    ```
+  </Step>
+
+  <Step title="Capture Images">
+    **Move checkerboard:**
+    - Different positions (left, right, center)
+    - Different orientations (tilted, rotated)
+    - Different distances (near, far)
+
+    **GUI indicators:**
+    - X, Y, Size, Skew bars fill up
+    - When all full → "Calibrate" button activates
+  </Step>
+
+  <Step title="Calibrate and Save">
+    1. Click **"Calibrate"** button
+    2. Wait for processing (30-60 seconds)
+    3. Click **"Save"** button
+    4. Calibration file saved to `/tmp/calibrationdata.tar.gz`
+
+    **Extract calibration:**
+    ```bash
+    cd /tmp
+    tar -xvf calibrationdata.tar.gz
+    # Creates ost.yaml (camera calibration)
+    ```
+  </Step>
+
+  <Step title="Use Calibration">
+    **Copy to package:**
+    ```bash
+    mkdir -p ~/ros2_ws/src/mecanum_description/config
+    cp /tmp/ost.yaml ~/ros2_ws/src/mecanum_description/config/camera_calibration.yaml
+    ```
+
+    **Load in launch file:**
+    ```python
+    camera_node = Node(
+        package='v4l2_camera',
+        executable='v4l2_camera_node',
+        parameters=[{
+            # ... other params ...
+            'camera_info_url': 'file:///path/to/camera_calibration.yaml'
+        }]
+    )
+    ```
+  </Step>
+</Steps>
+
+## Image Compression
+
+**Reduce bandwidth** for image transport over network:
+
+```bash
+# Install image transport
+sudo apt install ros-jazzy-compressed-image-transport
+
+# Republish compressed images
+ros2 run image_transport republish \
+  raw compressed \
+  --ros-args \
+  -r in:=/pi_camera/image_raw \
+  -r out:=/pi_camera/image_compressed
+```
+
+**Subscribers automatically decompress** when using `image_transport`.
+
+**Compression quality:**
+- JPEG: ~95% quality, 10:1 compression
+- PNG: Lossless, 2:1 compression
+- Configured in camera node parameters
+
+## Use Cases
+
+### 1. Visual Monitoring
+
+**Monitor robot operation remotely:**
+
+```bash
+# On robot (Raspberry Pi)
+ros2 launch mecanum_description camera.launch.py
+
+# On development PC (same network)
+ros2 run rqt_image_view rqt_image_view
+```
+
+**Applications:**
+- Teleoperation visual feedback
+- Debugging navigation issues
+- Monitoring environment
+
+### 2. Visual SLAM (Advanced)
+
+**ORB-SLAM3 or RTAB-Map** can use camera + LiDAR for improved mapping:
+
+```bash
+# Install RTAB-Map
+sudo apt install ros-jazzy-rtabmap-ros
+
+# Launch RTAB-Map with camera + LiDAR
+ros2 launch rtabmap_ros rtabmap.launch.py \
+  rgb_topic:=/pi_camera/image_raw \
+  camera_info_topic:=/pi_camera/camera_info \
+  depth_topic:=/scan
+```
+
+### 3. Object Detection (Advanced)
+
+**Use TensorFlow Lite or YOLO for object recognition:**
+
+```python
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
+import cv2
+
+class ObjectDetector(Node):
+    def __init__(self):
+        super().__init__('object_detector')
+        self.subscription = self.create_subscription(
+            Image,
+            '/pi_camera/image_raw',
+            self.image_callback,
+            10)
+        self.bridge = CvBridge()
+
+    def image_callback(self, msg):
+        # Convert ROS Image to OpenCV
+        cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+
+        # Run object detection (e.g., YOLO)
+        detections = self.detect_objects(cv_image)
+
+        # Draw bounding boxes
+        for det in detections:
+            cv2.rectangle(cv_image, det['bbox'], (0, 255, 0), 2)
+
+        # Display
+        cv2.imshow("Detections", cv_image)
+        cv2.waitKey(1)
+
+    def detect_objects(self, image):
+        # TODO: Implement detection (TFLite, YOLO, etc.)
+        return []
+
+def main():
+    rclpy.init()
+    node = ObjectDetector()
+    rclpy.spin(node)
+    rclpy.shutdown()
+```
+
+### 4. AprilTag Detection
+
+**Visual markers for localization:**
+
+```bash
+# Install AprilTag detection
+sudo apt install ros-jazzy-apriltag-ros
+
+# Launch AprilTag detector
+ros2 launch apriltag_ros tag_continuous.launch.py \
+  camera_name:=/pi_camera \
+  image_topic:=/pi_camera/image_raw \
+  camera_info_topic:=/pi_camera/camera_info
+```
+
+**Use cases:**
+- Docking station localization
+- Waypoint markers
+- Object manipulation
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="No /dev/video0 device" icon="video">
+    **Raspberry Pi Camera:**
+    ```bash
+    # Check camera detected
+    vcgencmd get_camera
+    # Expected: supported=1 detected=1
+
+    # Enable legacy camera support (if needed)
+    sudo raspi-config
+    # Interface Options → Legacy Camera → Enable
+    ```
+
+    **USB Camera:**
+    ```bash
+    # List USB devices
+    lsusb
+    # Look for camera manufacturer
+
+    # Check dmesg for errors
+    dmesg | grep video
+    ```
+  </Accordion>
+
+  <Accordion title="Camera image blank or corrupted" icon="image">
+    **Causes:**
+    - Incorrect pixel format
+    - Cable loose (RPi Camera)
+    - Insufficient lighting
+
+    **Solutions:**
+    - Try different pixel formats: `YUYV`, `MJPG`, `RGB3`
+    - Reseat camera cable
+    - Add lighting to environment
+    - Check camera lens clean
+  </Accordion>
+
+  <Accordion title="Low frame rate (<20 fps)" icon="gauge">
+    **Causes:**
+    - High resolution
+    - USB bandwidth saturation
+    - CPU overload
+
+    **Solutions:**
+    - Reduce resolution:
+      ```python
+      'image_size': [320, 240]  # Lower from 640x480
+      ```
+    - Use compressed transport
+    - Reduce other USB traffic
+    - Lower framerate to 15-20 fps
+  </Accordion>
+
+  <Accordion title="Image latency / delay" icon="clock">
+    **Reduce latency:**
+    ```python
+    # In camera node parameters
+    'framerate': 30.0,
+    'buffer_queue_size': 1  # Minimize buffering
+    ```
+
+    **Network latency:**
+    - Use compressed transport
+    - Check WiFi signal strength
+    - Consider wired Ethernet connection
+  </Accordion>
+
+  <Accordion title="Cannot view in RViz" icon="eye">
+    **Debug:**
+    1. Check topic publishing:
+       ```bash
+       ros2 topic hz /pi_camera/image_raw
+       # Should show ~30 Hz
+       ```
+
+    2. Check message type:
+       ```bash
+       ros2 topic info /pi_camera/image_raw
+       # Type: sensor_msgs/msg/Image
+       ```
+
+    3. Check RViz fixed frame matches camera frame
+
+    4. Try rqt_image_view instead:
+       ```bash
+       ros2 run rqt_image_view rqt_image_view
+       ```
+  </Accordion>
+</AccordionGroup>
+
+## Performance Optimization
+
+### Reduce CPU Usage
+
+```python
+# Lower resolution
+'image_size': [320, 240],  # From 640x480
+
+# Lower framerate
+'framerate': 15.0,  # From 30.0
+
+# Reduce processing
+'auto_white_balance': False,
+'auto_exposure': False
+```
+
+### Reduce Bandwidth
+
+```bash
+# Use JPEG compression
+ros2 run image_transport republish raw compressed \
+  --ros-args \
+  -r in:=/pi_camera/image_raw \
+  -r out:=/pi_camera/compressed \
+  -p compressed.jpeg_quality:=80
+```
+
+**Bandwidth comparison:**
+- Raw 640×480 RGB: ~28 MB/s
+- JPEG compressed: ~3 MB/s (80% quality)
+- PNG compressed: ~10 MB/s
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Sensor Integration"
+    icon="diagram-project"
+    href="/wp4-ros2/sensors/sensor-integration"
+  >
+    Combine camera with LiDAR and IMU
+  </Card>
+
+  <Card
+    title="Visual SLAM"
+    icon="map"
+    href="/reference/ros2/visual-slam"
+  >
+    Advanced mapping with camera
+  </Card>
+
+  <Card
+    title="OpenCV Integration"
+    icon="laptop-code"
+    href="/reference/code/opencv-ros2"
+  >
+    Computer vision in ROS2
+  </Card>
+
+  <Card
+    title="TensorFlow Lite"
+    icon="brain"
+    href="/reference/code/tensorflow-ros2"
+  >
+    On-device AI inference
+  </Card>
+</CardGroup>
+
+## References
+
+[1] ROS2 Camera Calibration: http://wiki.ros.org/camera_calibration
+[2] v4l2_camera: https://index.ros.org/p/v4l2_camera/
+[3] usb_cam: https://index.ros.org/p/usb_cam/
+[4] Image Transport: https://github.com/ros-perception/image_common

@@ -1,0 +1,612 @@
+---
+title: "Map Server"
+description: "Save, load, and serve maps for robot navigation using Nav2 Map Server"
+---
+
+## Overview
+
+The **Map Server** loads and serves occupancy grid maps to navigation systems. It's essential for autonomous navigation with pre-built maps.
+
+<Note>
+  **Map Server** provides the `/map` topic that Nav2 uses for path planning and obstacle avoidance.
+</Note>
+
+## Map Formats
+
+### Occupancy Grid Map
+
+**Components:**
+1. **Image file** (`.pgm`): Grayscale image of map
+2. **Metadata file** (`.yaml`): Map parameters
+
+**Directory structure:**
+```
+maps/
+├── my_map.pgm   # Occupancy grid image
+└── my_map.yaml  # Metadata
+```
+
+### PGM Image
+
+**Portable GrayMap** format:
+- **White (255):** Free space
+- **Black (0):** Occupied space
+- **Gray (205):** Unknown space
+
+**Example:** 100×100 pixels at 0.05m resolution = 5m × 5m map
+
+### YAML Metadata
+
+**File:** `maps/my_map.yaml`
+
+```yaml
+image: my_map.pgm         # Image filename (relative or absolute)
+resolution: 0.05          # meters per pixel
+origin: [-10.0, -10.0, 0.0]  # [x, y, yaw] of lower-left pixel (meters, radians)
+occupied_thresh: 0.65     # Pixels darker than this = occupied
+free_thresh: 0.196        # Pixels brighter than this = free
+negate: 0                 # 0 = white is free, 1 = black is free
+mode: trinary             # trinary, scale, or raw
+```
+
+**Parameters explained:**
+
+- **resolution:** Physical size of one pixel
+  - 0.05 = 5cm per pixel (common for indoor)
+  - 0.01 = 1cm per pixel (high detail)
+  - 0.1 = 10cm per pixel (large areas)
+
+- **origin:** Position of map's bottom-left corner in world frame
+  - Usually negative to center map around (0,0)
+  - Example: [-10, -10, 0] → 20×20m map centered at origin
+
+- **occupied_thresh:** Probability threshold for occupied
+  - 0.65 = 65% confidence → mark as occupied
+  - Higher = fewer obstacles (conservative)
+  - Lower = more obstacles (aggressive)
+
+- **free_thresh:** Probability threshold for free
+  - 0.196 = 19.6% confidence → mark as free
+  - Space between thresholds = unknown
+
+- **negate:** Invert image colors
+  - 0 = white is free (standard)
+  - 1 = black is free (inverted)
+
+## Saving Maps
+
+### Method 1: From SLAM Toolbox
+
+**While SLAM running:**
+
+**Option A: RViz plugin**
+1. Panels → SlamToolboxPlugin
+2. Click "Save Map"
+3. Choose location: `~/maps/my_map`
+
+**Option B: Service call**
+```bash
+ros2 service call /slam_toolbox/serialize_map \
+  slam_toolbox/srv/SerializePoseGraph \
+  "{filename: '/home/user/maps/my_map.posegraph'}"
+```
+
+**Then save occupancy grid:**
+```bash
+ros2 run nav2_map_server map_saver_cli -f ~/maps/my_map
+```
+
+Creates:
+- `my_map.pgm`
+- `my_map.yaml`
+
+### Method 2: map_saver_cli
+
+**Standalone map saving:**
+
+```bash
+# Basic usage
+ros2 run nav2_map_server map_saver_cli -f my_map
+
+# With options
+ros2 run nav2_map_server map_saver_cli \
+  -f ~/maps/lab_floor2 \
+  --map-topic /map \
+  --image-format pgm \
+  --mode trinary \
+  --free 0.196 \
+  --occ 0.65
+```
+
+**Parameters:**
+- `-f`: Output filename (without extension)
+- `--map-topic`: Topic to subscribe (default: `/map`)
+- `--image-format`: `pgm` or `png`
+- `--mode`: `trinary`, `scale`, or `raw`
+- `--free`: Free threshold
+- `--occ`: Occupied threshold
+
+### Verifying Saved Map
+
+```bash
+# View PGM image
+eog ~/maps/my_map.pgm  # Linux
+open ~/maps/my_map.pgm  # Mac
+
+# Check YAML contents
+cat ~/maps/my_map.yaml
+```
+
+## Loading Maps
+
+### Map Server Launch
+
+**File:** `launch/map_server.launch.py`
+
+```python
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch_ros.actions import Node
+from launch_ros.substitutions import FindPackageShare
+from ament_index_python.packages import get_package_share_directory
+import os
+
+def generate_launch_description():
+    # Default map file
+    pkg_share = FindPackageShare('mecanum_description').find('mecanum_description')
+    default_map = PathJoinSubstitution([pkg_share, 'maps', 'my_map.yaml'])
+
+    # Arguments
+    map_yaml_file = LaunchConfiguration('map')
+
+    declare_map_yaml_cmd = DeclareLaunchArgument(
+        'map',
+        default_value=default_map,
+        description='Full path to map yaml file')
+
+    # Map server node
+    start_map_server_cmd = Node(
+        package='nav2_map_server',
+        executable='map_server',
+        name='map_server',
+        output='screen',
+        parameters=[{
+            'yaml_filename': map_yaml_file,
+            'use_sim_time': False
+        }]
+    )
+
+    # Lifecycle manager for map server
+    start_lifecycle_manager_cmd = Node(
+        package='nav2_lifecycle_manager',
+        executable='lifecycle_manager',
+        name='lifecycle_manager_map_server',
+        output='screen',
+        parameters=[{
+            'node_names': ['map_server'],
+            'autostart': True
+        }]
+    )
+
+    return LaunchDescription([
+        declare_map_yaml_cmd,
+        start_map_server_cmd,
+        start_lifecycle_manager_cmd,
+    ])
+```
+
+**Usage:**
+```bash
+# Use default map
+ros2 launch mecanum_description map_server.launch.py
+
+# Use specific map
+ros2 launch mecanum_description map_server.launch.py map:=/home/user/maps/lab.yaml
+```
+
+### Lifecycle Management
+
+Map server uses **lifecycle nodes** (managed state):
+
+**States:**
+1. **Unconfigured** (initial)
+2. **Inactive** (configured but not serving map)
+3. **Active** (serving map)
+4. **Finalized** (shutdown)
+
+**Lifecycle manager** automates transitions.
+
+**Manual control:**
+```bash
+# Configure
+ros2 lifecycle set /map_server configure
+
+# Activate
+ros2 lifecycle set /map_server activate
+
+# Check state
+ros2 lifecycle get /map_server
+```
+
+## Verifying Map Loaded
+
+### Check Topic
+
+```bash
+# List topics
+ros2 topic list
+# Should see /map
+
+# Echo map (first message only, it's large!)
+ros2 topic echo /map --once
+```
+
+### RViz Visualization
+
+```bash
+rviz2
+```
+
+**Configure:**
+1. **Fixed Frame:** `map`
+2. **Add → Map**
+   - Topic: `/map`
+   - Color Scheme: map
+3. **Add → RobotModel**
+4. **Add → TF**
+
+**Expected:** Map appears, robot visible at origin (or wherever it is)
+
+<img
+  src="/images/map-server-rviz.png"
+  alt="Map loaded in RViz"
+  caption="Map Server providing occupancy grid map in RViz"
+/>
+
+## Editing Maps
+
+### GIMP (GNU Image Manipulation Program)
+
+**Install:**
+```bash
+sudo apt install gimp
+```
+
+**Edit map:**
+1. Open `my_map.pgm` in GIMP
+2. Use paintbrush:
+   - **White:** Mark as free
+   - **Black:** Mark as occupied
+   - **Gray (50%):** Mark as unknown
+3. Save as PGM (same filename)
+
+**Common edits:**
+- Add virtual walls (block off areas)
+- Remove dynamic objects (chairs moved)
+- Clean up noise
+- Expand walls slightly (safety margin)
+
+### imagemagick (Command-line)
+
+```bash
+# Install
+sudo apt install imagemagick
+
+# Rotate 90° clockwise
+convert my_map.pgm -rotate 90 my_map.pgm
+
+# Flip horizontal
+convert my_map.pgm -flop my_map.pgm
+
+# Resize (50%)
+convert my_map.pgm -resize 50% my_map_small.pgm
+
+# Threshold (clean up gray areas)
+convert my_map.pgm -threshold 50% my_map_binary.pgm
+```
+
+### Update Origin After Editing
+
+**If rotated/resized, update `origin` in YAML:**
+
+```yaml
+# If rotated 90° CW, swap X/Y and adjust signs
+origin: [-10.0, -10.0, 1.5708]  # yaw = 90° (π/2 rad)
+
+# If resized 50%, double resolution
+resolution: 0.1  # was 0.05
+```
+
+## Map Server Services
+
+Map server provides services for runtime map management:
+
+### Load Map
+
+```bash
+ros2 service call /map_server/load_map \
+  nav2_msgs/srv/LoadMap \
+  "{map_url: '/home/user/maps/new_map.yaml'}"
+```
+
+### Save Map (if map_saver enabled)
+
+```bash
+ros2 service call /map_server/save_map \
+  nav2_msgs/srv/SaveMap \
+  "{map_url: '/home/user/maps/updated_map'}"
+```
+
+## Multi-Floor / Multi-Map
+
+**For buildings with multiple floors:**
+
+### Approach 1: Separate Map Files
+
+```
+maps/
+├── floor1.yaml
+├── floor1.pgm
+├── floor2.yaml
+├── floor2.pgm
+└── floor3.yaml
+    floor3.pgm
+```
+
+**Load specific floor:**
+```bash
+ros2 launch mecanum_description map_server.launch.py map:=maps/floor2.yaml
+```
+
+**Switch floors at runtime:**
+```bash
+ros2 service call /map_server/load_map nav2_msgs/srv/LoadMap "{map_url: 'maps/floor3.yaml'}"
+```
+
+### Approach 2: 3D Map (Advanced)
+
+Use **Octomap** for 3D environments:
+```bash
+sudo apt install ros-jazzy-octomap-server
+```
+
+## Map Quality Check
+
+### Checklist
+
+- [ ] **Walls continuous:** No gaps in walls
+- [ ] **Rooms closed:** All rooms form closed shapes
+- [ ] **No artifacts:** No stray black pixels (noise)
+- [ ] **Free space clear:** Open areas are white
+- [ ] **Resolution appropriate:** 5cm for indoor, 10cm for outdoor
+- [ ] **Origin correct:** Robot starts at reasonable position
+
+### Quantitative Metrics
+
+**Map coverage:**
+```python
+# Calculate percentage of known space
+import numpy as np
+from PIL import Image
+
+img = Image.open('my_map.pgm')
+pixels = np.array(img)
+
+total_pixels = pixels.size
+unknown_pixels = np.sum(pixels == 205)  # Gray
+known_pixels = total_pixels - unknown_pixels
+
+coverage = (known_pixels / total_pixels) * 100
+print(f"Map coverage: {coverage:.1f}%")
+```
+
+**Good coverage:** >90% for indoor environments
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Map not appearing in RViz" icon="map">
+    **Debug:**
+    1. Check map server running:
+       ```bash
+       ros2 node list
+       # Should see /map_server
+       ```
+
+    2. Check map server state:
+       ```bash
+       ros2 lifecycle get /map_server
+       # Should be "active [3]"
+       ```
+
+    3. Check `/map` topic:
+       ```bash
+       ros2 topic info /map
+       # Should have publisher (map_server)
+       ```
+
+    4. Check Fixed Frame in RViz = `map`
+  </Accordion>
+
+  <Accordion title="Map loads but is rotated/shifted" icon="rotate">
+    **Cause:** Incorrect `origin` in YAML
+
+    **Solution:**
+    - Adjust origin [x, y, yaw] in YAML file
+    - Visualize in RViz to iteratively correct
+    - Common: yaw = 0, ±π/2, ±π
+
+    **Example:**
+    ```yaml
+    # Rotate 90° counterclockwise
+    origin: [-10.0, -10.0, 1.5708]
+    ```
+  </Accordion>
+
+  <Accordion title="Map quality poor (blurry, noisy)" icon="image">
+    **Causes:**
+    - SLAM mapping speed too fast
+    - LiDAR vibration
+    - Poor odometry
+
+    **Solutions:**
+    - Remap at slower speed
+    - Edit map in GIMP (clean up noise)
+    - Apply median filter:
+      ```bash
+      convert my_map.pgm -median 1 my_map_clean.pgm
+      ```
+  </Accordion>
+
+  <Accordion title="'Could not load map' error" icon="file-circle-xmark">
+    **Causes:**
+    - File path incorrect
+    - YAML syntax error
+    - PGM file corrupted
+
+    **Debug:**
+    1. Check file exists:
+       ```bash
+       ls -lh ~/maps/my_map.yaml
+       ls -lh ~/maps/my_map.pgm
+       ```
+
+    2. Validate YAML:
+       ```bash
+       cat ~/maps/my_map.yaml
+       # Check for syntax errors
+       ```
+
+    3. Test PGM loads:
+       ```bash
+       eog ~/maps/my_map.pgm
+       ```
+  </Accordion>
+</AccordionGroup>
+
+## Integration with Navigation
+
+**Full navigation stack:**
+
+```python
+# launch/navigation.launch.py
+from launch import LaunchDescription
+from launch.actions import IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import PathJoinSubstitution
+from launch_ros.substitutions import FindPackageShare
+
+def generate_launch_description():
+    # Map server
+    map_server = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('mecanum_description'),
+                'launch',
+                'map_server.launch.py'
+            ])
+        ])
+    )
+
+    # Localization (AMCL or SLAM localization mode)
+    localization = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('mecanum_description'),
+                'launch',
+                'localization.launch.py'
+            ])
+        ])
+    )
+
+    # Nav2 (path planning and navigation)
+    nav2 = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('nav2_bringup'),
+                'launch',
+                'navigation_launch.py'
+            ])
+        ])
+    )
+
+    return LaunchDescription([
+        map_server,
+        localization,
+        nav2,
+    ])
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Map Resolution" icon="ruler">
+    - Indoor: 0.05m (5cm) - good balance
+    - Detailed: 0.01m (1cm) - large files
+    - Outdoor: 0.1m (10cm) - faster processing
+  </Card>
+
+  <Card title="Map Naming" icon="tag">
+    Use descriptive names:
+    - `lab_floor3_20240315.yaml`
+    - `home_downstairs.yaml`
+    - Avoid: `map.yaml`, `test.yaml`
+  </Card>
+
+  <Card title="Version Control" icon="code-branch">
+    - Store maps in Git
+    - Tag versions: `v1.0-initial`, `v1.1-furniture-added`
+    - Keep backup of working maps
+  </Card>
+
+  <Card title="Documentation" icon="file-text">
+    Document each map:
+    - Creation date
+    - Environment (which floor/area)
+    - Known issues
+    - Update history
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Cartographer"
+    icon="map-location-dot"
+    href="/wp4-ros2/mapping/cartographer"
+  >
+    Alternative SLAM solution for complex environments
+  </Card>
+
+  <Card
+    title="Navigation"
+    icon="route"
+    href="/wp4-ros2/navigation/nav2-intro"
+  >
+    Use maps for autonomous path planning with Nav2
+  </Card>
+
+  <Card
+    title="Localization"
+    icon="location-dot"
+    href="/wp4-ros2/navigation/amcl"
+  >
+    Localize robot in pre-built map using AMCL
+  </Card>
+
+  <Card
+    title="Multi-Robot Mapping"
+    icon="users"
+    href="/reference/ros2/multi-robot"
+  >
+    Coordinate multiple robots for faster mapping
+  </Card>
+</CardGroup>
+
+## References
+
+[1] Nav2 Map Server: https://docs.nav2.org/configuration/packages/configuring-map-server.html
+[2] Occupancy Grid Map: http://docs.ros.org/en/api/nav_msgs/html/msg/OccupancyGrid.html
+[3] Map Format Spec: http://wiki.ros.org/map_server#Map_format

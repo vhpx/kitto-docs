@@ -1,0 +1,611 @@
+---
+title: 'Data Visualization'
+description: 'Visualize robot data, sensors, and navigation using RViz2 and rqt tools'
+icon: 'chart-line'
+---
+
+## Overview
+
+ROS2 provides powerful visualization tools to debug robots, view sensor data, and monitor system state. **RViz2** visualizes 3D robot models, sensor data, and navigation paths, while **rqt** offers debugging GUIs for topics, parameters, and graphs.
+
+<CardGroup cols={2}>
+  <Card title="RViz2" icon="cube">
+    3D visualization of robot, sensors, and environment
+  </Card>
+  <Card title="rqt Tools" icon="wrench">
+    Debug topics, plot data, inspect parameters
+  </Card>
+</CardGroup>
+
+---
+
+## RViz2
+
+### Launching RViz2
+
+```bash
+# Launch RViz2 with default config
+ros2 run rviz2 rviz2
+
+# Launch with specific config file
+ros2 run rviz2 rviz2 -d ~/ros2_ws/src/mecanum_description/rviz/robot.rviz
+
+# From launch file
+ros2 launch mecanum_description display.launch.py
+```
+
+### Interface Overview
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ File  Panels  View  ...                        [× □ ─]   │  Menu Bar
+├──────────────────────────────────────────────────────────┤
+│ [+] Displays        │         3D Viewport                │
+│ ├─ Global Options   │                                    │
+│ │  └─ Fixed Frame   │         [Robot Model]              │
+│ ├─ RobotModel      │                                    │
+│ ├─ TF              │         ┌──────┐                   │
+│ ├─ LaserScan       │         │Robot │                   │
+│ ├─ Map             │         └──────┘                   │
+│ ├─ Path            │          ...                       │
+│ └─ Odometry        │                                    │
+│                     │                                    │
+│ [Views]            │         [Camera controls]          │
+│ [Time]             │                                    │
+│ [Tool Properties]  │                                    │
+└─────────────────────┴────────────────────────────────────┘
+```
+
+---
+
+## Essential RViz2 Displays
+
+### 1. RobotModel
+
+Shows robot structure from URDF:
+
+```
+Add Display → RobotModel
+└─ Description Topic: /robot_description
+└─ TF Prefix: (leave empty)
+└─ Visual Enabled: ✓
+└─ Collision Enabled: ☐
+```
+
+<Tip>
+If robot doesn't appear, check:
+- `robot_state_publisher` node is running
+- Fixed Frame set to `base_link` or `odom`
+- TF tree is complete: `ros2 run tf2_tools view_frames`
+</Tip>
+
+### 2. LaserScan
+
+Visualizes LiDAR data:
+
+```
+Add Display → LaserScan
+└─ Topic: /scan
+└─ Size (m): 0.05  (point size)
+└─ Style: Points / Flat Squares / Spheres
+└─ Color Transformer: Intensity / FlatColor / AxisColor
+└─ Decay Time: 0  (0 = latest only, >0 = show history)
+```
+
+### 3. TF
+
+Shows coordinate frame transformations:
+
+```
+Add Display → TF
+└─ Show Names: ✓
+└─ Show Axes: ✓
+└─ Show Arrows: ☐
+└─ Marker Scale: 0.3
+└─ Frames:
+    ├─ All Enabled: ☐
+    ├─ map: ✓
+    ├─ odom: ✓
+    ├─ base_link: ✓
+    └─ lidar_link: ✓
+```
+
+### 4. Map
+
+Displays occupancy grid from SLAM:
+
+```
+Add Display → Map
+└─ Topic: /map
+└─ Color Scheme: map / costmap / raw
+└─ Alpha: 0.7  (transparency)
+└─ Draw Behind: ✓
+```
+
+### 5. Path
+
+Shows planned navigation path:
+
+```
+Add Display → Path
+└─ Topic: /plan
+└─ Color: 255; 255; 0  (yellow)
+└─ Alpha: 1.0
+└─ Line Width: 0.05
+└─ Buffer Length: 1  (paths to display)
+```
+
+### 6. Odometry
+
+Visualizes robot position estimates:
+
+```
+Add Display → Odometry
+└─ Topic: /odom
+└─ Position Tolerance: 0.1
+└─ Angle Tolerance: 0.1
+└─ Keep: 100  (trail length)
+└─ Shape:
+    ├─ Arrow
+    ├─ Axes
+    └─ Keep: 50  (show last 50 positions)
+```
+
+### 7. Marker / MarkerArray
+
+For custom visualizations (goals, waypoints, etc.):
+
+```
+Add Display → Marker
+└─ Topic: /visualization_marker
+└─ Queue Size: 100
+```
+
+---
+
+## RViz2 Configuration
+
+### Saving Configuration
+
+```
+File → Save Config As → ~/ros2_ws/src/mecanum_description/rviz/robot.rviz
+```
+
+### Loading Configuration in Launch File
+
+```python title="rviz.launch.py"
+import os
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    rviz_config = os.path.join(
+        get_package_share_directory('mecanum_description'),
+        'rviz',
+        'robot.rviz'
+    )
+
+    return LaunchDescription([
+        Node(
+            package='rviz2',
+            executable='rviz2',
+            name='rviz2',
+            arguments=['-d', rviz_config],
+            output='screen'
+        ),
+    ])
+```
+
+### Fixed Frame
+
+**Global Options → Fixed Frame:**
+- Use `map` for global visualization (navigation)
+- Use `odom` for local odometry visualization
+- Use `base_link` to follow robot (first-person view)
+
+---
+
+## rqt Tools
+
+### rqt_graph
+
+Visualize ROS2 computation graph (nodes and topics):
+
+```bash
+ros2 run rqt_graph rqt_graph
+
+# Or launch rqt and select Plugins → Introspection → Node Graph
+```
+
+**What it shows:**
+- Nodes (ovals)
+- Topics (rectangles)
+- Connections (arrows)
+- Message types
+
+**Useful for:**
+- Understanding system architecture
+- Debugging missing connections
+- Verifying publish-subscribe relationships
+
+### rqt_plot
+
+Plot numeric data over time:
+
+```bash
+ros2 run rqt_plot rqt_plot
+
+# Plot specific topic fields
+ros2 run rqt_plot rqt_plot /odom/pose/pose/position/x:y
+
+# Multiple topics
+ros2 run rqt_plot rqt_plot /cmd_vel/linear/x /odom/twist/twist/linear/x
+```
+
+**Use cases:**
+- Monitor velocity commands vs actual velocity
+- Plot battery voltage over time
+- Visualize PID error signals
+- Track motor speeds
+
+### rqt_console
+
+View log messages from all nodes:
+
+```bash
+ros2 run rqt_console rqt_console
+```
+
+**Features:**
+- Filter by severity (DEBUG, INFO, WARN, ERROR, FATAL)
+- Filter by node name
+- Search log messages
+- Export logs to file
+
+**Log levels:**
+```python
+self.get_logger().debug('Detailed debug info')
+self.get_logger().info('Normal operation')
+self.get_logger().warn('Warning: unexpected value')
+self.get_logger().error('Error: sensor offline')
+self.get_logger().fatal('Fatal: system shutdown')
+```
+
+### rqt_topic
+
+Monitor topic data in real-time:
+
+```bash
+ros2 run rqt_topic rqt_topic
+```
+
+**Features:**
+- View all active topics
+- See message types and publishers
+- Echo topic data (like `ros2 topic echo`)
+- Plot numeric fields
+
+### rqt_reconfigure
+
+Dynamically adjust node parameters:
+
+```bash
+ros2 run rqt_reconfigure rqt_reconfigure
+```
+
+**Features:**
+- View all dynamic parameters
+- Adjust parameters with sliders/checkboxes
+- Changes apply immediately (no restart)
+- Useful for tuning PID, speeds, thresholds
+
+### rqt_image_view
+
+Display camera images:
+
+```bash
+ros2 run rqt_image_view rqt_image_view
+```
+
+**Topics:**
+- Select camera topic from dropdown
+- View compressed or raw images
+- Zoom, pan, adjust brightness
+
+---
+
+## Plotting with PlotJuggler
+
+**PlotJuggler** is a more advanced alternative to rqt_plot:
+
+### Installation
+
+```bash
+sudo apt install ros-jazzy-plotjuggler-ros
+```
+
+### Usage
+
+```bash
+ros2 run plotjuggler plotjuggler
+
+# In PlotJuggler:
+# 1. Streaming → ROS2 Topics
+# 2. Select topics to plot
+# 3. Drag topics to plot area
+# 4. Can save/load layouts, export to CSV
+```
+
+**Advantages over rqt_plot:**
+- Multiple subplots
+- Zoom, pan, measure
+- Save and replay data
+- Export to CSV/image
+
+---
+
+## Command-Line Visualization
+
+### Viewing LaserScan ASCII Art
+
+```bash
+ros2 topic echo /scan --field ranges | head -n 20
+```
+
+### Monitoring Topic Hz
+
+```bash
+ros2 topic hz /scan
+# Output: average rate: 5.499 Hz
+
+ros2 topic hz /odom
+# Output: average rate: 19.852 Hz
+```
+
+### Bandwidth Usage
+
+```bash
+ros2 topic bw /scan
+# Output: average: 4.32 KB/s
+```
+
+### Topic Info
+
+```bash
+ros2 topic info /scan --verbose
+# Shows: Type, Publishers, Subscribers, QoS settings
+```
+
+---
+
+## Custom Markers for Visualization
+
+Publish markers to display custom data in RViz:
+
+```python title="waypoint_visualizer.py"
+from visualization_msgs.msg import Marker
+from geometry_msgs.msg import Point
+from rclpy.node import Node
+
+class WaypointVisualizer(Node):
+    def __init__(self):
+        super().__init__('waypoint_visualizer')
+
+        self.marker_pub = self.create_publisher(
+            Marker, '/visualization_marker', 10
+        )
+
+        # Publish goal marker
+        self.publish_goal_marker(1.0, 0.5, 0.0)
+
+    def publish_goal_marker(self, x, y, z):
+        marker = Marker()
+        marker.header.frame_id = 'map'
+        marker.header.stamp = self.get_clock().now().to_msg()
+
+        marker.ns = 'waypoints'
+        marker.id = 0
+        marker.type = Marker.SPHERE
+        marker.action = Marker.ADD
+
+        # Position
+        marker.pose.position.x = x
+        marker.pose.position.y = y
+        marker.pose.position.z = z
+
+        # Orientation (no rotation)
+        marker.pose.orientation.w = 1.0
+
+        # Size
+        marker.scale.x = 0.2
+        marker.scale.y = 0.2
+        marker.scale.z = 0.2
+
+        # Color (green, semi-transparent)
+        marker.color.r = 0.0
+        marker.color.g = 1.0
+        marker.color.b = 0.0
+        marker.color.a = 0.8
+
+        marker.lifetime.sec = 0  # 0 = forever
+
+        self.marker_pub.publish(marker)
+```
+
+**Marker types:**
+- `ARROW`, `CUBE`, `SPHERE`, `CYLINDER`
+- `LINE_STRIP`, `LINE_LIST`
+- `POINTS`
+- `TEXT_VIEW_FACING`
+- `MESH_RESOURCE` (load custom 3D models)
+
+---
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Performance" icon="gauge">
+    - Limit LaserScan decay time (0-2 seconds)
+    - Reduce path buffer length (10-100)
+    - Disable unused displays
+    - Lower update rate for slow computers
+  </Card>
+
+  <Card title="Organization" icon="layer-group">
+    - Save RViz configs for different tasks (mapping, navigation, debug)
+    - Use descriptive display names
+    - Group related displays
+    - Document Fixed Frame choice
+  </Card>
+
+  <Card title="Debugging" icon="bug">
+    - Check Fixed Frame if nothing appears
+    - Verify topic names match (case-sensitive!)
+    - Use rqt_graph to find missing connections
+    - Monitor rqt_console for errors
+  </Card>
+
+  <Card title="Efficiency" icon="rocket">
+    - Use rqt_plot for quick checks
+    - Use PlotJuggler for analysis
+    - Save data with `ros2 bag record`
+    - Export plots for reports
+  </Card>
+</CardGroup>
+
+---
+
+## Recording and Playback
+
+### Record Topics
+
+```bash
+# Record all topics
+ros2 bag record -a
+
+# Record specific topics
+ros2 bag record /scan /odom /cmd_vel /imu/data
+
+# Record to specific file
+ros2 bag record -o navigation_test /scan /odom
+```
+
+### Playback
+
+```bash
+# Play bag file
+ros2 bag play navigation_test/navigation_test_0.db3
+
+# Play at 2x speed
+ros2 bag play --rate 2.0 navigation_test/navigation_test_0.db3
+
+# Play in loop
+ros2 bag play --loop navigation_test/navigation_test_0.db3
+```
+
+**Workflow:**
+1. Record data during robot operation
+2. Play back offline
+3. Visualize in RViz without robot running
+4. Debug and analyze at your own pace
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="RViz shows empty 3D view">
+    **Solutions:**
+    1. Check Fixed Frame is set to existing frame (e.g., `base_link`, `map`)
+    2. Add displays (RobotModel, LaserScan, etc.)
+    3. Verify nodes are publishing data:
+       ```bash
+       ros2 topic list
+       ros2 topic echo /scan  # Should show data
+       ```
+    4. Reset camera: Views → Reset Camera
+  </Accordion>
+
+  <Accordion title="RobotModel not visible">
+    **Solutions:**
+    1. Verify `robot_state_publisher` is running:
+       ```bash
+       ros2 node list | grep robot_state_publisher
+       ```
+
+    2. Check `robot_description` parameter:
+       ```bash
+       ros2 param get /robot_state_publisher robot_description
+       ```
+
+    3. Verify TF tree is complete:
+       ```bash
+       ros2 run tf2_tools view_frames
+       ```
+
+    4. In RViz: RobotModel → Description Topic → `/robot_description`
+  </Accordion>
+
+  <Accordion title="LaserScan not showing">
+    **Solutions:**
+    1. Check topic name matches:
+       ```bash
+       ros2 topic list | grep scan
+       ```
+
+    2. Verify scan is being published:
+       ```bash
+       ros2 topic hz /scan
+       ```
+
+    3. In RViz: LaserScan → Topic → Select `/scan`
+
+    4. Check Fixed Frame is appropriate (e.g., `odom` or `map`)
+  </Accordion>
+
+  <Accordion title="rqt_plot shows no data">
+    **Solutions:**
+    1. Ensure topic is publishing numeric data:
+       ```bash
+       ros2 topic echo /odom/pose/pose/position/x
+       ```
+
+    2. Use full field path: `/odom/pose/pose/position/x`
+
+    3. Check topic type supports plotting (must have numeric fields)
+
+    4. Try PlotJuggler as alternative
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="ROS2 Architecture" icon="diagram-project" href="/reference/ros2/architecture">
+    Understand nodes, topics, and services
+  </Card>
+
+  <Card title="TF Transforms" icon="arrows-spin" href="/reference/ros2/tf-transforms">
+    Visualize coordinate frames in RViz
+  </Card>
+
+  <Card title="Navigation" icon="route" href="/wp4-ros2/navigation/nav2-introduction">
+    Visualize Nav2 paths and costmaps
+  </Card>
+
+  <Card title="SLAM" icon="map" href="/wp4-ros2/mapping/slam-toolbox">
+    Visualize map creation in real-time
+  </Card>
+</CardGroup>
+
+---
+
+## References
+
+- [RViz2 User Guide](https://docs.ros.org/en/jazzy/Tutorials/Intermediate/RViz/RViz-User-Guide/RViz-User-Guide.html)
+- [rqt Documentation](https://docs.ros.org/en/jazzy/Concepts/About-RQt.html)
+- [PlotJuggler](https://github.com/facontidavide/PlotJuggler)
+- [Visualization Markers](https://docs.ros.org/en/jazzy/Tutorials/Intermediate/RViz/Markers/Markers.html)

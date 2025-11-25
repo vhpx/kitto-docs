@@ -1,0 +1,409 @@
+---
+title: 'Encoder Reading'
+description: 'Read rotary encoders for motor velocity and position feedback'
+icon: 'gauge'
+---
+
+## Overview
+
+**Rotary encoders** measure motor rotation using quadrature signals (channels A and B). The ESP32 reads these signals via interrupts to count encoder ticks and calculate velocity.
+
+---
+
+## Quadrature Encoding
+
+```
+Channel A:  ┌─┐   ┌─┐   ┌─┐
+            │ │   │ │   │ │
+          ──┘ └───┘ └───┘ └──
+
+Channel B:    ┌─┐   ┌─┐   ┌─┐
+              │ │   │ │   │ │
+          ────┘ └───┘ └───┘ └
+
+Forward:  A leads B (A rises before B)
+Backward: B leads A (B rises before A)
+```
+
+---
+
+## Complete Implementation
+
+```cpp title="encoder_reader.h"
+#ifndef ENCODER_READER_H
+#define ENCODER_READER_H
+
+#include <Arduino.h>
+
+class EncoderReader {
+private:
+    uint8_t pin_a;
+    uint8_t pin_b;
+    volatile long count;
+    volatile long last_count;
+
+    // Velocity calculation
+    unsigned long last_time;
+    float velocity;  // rad/s
+    float counts_per_revolution;
+
+    // Interrupt service routine (must be static)
+    static void IRAM_ATTR isr_wrapper();
+    static EncoderReader* instance;
+
+    void handleInterrupt();
+
+public:
+    EncoderReader(uint8_t pinA, uint8_t pinB, float countsPerRev);
+    void begin();
+    long getCount();
+    void resetCount();
+    float getVelocity();  // rad/s
+    void updateVelocity();
+};
+
+#endif
+```
+
+```cpp title="encoder_reader.cpp"
+#include "encoder_reader.h"
+
+EncoderReader* EncoderReader::instance = nullptr;
+
+EncoderReader::EncoderReader(uint8_t pinA, uint8_t pinB, float countsPerRev) {
+    pin_a = pinA;
+    pin_b = pinB;
+    count = 0;
+    last_count = 0;
+    velocity = 0.0;
+    counts_per_revolution = countsPerRev;
+    last_time = millis();
+
+    instance = this;
+}
+
+void EncoderReader::begin() {
+    pinMode(pin_a, INPUT);
+    pinMode(pin_b, INPUT);
+
+    attachInterrupt(digitalPinToInterrupt(pin_a), isr_wrapper, RISING);
+}
+
+void IRAM_ATTR EncoderReader::isr_wrapper() {
+    if (instance != nullptr) {
+        instance->handleInterrupt();
+    }
+}
+
+void IRAM_ATTR EncoderReader::handleInterrupt() {
+    int b_state = digitalRead(pin_b);
+
+    if (b_state == HIGH) {
+        count++;  // Forward
+    } else {
+        count--;  // Backward
+    }
+}
+
+long EncoderReader::getCount() {
+    return count;
+}
+
+void EncoderReader::resetCount() {
+    count = 0;
+    last_count = 0;
+}
+
+void EncoderReader::updateVelocity() {
+    unsigned long current_time = millis();
+    float dt = (current_time - last_time) / 1000.0;  // seconds
+
+    if (dt > 0) {
+        long count_diff = count - last_count;
+        float revolutions = count_diff / counts_per_revolution;
+        velocity = (revolutions * 2.0 * PI) / dt;  // rad/s
+
+        last_count = count;
+        last_time = current_time;
+    }
+}
+
+float EncoderReader::getVelocity() {
+    return velocity;
+}
+```
+
+---
+
+## Usage Example: Single Encoder
+
+```cpp title="single_encoder_example.ino"
+#include "encoder_reader.h"
+
+// Encoder pins
+#define ENCODER_A 34
+#define ENCODER_B 35
+
+// JGA25-370: 11 PPR × 19 gear ratio = 209 counts/rev
+const float COUNTS_PER_REV = 209.0;
+
+EncoderReader encoder(ENCODER_A, ENCODER_B, COUNTS_PER_REV);
+
+void setup() {
+    Serial.begin(115200);
+    encoder.begin();
+
+    Serial.println("Encoder Reader Started");
+}
+
+void loop() {
+    // Update velocity every 50ms (20 Hz)
+    static unsigned long last_update = 0;
+    if (millis() - last_update >= 50) {
+        last_update = millis();
+
+        encoder.updateVelocity();
+
+        long count = encoder.getCount();
+        float velocity = encoder.getVelocity();
+
+        Serial.printf("Count: %ld | Velocity: %.2f rad/s\n", count, velocity);
+    }
+}
+```
+
+---
+
+## Four-Wheel Implementation
+
+```cpp title="four_wheel_encoders.ino"
+#include "encoder_reader.h"
+
+// Encoder pins (JGA25-370 motors)
+#define ENC_FL_A 34
+#define ENC_FL_B 35
+#define ENC_FR_A 36
+#define ENC_FR_B 39
+#define ENC_RL_A 32
+#define ENC_RL_B 33
+#define ENC_RR_A 25
+#define ENC_RR_B 26
+
+const float COUNTS_PER_REV = 209.0;
+
+// Create encoder objects
+EncoderReader enc_fl(ENC_FL_A, ENC_FL_B, COUNTS_PER_REV);
+EncoderReader enc_fr(ENC_FR_A, ENC_FR_B, COUNTS_PER_REV);
+EncoderReader enc_rl(ENC_RL_A, ENC_RL_B, COUNTS_PER_REV);
+EncoderReader enc_rr(ENC_RR_A, ENC_RR_B, COUNTS_PER_REV);
+
+void setup() {
+    Serial.begin(115200);
+
+    enc_fl.begin();
+    enc_fr.begin();
+    enc_rl.begin();
+    enc_rr.begin();
+
+    Serial.println("Four-Wheel Encoder System Started");
+}
+
+void loop() {
+    static unsigned long last_update = 0;
+
+    if (millis() - last_update >= 50) {  // 20 Hz
+        last_update = millis();
+
+        // Update all velocities
+        enc_fl.updateVelocity();
+        enc_fr.updateVelocity();
+        enc_rl.updateVelocity();
+        enc_rr.updateVelocity();
+
+        // Get velocities
+        float vel_fl = enc_fl.getVelocity();
+        float vel_fr = enc_fr.getVelocity();
+        float vel_rl = enc_rl.getVelocity();
+        float vel_rr = enc_rr.getVelocity();
+
+        // Print as CSV for serial plotting
+        Serial.printf("%.2f,%.2f,%.2f,%.2f\n", vel_fl, vel_fr, vel_rl, vel_rr);
+    }
+}
+```
+
+---
+
+## Forward Kinematics from Encoders
+
+Calculate robot velocity from wheel encoders:
+
+```cpp title="mecanum_odometry.ino"
+#include "encoder_reader.h"
+
+// Robot parameters (meters)
+const float WHEEL_RADIUS = 0.05;      // 5cm
+const float WHEELBASE = 0.20;         // 20cm
+const float TRACK_WIDTH = 0.20;       // 20cm
+const float L = (WHEELBASE + TRACK_WIDTH) / 2.0;
+
+// Encoder objects (declaration omitted for brevity)
+extern EncoderReader enc_fl, enc_fr, enc_rl, enc_rr;
+
+// Robot pose
+float robot_x = 0.0;
+float robot_y = 0.0;
+float robot_theta = 0.0;
+
+void updateOdometry() {
+    // Get wheel velocities (rad/s)
+    float w_fl = enc_fl.getVelocity();
+    float w_fr = enc_fr.getVelocity();
+    float w_rl = enc_rl.getVelocity();
+    float w_rr = enc_rr.getVelocity();
+
+    // Mecanum forward kinematics
+    float vx = (WHEEL_RADIUS / 4.0) * (w_fl + w_fr + w_rl + w_rr);
+    float vy = (WHEEL_RADIUS / 4.0) * (-w_fl + w_fr + w_rl - w_rr);
+    float omega = (WHEEL_RADIUS / (4.0 * L)) * (-w_fl + w_fr - w_rl + w_rr);
+
+    // Update pose (simple integration, dt = 0.05s for 20 Hz)
+    float dt = 0.05;
+    float dx = vx * cos(robot_theta) - vy * sin(robot_theta);
+    float dy = vx * sin(robot_theta) + vy * cos(robot_theta);
+
+    robot_x += dx * dt;
+    robot_y += dy * dt;
+    robot_theta += omega * dt;
+
+    // Normalize theta to [-pi, pi]
+    while (robot_theta > PI) robot_theta -= 2.0 * PI;
+    while (robot_theta < -PI) robot_theta += 2.0 * PI;
+
+    // Print odometry
+    Serial.printf("Pose: x=%.3f y=%.3f theta=%.3f | Vel: vx=%.2f vy=%.2f omega=%.2f\n",
+                  robot_x, robot_y, robot_theta, vx, vy, omega);
+}
+
+void loop() {
+    static unsigned long last_update = 0;
+
+    if (millis() - last_update >= 50) {
+        last_update = millis();
+
+        enc_fl.updateVelocity();
+        enc_fr.updateVelocity();
+        enc_rl.updateVelocity();
+        enc_rr.updateVelocity();
+
+        updateOdometry();
+    }
+}
+```
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Count not incrementing">
+    **Solutions:**
+    1. Check wiring (A to GPIO 34, B to GPIO 35, GND, VCC)
+    2. Verify encoder power (5V or 3.3V depending on encoder)
+    3. Test pins individually:
+       ```cpp
+       Serial.println(digitalRead(ENCODER_A));
+       Serial.println(digitalRead(ENCODER_B));
+       ```
+    4. Manually rotate motor and observe output
+  </Accordion>
+
+  <Accordion title="Count only goes one direction">
+    **Cause:** Channel B not connected or wrong pin
+
+    **Solutions:**
+    1. Verify pin_b is correct input-only pin (34-39)
+    2. Check Channel B wiring
+    3. Swap A and B channels if reversed
+  </Accordion>
+
+  <Accordion title="Erratic count / noise">
+    **Solutions:**
+    1. Add hardware debouncing (0.1µF capacitor across A and B)
+    2. Use pull-up resistors (10kΩ)
+    3. Shorten encoder wires
+    4. Keep encoder wires away from motor power wires
+  </Accordion>
+
+  <Accordion title="Velocity always zero">
+    **Solutions:**
+    1. Ensure `updateVelocity()` called regularly (every 50ms)
+    2. Check COUNTS_PER_REV matches your encoder
+    3. Verify motor is actually spinning
+    4. Add debug prints:
+       ```cpp
+       Serial.printf("Count diff: %ld | dt: %.3f\n", count_diff, dt);
+       ```
+  </Accordion>
+
+  <Accordion title="Velocity fluctuates wildly">
+    **Cause:** Update rate too fast or too slow
+
+    **Solutions:**
+    1. Use fixed 20-50 Hz update rate (50ms)
+    2. Add low-pass filter:
+       ```cpp
+       float alpha = 0.8;
+       velocity = alpha * velocity + (1 - alpha) * new_velocity;
+       ```
+    3. Average over multiple readings
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Pin Considerations (ESP32)
+
+```cpp
+// Input-only pins (no pull-up, best for encoders)
+// GPIO 34, 35, 36, 39
+
+// Use for encoders (avoid ADC conflicts):
+#define ENC_FL_A 34  // Input-only
+#define ENC_FL_B 35  // Input-only
+#define ENC_FR_A 36  // Input-only
+#define ENC_FR_B 39  // Input-only
+
+// If need more encoder pins, use:
+// GPIO 32, 33, 25, 26, 27 (have pull-ups, but work fine)
+```
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="PID Controller" icon="sliders" href="/reference/code-examples/pid-controller">
+    Use encoder velocity for PID feedback
+  </Card>
+
+  <Card title="Motor Control" icon="gear" href="/wp3-embedded/dc-motor-control">
+    Complete closed-loop motor control
+  </Card>
+
+  <Card title="Serial Communication" icon="usb" href="/reference/code-examples/serial-communication">
+    Send encoder data to ROS2
+  </Card>
+
+  <Card title="Hardware Reference" icon="microchip" href="/reference/hardware/motors">
+    JGA25-370 encoder specifications
+  </Card>
+</CardGroup>
+
+---
+
+## References
+
+- [Rotary Encoder Wikipedia](https://en.wikipedia.org/wiki/Rotary_encoder)
+- [Quadrature Encoding](https://en.wikipedia.org/wiki/Incremental_encoder#Quadrature_outputs)
+- [ESP32 GPIO Reference](https://randomnerdtutorials.com/esp32-pinout-reference-gpios/)

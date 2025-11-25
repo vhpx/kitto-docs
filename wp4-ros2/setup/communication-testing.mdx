@@ -1,0 +1,577 @@
+---
+title: "Communication Testing"
+description: "Test ROS2 communication between development computer and Raspberry Pi"
+---
+
+## Overview
+
+Before building your robot software, you must verify that your PC and Raspberry Pi can communicate over ROS2. This ensures nodes on different machines can discover and exchange data.
+
+<Note>
+  **Multi-Machine ROS2:** By default, ROS2 uses DDS (Data Distribution Service) for automatic discovery on local networks. No manual configuration needed for simple setups!
+</Note>
+
+## Network Prerequisites
+
+### Both Devices on Same Network
+
+<Steps>
+  <Step title="Verify WiFi Connection">
+    **On PC:**
+    ```bash
+    ip addr show
+    # Look for wlan0 or similar
+    # Example: 192.168.1.100
+    ```
+
+    **On Raspberry Pi (via SSH):**
+    ```bash
+    hostname -I
+    # Example: 192.168.1.50
+    ```
+
+    **Important:** Both should have IPs in same subnet (e.g., 192.168.1.x)
+  </Step>
+
+  <Step title="Test Basic Connectivity">
+    **From PC to RPi:**
+    ```bash
+    ping alpha-pi.local
+    # OR
+    ping 192.168.1.50
+    ```
+
+    **From RPi to PC:**
+    ```bash
+    ping 192.168.1.100
+    ```
+
+    **Expected:** Continuous ping replies. Press Ctrl+C to stop.
+
+    <Warning>
+      If ping fails, check:
+      - Both on same WiFi network
+      - Firewall settings (disable temporarily for testing)
+      - Router allows inter-device communication
+    </Warning>
+  </Step>
+</Steps>
+
+## ROS2 Discovery Mechanism
+
+ROS2 uses **DDS Discovery** to find nodes on the network:
+
+1. **Multicast Discovery:** Nodes broadcast their presence via UDP multicast
+2. **Automatic Connection:** Nodes with matching topic/service names connect
+3. **No Central Server:** Fully distributed (unlike ROS1 roscore)
+
+### Domain ID
+
+**Domain ID** isolates ROS2 networks. Nodes with different domain IDs cannot communicate.
+
+```bash
+# Check current domain (default: 0)
+printenv ROS_DOMAIN_ID
+
+# Set domain ID (0-101 for WiFi, 0-232 for wired)
+export ROS_DOMAIN_ID=0
+
+# Make permanent (add to ~/.bashrc)
+echo "export ROS_DOMAIN_ID=0" >> ~/.bashrc
+```
+
+<Tip>
+  **Multi-Robot Scenario:** Use different domain IDs for different robots on same network (e.g., alpha=0, beta=1, gamma=2).
+</Tip>
+
+## Test 1: Talker-Listener (Same Machine)
+
+First, test on single machine to verify ROS2 installation.
+
+### On PC
+
+**Terminal 1:**
+```bash
+ros2 run demo_nodes_cpp talker
+```
+
+**Expected Output:**
+```
+[INFO] [talker]: Publishing: 'Hello World: 1'
+[INFO] [talker]: Publishing: 'Hello World: 2'
+...
+```
+
+**Terminal 2:**
+```bash
+ros2 run demo_nodes_cpp listener
+```
+
+**Expected Output:**
+```
+[INFO] [listener]: I heard: [Hello World: 1]
+[INFO] [listener]: I heard: [Hello World: 2]
+...
+```
+
+<Accordion title="If listener doesn't receive messages" icon="triangle-exclamation">
+  **Solutions:**
+  - Restart ROS2 daemon: `ros2 daemon stop && ros2 daemon start`
+  - Check firewall (allow UDP ports 7400-7500)
+  - Verify ROS_DOMAIN_ID matches in both terminals
+</Accordion>
+
+## Test 2: PC → Raspberry Pi Communication
+
+### Setup
+
+**On PC (Terminal 1):**
+```bash
+# Run talker
+ros2 run demo_nodes_cpp talker
+```
+
+**On Raspberry Pi (via SSH):**
+```bash
+# Run listener
+ros2 run demo_nodes_cpp listener
+```
+
+**Expected Result:**
+```
+[INFO] [listener]: I heard: [Hello World: 1]
+[INFO] [listener]: I heard: [Hello World: 2]
+...
+```
+
+<Note>
+  **Success!** Your Raspberry Pi is receiving messages from PC. This proves multi-machine ROS2 works!
+</Note>
+
+### Reverse Direction
+
+**On Raspberry Pi:**
+```bash
+ros2 run demo_nodes_cpp talker
+```
+
+**On PC:**
+```bash
+ros2 run demo_nodes_cpp listener
+```
+
+**Expected:** PC receives messages from Raspberry Pi.
+
+## Test 3: Node List Verification
+
+While talker/listener running:
+
+**On PC:**
+```bash
+ros2 node list
+```
+
+**Expected Output:**
+```
+/talker
+/listener
+```
+
+**Key Point:** You should see BOTH nodes (one on PC, one on RPi) in the list from either machine!
+
+### Topic List
+
+```bash
+ros2 topic list
+```
+
+**Expected:**
+```
+/chatter
+/parameter_events
+/rosout
+```
+
+### Topic Info
+
+```bash
+ros2 topic info /chatter
+```
+
+**Expected:**
+```
+Type: std_msgs/msg/String
+Publisher count: 1
+Subscription count: 1
+```
+
+## Test 4: Velocity Command Test
+
+Simulate robot control: PC sends velocity commands, RPi listens.
+
+### On Raspberry Pi
+
+```bash
+# Echo velocity commands
+ros2 topic echo /cmd_vel
+```
+
+### On PC
+
+```bash
+# Publish velocity command
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+  "{linear: {x: 0.5, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.3}}"
+```
+
+**On RPi Terminal:**
+```
+linear:
+  x: 0.5
+  y: 0.0
+  z: 0.0
+angular:
+  x: 0.0
+  y: 0.0
+  z: 0.3
+---
+```
+
+**Interpretation:**
+- PC (development computer) sends velocity commands
+- RPi (onboard robot computer) receives them for motor control
+- This is exactly how teleop will work!
+
+## Test 5: Service Call Across Machines
+
+**On PC (Server):**
+```bash
+# Create simple service server
+ros2 run demo_nodes_cpp add_two_ints_server
+```
+
+**On Raspberry Pi (Client):**
+```bash
+# Call service
+ros2 service call /add_two_ints example_interfaces/srv/AddTwoInts "{a: 5, b: 3}"
+```
+
+**Expected Response:**
+```
+waiting for service to become available...
+response:
+  sum: 8
+```
+
+## Test 6: RQT Graph Visualization
+
+**On PC (requires Desktop):**
+```bash
+# Install if not already
+sudo apt install ros-jazzy-rqt ros-jazzy-rqt-common-plugins
+
+# Launch graph visualization
+rqt_graph
+```
+
+While talker/listener running across PC and RPi:
+- You'll see nodes and topics graphically
+- Arrows show publisher → subscriber connections
+- Great for debugging communication issues
+
+<img
+  src="/images/rqt-graph-example.png"
+  alt="RQT graph showing talker-listener connection"
+  caption="RQT graph visualizing nodes and topics across PC and Raspberry Pi"
+/>
+
+## Troubleshooting Multi-Machine Communication
+
+<AccordionGroup>
+  <Accordion title="Nodes don't see each other" icon="eye-slash">
+    **Symptoms:**
+    - `ros2 node list` only shows local nodes
+    - Messages not received across machines
+
+    **Solutions:**
+
+    1. **Check same network:**
+       ```bash
+       # Both should be on same subnet
+       ip addr show  # PC
+       hostname -I   # RPi
+       ```
+
+    2. **Verify ping works:**
+       ```bash
+       ping alpha-pi.local
+       ```
+
+    3. **Check ROS_DOMAIN_ID matches:**
+       ```bash
+       # On both machines
+       printenv ROS_DOMAIN_ID
+       # Should be same (or both unset/0)
+       ```
+
+    4. **Restart DDS daemon:**
+       ```bash
+       ros2 daemon stop
+       ros2 daemon start
+       ```
+
+    5. **Check firewall:**
+       ```bash
+       # Ubuntu: Temporarily disable for testing
+       sudo ufw disable
+       # If this fixes it, add rules:
+       sudo ufw allow 7400:7500/udp
+       sudo ufw enable
+       ```
+  </Accordion>
+
+  <Accordion title="Messages delayed or intermittent" icon="clock">
+    **Causes:**
+    - WiFi signal weak
+    - Network congestion
+    - QoS (Quality of Service) mismatch
+
+    **Solutions:**
+
+    1. **Check WiFi signal:**
+       ```bash
+       # On Raspberry Pi
+       iwconfig wlan0
+       # Look for "Signal level"
+       ```
+
+    2. **Use wired Ethernet (if possible):**
+       - More reliable than WiFi
+       - Lower latency
+
+    3. **Reduce message rate:**
+       - For high-bandwidth topics (images, laserscan)
+       - Example: Publish at 10Hz instead of 30Hz
+
+    4. **Check QoS settings:**
+       - Publisher and subscriber QoS must be compatible
+       - Default is usually fine
+  </Accordion>
+
+  <Accordion title="Only works one direction" icon="arrow-right">
+    **Symptom:** PC → RPi works, but RPi → PC doesn't (or vice versa)
+
+    **Likely Cause:** Asymmetric firewall
+
+    **Solution:**
+    ```bash
+    # Check firewall on BOTH machines
+    sudo ufw status
+
+    # Allow ROS2 traffic
+    sudo ufw allow 7400:7500/udp
+    sudo ufw allow 7400:7500/tcp
+    ```
+  </Accordion>
+
+  <Accordion title="High CPU usage from discovery" icon="microchip">
+    **Cause:** Many ROS2 systems on same network continuously discovering
+
+    **Solutions:**
+
+    1. **Use different domain IDs:**
+       ```bash
+       # Your robot uses domain 5
+       export ROS_DOMAIN_ID=5
+       ```
+
+    2. **Use ROS_LOCALHOST_ONLY (for single machine):**
+       ```bash
+       export ROS_LOCALHOST_ONLY=1
+       # Nodes only discover locally
+       ```
+
+    3. **Static peer discovery (advanced):**
+       - Configure specific IPs instead of multicast
+       - See: https://docs.ros.org/en/jazzy/How-To-Guides/DDS-tuning.html
+  </Accordion>
+
+  <Accordion title="Works wired but not WiFi" icon="wifi">
+    **Cause:** Some routers block multicast over WiFi
+
+    **Solutions:**
+
+    1. **Enable multicast/IGMP on router:**
+       - Check router settings for "multicast filtering"
+       - Disable AP isolation
+
+    2. **Use different router:**
+       - Some cheap routers don't support multicast properly
+
+    3. **Wired connection for Raspberry Pi:**
+       - More reliable for robot operation anyway
+  </Accordion>
+</AccordionGroup>
+
+## Advanced: ROS_DOMAIN_ID Best Practices
+
+### Single Robot in Lab
+
+```bash
+# Use default domain 0
+# No configuration needed
+```
+
+### Multiple Robots in Same Lab
+
+**Robot Alpha (PC and RPi):**
+```bash
+export ROS_DOMAIN_ID=0
+```
+
+**Robot Beta (PC and RPi):**
+```bash
+export ROS_DOMAIN_ID=1
+```
+
+**Robot Gamma (PC and RPi):**
+```bash
+export ROS_DOMAIN_ID=2
+```
+
+**Result:** Each robot is isolated, no cross-talk.
+
+### Development + Robot Testing
+
+**Robot (operating):**
+```bash
+export ROS_DOMAIN_ID=0
+```
+
+**Development testing (separate network):**
+```bash
+export ROS_DOMAIN_ID=99
+```
+
+## Performance Testing
+
+### Measure Latency
+
+**Terminal 1:**
+```bash
+ros2 topic pub -r 100 /test std_msgs/msg/String "{data: 'test'}"
+# Publish at 100 Hz
+```
+
+**Terminal 2:**
+```bash
+ros2 topic hz /test
+# Expected output:
+# average rate: 100.000
+```
+
+### Measure Bandwidth
+
+```bash
+ros2 topic bw /test
+# Shows bandwidth used by topic
+```
+
+### Large Message Test (Simulating LiDAR)
+
+**On PC:**
+```bash
+# Publish large message (like LaserScan)
+ros2 topic pub /scan sensor_msgs/msg/LaserScan \
+  "{angle_min: -3.14, angle_max: 3.14, ranges: [1.0, 1.1, 1.2, ...]}"
+```
+
+**On RPi:**
+```bash
+ros2 topic hz /scan
+# Should receive at expected rate
+```
+
+## Communication Checklist
+
+Before proceeding to robot development:
+
+- [ ] PC and RPi on same network (verified with ping)
+- [ ] ROS2 talker/listener works PC → RPi
+- [ ] ROS2 talker/listener works RPi → PC
+- [ ] `ros2 node list` shows nodes from both machines
+- [ ] `ros2 topic echo` receives data across network
+- [ ] Service calls work across machines
+- [ ] ROS_DOMAIN_ID configured if multiple robots
+- [ ] Firewall configured to allow ROS2 traffic
+- [ ] Latency acceptable (&lt;50ms for local network)
+- [ ] No discovery issues (nodes appear within 2-3 seconds)
+
+## Network Architecture for Robot
+
+```
+Development Computer (PC)              Raspberry Pi (Onboard)
+┌─────────────────────────┐           ┌──────────────────────┐
+│                         │           │                      │
+│  RViz (visualization)   │◄─────────►│  Motor Controller    │
+│  Teleop Keyboard        │  WiFi/LAN │  LiDAR Driver        │
+│  Nav2 Goal Sender       │           │  IMU Publisher       │
+│  SLAM Toolbox (mapping) │           │  Odometry Publisher  │
+│  PlotJuggler (debug)    │           │  Transform Publisher │
+│                         │           │                      │
+└─────────────────────────┘           └──────────────────────┘
+
+        ROS_DOMAIN_ID=0                   ROS_DOMAIN_ID=0
+               ▲                                 ▲
+               │                                 │
+               └────────── Same Network ─────────┘
+```
+
+**Topics across network:**
+- `/cmd_vel` - PC sends velocity commands → RPi
+- `/odom` - RPi publishes odometry → PC
+- `/scan` - RPi publishes LiDAR data → PC
+- `/imu` - RPi publishes IMU data → PC
+- `/joint_states` - RPi publishes encoder data → PC
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Robot Description"
+    icon="robot"
+    href="/wp4-ros2/description/urdf-introduction"
+  >
+    Create URDF model of your Mecanum robot
+  </Card>
+
+  <Card
+    title="ROS2 Control"
+    icon="gamepad"
+    href="/wp4-ros2/control/ros2-control-intro"
+  >
+    Set up ros2_control framework
+  </Card>
+
+  <Card
+    title="Teleop Control"
+    icon="keyboard"
+    href="/wp4-ros2/control/teleop"
+  >
+    Control robot with keyboard
+  </Card>
+
+  <Card
+    title="Troubleshooting"
+    icon="life-ring"
+    href="/troubleshooting/ros2-errors"
+  >
+    Common ROS2 communication errors
+  </Card>
+</CardGroup>
+
+## References
+
+[1] ROS2 Multi-Machine Setup: https://docs.ros.org/en/jazzy/Tutorials/Multi-Machine-Setup.html
+[2] DDS Tuning: https://docs.ros.org/en/jazzy/How-To-Guides/DDS-tuning.html
+[3] ROS2 Domain ID: https://docs.ros.org/en/jazzy/Concepts/About-Domain-ID.html

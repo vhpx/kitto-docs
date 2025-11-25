@@ -1,0 +1,594 @@
+---
+title: "RPLIDAR A1M8 Specifications"
+description: "Complete RPLIDAR A1M8 specifications, interface details, and performance characteristics"
+---
+
+## Overview
+
+The **RPLIDAR A1M8** is a low-cost 360° 2D laser scanner designed for indoor robotics applications. It provides distance measurements in all directions, essential for SLAM mapping and autonomous navigation.
+
+<Note>
+  **Key Features:** 360° scanning, 12m range, 5.5 Hz scan rate, USB interface, affordable ($99), ROS2 support via rplidar_ros package.
+</Note>
+
+## Specifications Summary
+
+### Performance
+
+| Parameter | Specification | Notes |
+|-----------|--------------|-------|
+| **Range** | 0.15m - 12m | Typical white object (70% reflectivity) |
+| **Angular Range** | 0-360° (full circle) | Continuous rotation |
+| **Angular Resolution** | ≤1° | 360 sample points per scan |
+| **Sample Rate** | 8000 samples/second | Sustained data rate |
+| **Scan Rate** | 5.5 Hz | 5.5 complete 360° scans per second |
+| **Distance Resolution** | &lt;0.5mm | High precision |
+| **Accuracy** | ±1.5 cm | At 95% confidence (0.15-6m) |
+| **Precision** | ±0.2 cm | Standard deviation |
+
+### Physical
+
+| Parameter | Specification |
+|-----------|--------------|
+| **Dimensions** | Ø98mm × 38mm (cylinder) |
+| **Weight** | ~160g (with cable) |
+| **Mounting** | 4× M3 screw holes |
+| **Operating Temperature** | 0°C to +40°C |
+| **Storage Temperature** | -10°C to +60°C |
+
+### Electrical
+
+| Parameter | Specification | Notes |
+|-----------|--------------|-------|
+| **Power Supply** | 5V DC | Via USB or external |
+| **Current Draw** | 350-500mA | Peak during startup: 800mA |
+| **Power Consumption** | 1.75-2.5W | Typical ~2W |
+| **Interface** | USB 2.0 (UART internally) | USB Type-A to Type-B Mini cable |
+| **Baud Rate** | 115200 bps | Fixed (not configurable) |
+| **Communication Protocol** | Proprietary (SLAMTEC protocol) | ROS driver handles protocol |
+
+### Optical
+
+| Parameter | Specification |
+|-----------|--------------|
+| **Laser Type** | Class I laser (eye-safe) | 785nm wavelength (near-infrared) |
+| **Laser Power** | <5mW | Eye-safe under normal use |
+| **Beam Divergence** | <1.5° | Tight beam |
+| **FOV** | 360° | Horizontal plane only |
+
+## Detailed Performance
+
+### Range vs. Reflectivity
+
+**Maximum range depends on target reflectivity:**
+
+| Target Reflectivity | Max Range | Examples |
+|---------------------|-----------|----------|
+| **90-100%** (white) | 12m | White wall, paper |
+| **70-80%** (light gray) | 10-11m | Light-colored objects |
+| **50-60%** (medium gray) | 8-9m | Typical indoor walls |
+| **20-30%** (dark gray) | 5-6m | Dark furniture |
+| **<10%** (black) | 2-4m | Black surfaces (absorb IR) |
+
+<Warning>
+  **Dark surfaces:** May not be detected beyond 4-6m. Plan accordingly for environments with dark walls/furniture.
+</Warning>
+
+### Angular Performance
+
+**Scan pattern:**
+```
+                North (0°)
+                    │
+          270° ─────┼───── 90°
+                    │
+                  180°
+
+Rotation: Clockwise (when viewed from top)
+Data published: Counter-clockwise (ROS convention)
+```
+
+**Angular resolution:**
+- **Mechanical:** Motor rotates continuously at 5.5 RPS
+- **Samples:** 8000 samples/sec ÷ 5.5 scans/sec = ~1455 samples/scan
+- **Angular spacing:** 360° ÷ 1455 ≈ 0.25° between samples
+- **Published resolution:** Typically ~1° after filtering/processing
+
+### Scan Rate
+
+**Fixed scan rate: 5.5 Hz**
+
+```
+Scan period = 1 / 5.5 Hz = 182 ms per scan
+
+At 0.5 m/s robot speed:
+Distance traveled per scan = 0.5 m/s × 0.182 s = 9.1 cm
+
+Conclusion: Scan rate sufficient for robot moving <1 m/s
+```
+
+**Implications for navigation:**
+- **SLAM:** 5.5 Hz adequate for 0.4-0.6 m/s robot speed
+- **Obstacle avoidance:** React in 180ms (acceptable for slow robots)
+- **Faster robots:** Consider RPLIDAR A2 (10 Hz) or A3 (15 Hz)
+
+### Accuracy & Precision
+
+**Measurement error vs. distance:**
+
+| Distance | Accuracy (95%) | Precision (σ) |
+|----------|---------------|---------------|
+| **0.5m** | ±1.0 cm | ±0.15 cm |
+| **1.0m** | ±1.2 cm | ±0.18 cm |
+| **2.0m** | ±1.5 cm | ±0.20 cm |
+| **4.0m** | ±2.0 cm | ±0.25 cm |
+| **8.0m** | ±3.0 cm | ±0.35 cm |
+| **12.0m** | ±5.0 cm | ±0.50 cm |
+
+**Factors affecting accuracy:**
+- Surface angle (perpendicular best)
+- Reflectivity (bright surfaces best)
+- Ambient light (avoid direct sunlight)
+- Vibration (mount rigidly)
+
+## Mechanical Design
+
+### Dimensions & Mounting
+
+**LiDAR body:**
+```
+Top View:
+    ___________________
+   /                   \
+  |   ╔═════════════╗   |
+  |   ║   Rotating  ║   |    Ø98mm
+  |   ║   Scanner   ║   |
+  |   ╚═════════════╝   |
+   \___________________/
+        4× M3 holes
+
+Side View:
+    ┌─────────────────┐  ┬
+    │    USB Port     │  │
+    ├─────────────────┤  │ 38mm height
+    │  Rotating Top   │  │
+    │   (Scan Head)   │  │
+    └─────────────────┘  ┴
+```
+
+**Mounting holes:**
+- **Pattern:** 4× M3 threaded holes in square pattern
+- **Spacing:** 82mm × 82mm (hole center to center)
+- **Depth:** ~5mm thread depth
+- **Screws:** M3 × 6mm or 8mm (not longer than 10mm)
+
+**Mounting recommendations:**
+- **Location:** Center top of robot (360° unobstructed view)
+- **Height:** 20-30cm above ground (see obstacles, avoid low objects)
+- **Orientation:** USB port facing robot rear (cable management)
+- **Stability:** Rigidly mounted (no flex, vibration reduces accuracy)
+
+### Cable Management
+
+**USB cable (included):**
+- **Length:** 1.5m (Type-A to Mini-B)
+- **Routing:** Secure to robot frame with cable ties
+- **Strain relief:** Avoid sharp bends near connectors
+- **Rotation:** Ensure cable doesn't interfere with scanner rotation
+
+**External power option:**
+- Red wire: 5V
+- Black wire: GND
+- If using external 5V (not USB power), still connect USB for data
+
+## Electrical Interface
+
+### USB Connection
+
+**Pinout (USB Mini-B connector):**
+
+| Pin | Function | Wire Color |
+|-----|----------|------------|
+| 1 | VBUS (5V) | Red |
+| 2 | D- (data) | White |
+| 3 | D+ (data) | Green |
+| 4 | NC | - |
+| 5 | GND | Black |
+| Shield | Shield/GND | Bare |
+
+**Power consumption:**
+```
+Startup (0-2 seconds): 600-800 mA (motor spin-up)
+Operating steady-state: 350-500 mA (average ~450 mA)
+Peak during scan: 500 mA
+
+Power budget: 5V × 0.5A = 2.5W
+```
+
+**Power source options:**
+1. **USB from Raspberry Pi:** Most convenient
+   - Pi USB port provides up to 1.2A total (shared)
+   - LiDAR + ESP32 + camera = ~1.0A total (OK)
+
+2. **External 5V rail:** Best performance
+   - Dedicated 5V 2A buck converter
+   - Eliminates power competition
+   - Recommended for reliability
+
+### Communication Protocol
+
+**UART-based protocol (abstracted by USB):**
+
+- **Baud rate:** 115200 bps (fixed)
+- **Data format:** Binary packets
+- **Protocol:** Proprietary SLAMTEC format
+- **ROS driver:** `rplidar_ros` handles all protocol details
+
+**Data packet structure** (for reference, driver handles this):
+```
+Start flag (1 byte)
+Data length (2 bytes)
+Payload (variable)
+Checksum (1 byte)
+```
+
+**Typical data rate:**
+```
+8000 samples/sec × 5 bytes/sample = 40 kB/s
+```
+
+## Scan Data Format
+
+### Published ROS Topic
+
+**Topic:** `/scan`
+**Type:** `sensor_msgs/msg/LaserScan`
+
+**Message structure:**
+```yaml
+header:
+  stamp: {sec: 1234567890, nanosec: 123456789}
+  frame_id: "lidar_link"
+
+angle_min: -3.14159       # -π radians (180°, rear)
+angle_max: 3.14159        # +π radians (180°, rear)
+angle_increment: 0.0174533  # ~1 degree (π/180)
+
+time_increment: 0.0       # Time between measurements (0 for snapshot)
+scan_time: 0.18           # Time for full scan (1/5.5 Hz ≈ 182ms)
+
+range_min: 0.15           # Minimum valid range (m)
+range_max: 12.0           # Maximum valid range (m)
+
+ranges: [1.234, 1.456, 2.789, ... ]  # 360 distance readings (m)
+                                      # inf = no return (out of range)
+
+intensities: []           # Not provided by RPLIDAR A1M8 (empty array)
+```
+
+**Angle convention:**
+```
+ROS standard (REP 105):
+  0° = Forward (robot +X axis)
+  90° = Left
+  180° = Rear
+  270° = Right
+
+Scan direction: Counter-clockwise (right-hand rule, +Z up)
+```
+
+### Data Quality
+
+**Valid range indicators:**
+
+| Value | Meaning |
+|-------|---------|
+| **0.15 - 12.0** | Valid measurement |
+| **inf** (infinity) | No return (beyond 12m or dark surface) |
+| **0.0** | Invalid measurement (ignore) |
+| **< 0.15** | Too close (below minimum range) |
+
+**Quality metrics:**
+```bash
+# Check scan data quality
+ros2 topic echo /scan --field ranges | head -n 100
+
+# Count valid readings
+# Good: >85% in range [0.15, 12.0]
+# Poor: <70% valid (dirty lens, sunlight, etc.)
+```
+
+## Performance Optimization
+
+### Environmental Considerations
+
+**Best performance:**
+- ✓ Indoor environments
+- ✓ Diffuse lighting (no direct sunlight)
+- ✓ White/light-colored walls
+- ✓ Perpendicular surfaces
+- ✓ Static environment
+
+**Reduced performance:**
+- ✗ Direct sunlight (IR interference)
+- ✗ Dark surfaces (low reflectivity)
+- ✗ Transparent surfaces (glass, mirrors)
+- ✗ Highly reflective surfaces (metal, wet floors)
+- ✗ Moving obstacles (motion blur)
+
+### Noise Reduction
+
+**Hardware:**
+1. **Clean lens:** Use microfiber cloth weekly
+2. **Rigid mounting:** No vibration or flex
+3. **Cable routing:** Away from motor power wires
+4. **Shielding:** Avoid sunlight exposure
+
+**Software (ROS2 laser_filters):**
+```yaml
+scan_filter_chain:
+  filter_type: "laser_filters/LaserScanRangeFilter"
+  params:
+    lower_threshold: 0.15      # Remove below min range
+    upper_threshold: 11.5      # Remove beyond reliable range
+    use_message_range_limits: false
+```
+
+**Advanced filtering:**
+```yaml
+shadow_filter:
+  filter_type: "laser_filters/ScanShadowsFilter"
+  params:
+    min_angle: -3.14
+    max_angle: 3.14
+    neighbors: 10    # Window size for outlier detection
+    window: 1        # Distance threshold
+```
+
+## Calibration & Alignment
+
+### Mechanical Alignment
+
+**Verify 0° points forward:**
+
+**Procedure:**
+1. Place robot facing wall
+2. Launch LiDAR: `ros2 launch mecanum_description lidar.launch.py`
+3. View in RViz (LaserScan display)
+4. Check scan point directly ahead corresponds to 0° (forward)
+
+**If misaligned:**
+
+**Option 1: Physical rotation**
+- Loosen mounting screws
+- Rotate LiDAR housing to align
+- Re-tighten screws
+
+**Option 2: TF transform (software)**
+```xml
+<!-- In URDF -->
+<joint name="lidar_joint" type="fixed">
+  <parent link="base_link"/>
+  <child link="lidar_link"/>
+  <origin xyz="0 0 0.20" rpy="0 0 1.5708"/>
+  <!--                         Yaw offset: π/2 (90° if needed) -->
+</joint>
+```
+
+### Range Calibration
+
+**Test accuracy:**
+1. Place object at known distance (e.g., 1.000 m)
+2. Read scan data at corresponding angle
+3. Compare measured vs. actual distance
+
+```bash
+# Echo scan at specific angle
+ros2 topic echo /scan --field ranges[0]  # 0° forward
+ros2 topic echo /scan --field ranges[90] # 90° left
+
+# Should read within ±2 cm of actual distance
+```
+
+**If inaccurate:**
+- Clean lens thoroughly
+- Check for reflective surfaces causing multipath
+- Verify firmware up-to-date (rare issue)
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Motor not spinning" icon="rotate">
+    **Symptoms:**
+    - Power LED on, but no rotation
+    - No scan data published
+
+    **Debug:**
+    ```bash
+    # Check USB connection
+    lsusb | grep -i "slamtec\|cp210"
+
+    # Check permissions
+    ls -l /dev/ttyUSB0
+    # Should show: crw-rw-rw-
+
+    # Try manual spin test (if accessible)
+    # Gently spin scanner by hand (powered off)
+    # Should rotate freely with slight resistance
+    ```
+
+    **Causes:**
+    - Motor power issue (USB voltage <4.75V)
+    - Motor stalled/jammed
+    - USB cable damaged
+    - LiDAR faulty
+
+    **Solutions:**
+    - Use external 5V 2A supply
+    - Check for mechanical obstruction
+    - Try different USB cable
+    - RMA if under warranty
+  </Accordion>
+
+  <Accordion title="No scan data / topic not publishing" icon="signal">
+    **Debug:**
+    ```bash
+    # Check node running
+    ros2 node list | grep rplidar
+
+    # Check topic exists
+    ros2 topic list | grep scan
+
+    # Check for errors in node logs
+    ros2 node logs /rplidar_node
+    ```
+
+    **Common errors:**
+    - "Cannot open serial port" → Permission issue
+      ```bash
+      sudo chmod 666 /dev/ttyUSB0
+      # Or add user to dialout group permanently
+      ```
+
+    - "Device not found" → USB not connected or wrong port
+      ```bash
+      ls /dev/ttyUSB*
+      # Try /dev/ttyUSB1, etc. if multiple devices
+      ```
+
+    - "Check sum error" → Communication issue
+      - Try different USB cable
+      - Reboot LiDAR (power cycle)
+  </Accordion>
+
+  <Accordion title="Low scan rate (<5 Hz)" icon="gauge">
+    **Causes:**
+    - USB bandwidth saturation
+    - CPU overload
+    - Motor speed unstable
+
+    **Debug:**
+    ```bash
+    # Check actual rate
+    ros2 topic hz /scan
+    # Expected: 5.3-5.7 Hz
+
+    # Check CPU usage
+    top
+    ```
+
+    **Solutions:**
+    - Use USB 2.0 port (not USB 3.0 hub)
+    - Reduce other USB traffic (disable camera temporarily)
+    - Ensure LiDAR connected directly (not through hub)
+  </Accordion>
+
+  <Accordion title="Noisy scans / many outliers" icon="wave-square">
+    **Causes:**
+    - Dirty lens
+    - Sunlight interference
+    - Vibration
+    - Reflective surfaces
+
+    **Solutions:**
+    - Clean lens with microfiber cloth
+    - Block direct sunlight
+    - Mount more rigidly
+    - Use laser_filters package:
+      ```bash
+      sudo apt install ros-jazzy-laser-filters
+      ```
+  </Accordion>
+
+  <Accordion title="Reduced range (<6m on white wall)" icon="ruler">
+    **Causes:**
+    - Dirty lens (most common)
+    - Aging laser diode
+    - Dark/absorbing surfaces
+
+    **Solutions:**
+    - Clean lens thoroughly
+    - Check lens for scratches/damage
+    - Adjust Nav2 costmap max range:
+      ```yaml
+      obstacle_max_range: 6.0  # Reduce from 11.5
+      ```
+    - If persistent: Laser diode may be degrading (contact manufacturer)
+  </Accordion>
+
+  <Accordion title="Scan data drifts / jumps" icon="arrows-spin">
+    **Causes:**
+    - Incorrect TF frames
+    - Timestamp issues
+    - Motor speed variation
+
+    **Debug:**
+    ```bash
+    # Check TF tree
+    ros2 run tf2_tools view_frames
+
+    # Verify lidar_link → base_link transform exists
+    ros2 run tf2_ros tf2_echo base_link lidar_link
+    ```
+
+    **Solutions:**
+    - Ensure `angle_compensate: true` in launch file
+    - Check system time sync (NTP)
+    - Verify no TF errors in logs
+  </Accordion>
+</AccordionGroup>
+
+## Comparison with Alternatives
+
+| Model | Range | Scan Rate | Price | Pros | Cons |
+|-------|-------|-----------|-------|------|------|
+| **RPLIDAR A1M8** | 12m | 5.5 Hz | $99 | Affordable, reliable | Slower scan rate |
+| RPLIDAR A2M8 | 12m | 10 Hz | $320 | Faster scans | 3× price |
+| RPLIDAR A3M1 | 25m | 15 Hz | $599 | Long range, fast | 6× price |
+| YDLiDAR X4 | 10m | 7 Hz | $79 | Cheaper | Less reliable |
+| Hokuyo UST-10LX | 10m | 40 Hz | $1500 | Very fast, precise | 15× price |
+
+**Verdict for course project:** RPLIDAR A1M8 offers best value for indoor navigation.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="LiDAR Setup Guide"
+    icon="gear"
+    href="/wp4-ros2/sensors/lidar-setup"
+  >
+    Complete LiDAR installation and configuration
+  </Card>
+
+  <Card
+    title="IMU Specifications"
+    icon="compass"
+    href="/reference/hardware/imu"
+  >
+    ICM-20948 IMU details
+  </Card>
+
+  <Card
+    title="SLAM Mapping"
+    icon="map"
+    href="/wp4-ros2/mapping/slam-toolbox"
+  >
+    Use LiDAR for SLAM mapping
+  </Card>
+
+  <Card
+    title="Navigation Setup"
+    icon="route"
+    href="/wp4-ros2/navigation/nav2-intro"
+  >
+    Configure Nav2 with LiDAR
+  </Card>
+</CardGroup>
+
+## References
+
+[1] RPLIDAR A1 Datasheet: https://www.slamtec.com/en/Lidar/A1Spec
+[2] RPLIDAR SDK: https://github.com/Slamtec/rplidar_sdk
+[3] rplidar_ros Driver: https://github.com/Slamtec/rplidar_ros
+[4] LaserScan Message: https://docs.ros2.org/latest/api/sensor_msgs/msg/LaserScan.html

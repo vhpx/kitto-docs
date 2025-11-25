@@ -1,0 +1,878 @@
+---
+title: 'Git & GitHub'
+description: 'Version control and collaboration for team-based robot development'
+icon: 'git-alt'
+---
+
+## Overview
+
+Git is a distributed version control system that tracks changes to your code over time. GitHub is a cloud-based hosting platform for Git repositories that enables team collaboration. Together, they form the backbone of modern software development and are essential for managing code in team projects like the mecanum robot.
+
+<CardGroup cols={2}>
+  <Card title="Version Control" icon="code-commit">
+    Track changes, revert mistakes, and maintain code history
+  </Card>
+  <Card title="Collaboration" icon="users">
+    Work simultaneously with teammates without overwriting each other's code
+  </Card>
+</CardGroup>
+
+---
+
+## Why Use Git?
+
+Without version control:
+```
+❌ mecanum_robot_final.ino
+❌ mecanum_robot_final_v2.ino
+❌ mecanum_robot_final_v2_ACTUALLY_FINAL.ino
+❌ mecanum_robot_final_v2_FIXED_BUG.ino (which version works?!)
+```
+
+With Git:
+```
+✓ mecanum_robot/
+  ├─ src/main.cpp
+  └─ .git/ (complete history of all changes)
+
+git log --oneline
+abc123 Fix encoder interrupt bug
+def456 Add PID motor control
+789abc Implement IMU integration
+```
+
+**Benefits:**
+- **Undo mistakes:** Revert to previous working versions
+- **Track changes:** See who changed what, when, and why
+- **Branching:** Work on features independently without breaking main code
+- **Backup:** Cloud storage on GitHub prevents data loss
+- **Collaboration:** Merge code from multiple teammates automatically
+
+---
+
+## Installation
+
+### Git
+
+<Tabs>
+  <Tab title="Windows">
+    1. Download Git from [git-scm.com/downloads](https://git-scm.com/downloads)
+    2. Run installer with default settings
+    3. Important options:
+       - ✓ Use Git from the command line and 3rd-party software
+       - ✓ Use bundled OpenSSH
+       - ✓ Checkout Windows-style, commit Unix-style (recommended)
+
+    4. Verify installation:
+       ```bash
+       git --version
+       # Output: git version 2.43.0
+       ```
+  </Tab>
+
+  <Tab title="macOS">
+    **Option 1: Homebrew (recommended)**
+    ```bash
+    # Install Homebrew if not already installed
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+    # Install Git
+    brew install git
+    ```
+
+    **Option 2: Xcode Command Line Tools**
+    ```bash
+    xcode-select --install
+    ```
+
+    **Verify:**
+    ```bash
+    git --version
+    # Output: git version 2.43.0
+    ```
+  </Tab>
+
+  <Tab title="Linux (Ubuntu/Debian)">
+    ```bash
+    # Update package index
+    sudo apt update
+
+    # Install Git
+    sudo apt install git
+
+    # Verify
+    git --version
+    # Output: git version 2.43.0
+    ```
+
+    **For other distros:**
+    - **Fedora/RHEL:** `sudo dnf install git`
+    - **Arch:** `sudo pacman -S git`
+  </Tab>
+</Tabs>
+
+### Configure Git
+
+Set your identity (required for commits):
+
+```bash
+# Set your name
+git config --global user.name "Your Name"
+
+# Set your email (use RMIT email)
+git config --global user.email "s1234567@student.rmit.edu.au"
+
+# Set default branch name to 'main'
+git config --global init.defaultBranch main
+
+# Verify configuration
+git config --list
+```
+
+<Note>
+Use the **same email** you'll use for GitHub to link commits to your account
+</Note>
+
+---
+
+## GitHub Account Setup
+
+<Steps>
+  <Step title="Create GitHub Account">
+    Visit [github.com](https://github.com/) and sign up
+
+    **Recommendations:**
+    - Use RMIT email for student benefits
+    - Choose professional username (e.g., `john-smith-rmit`, not `xXcoder123Xx`)
+  </Step>
+
+  <Step title="Enable Student Benefits">
+    Visit [education.github.com/students](https://education.github.com/students)
+
+    Apply for **GitHub Student Developer Pack** (free):
+    - Unlimited private repositories
+    - GitHub Copilot (AI code assistant)
+    - Free cloud credits and premium tools
+
+    Upload student ID or use RMIT email for verification
+  </Step>
+
+  <Step title="Set Up SSH Key (Recommended)">
+    SSH keys allow pushing/pulling without entering password each time
+
+    ```bash
+    # Generate SSH key
+    ssh-keygen -t ed25519 -C "s1234567@student.rmit.edu.au"
+
+    # Press Enter to accept default location (~/.ssh/id_ed25519)
+    # Enter passphrase (optional but recommended)
+
+    # Copy public key to clipboard
+    # macOS:
+    pbcopy < ~/.ssh/id_ed25519.pub
+
+    # Linux:
+    cat ~/.ssh/id_ed25519.pub | xclip -selection clipboard
+
+    # Windows (Git Bash):
+    cat ~/.ssh/id_ed25519.pub | clip
+    ```
+
+    Add SSH key to GitHub:
+    1. GitHub → **Settings → SSH and GPG keys**
+    2. Click **New SSH key**
+    3. Paste key, add title (e.g., "My Laptop")
+    4. Click **Add SSH key**
+
+    Test connection:
+    ```bash
+    ssh -T git@github.com
+    # Output: Hi username! You've successfully authenticated...
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Basic Git Workflow
+
+### Creating a Repository
+
+<Tabs>
+  <Tab title="Option 1: Create on GitHub (Recommended)">
+    1. Go to GitHub → Click **New** (green button)
+    2. Repository name: `mecanum-robot-firmware`
+    3. Description: "ESP32 firmware for EEET2610 mecanum robot"
+    4. Visibility: **Private** (for coursework)
+    5. ✓ Add README file
+    6. Add .gitignore: **PlatformIO**
+    7. License: **MIT** (optional)
+    8. Click **Create repository**
+
+    Clone to your computer:
+    ```bash
+    # Navigate to where you want the project
+    cd ~/Documents/GitHub
+
+    # Clone repository (use SSH URL)
+    git clone git@github.com:your-username/mecanum-robot-firmware.git
+
+    cd mecanum-robot-firmware
+    ```
+  </Tab>
+
+  <Tab title="Option 2: Start Locally">
+    ```bash
+    # Create project directory
+    mkdir mecanum-robot-firmware
+    cd mecanum-robot-firmware
+
+    # Initialize Git repository
+    git init
+
+    # Create initial files
+    echo "# Mecanum Robot Firmware" > README.md
+
+    # Stage and commit
+    git add README.md
+    git commit -m "Initial commit"
+
+    # Connect to GitHub (create empty repo on GitHub first)
+    git remote add origin git@github.com:your-username/mecanum-robot-firmware.git
+
+    # Push to GitHub
+    git branch -M main
+    git push -u origin main
+    ```
+  </Tab>
+</Tabs>
+
+### Daily Git Commands
+
+```bash
+# 1. Check current status
+git status
+
+# 2. Add changes to staging area
+git add src/main.cpp              # Add specific file
+git add src/                      # Add entire directory
+git add .                         # Add all changes
+
+# 3. Commit staged changes
+git commit -m "Add PID motor control"
+
+# 4. Push to GitHub
+git push
+
+# 5. Pull latest changes from GitHub
+git pull
+
+# 6. View commit history
+git log --oneline --graph --all
+```
+
+<Tip>
+**Good commit message format:**
+```
+git commit -m "Add PID controller for motor speed regulation"
+```
+**Bad commit messages:**
+```
+git commit -m "fixed stuff"      # Too vague
+git commit -m "asdf"             # Meaningless
+git commit -m "update"           # No context
+```
+</Tip>
+
+---
+
+## Branching Strategy
+
+Branches allow working on features independently without affecting the main codebase.
+
+### Creating Branches
+
+```bash
+# View current branch
+git branch
+
+# Create new branch
+git branch feature/encoder-reading
+
+# Switch to new branch
+git checkout feature/encoder-reading
+
+# Create and switch in one command
+git checkout -b feature/imu-integration
+
+# View all branches
+git branch -a
+```
+
+### Recommended Team Workflow
+
+```
+main
+  ├─ feature/motor-control (Student 1)
+  ├─ feature/imu-sensor (Student 2)
+  └─ feature/pid-tuning (Student 3)
+
+Workflow:
+1. Each student creates feature branch from main
+2. Work on feature independently
+3. Test feature thoroughly
+4. Merge back to main via Pull Request
+5. Delete feature branch after merge
+```
+
+### Merging Branches
+
+```bash
+# Switch to main branch
+git checkout main
+
+# Merge feature branch into main
+git merge feature/encoder-reading
+
+# Push merged changes to GitHub
+git push
+
+# Delete merged branch (local)
+git branch -d feature/encoder-reading
+
+# Delete merged branch (remote)
+git push origin --delete feature/encoder-reading
+```
+
+<Warning>
+**Merge conflicts** occur when two people edit the same lines of code. Git will mark conflicts in the file:
+
+```cpp
+<<<<<<< HEAD
+// Your changes
+encoder_count++;
+=======
+// Teammate's changes
+encoder_value += 1;
+>>>>>>> feature/encoder-reading
+```
+
+**Resolution:**
+1. Manually edit file to choose correct version
+2. Remove conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`)
+3. Stage and commit resolved file
+</Warning>
+
+---
+
+## Pull Requests (PRs)
+
+Pull Requests are the professional way to merge code in team projects.
+
+<Steps>
+  <Step title="Push Feature Branch to GitHub">
+    ```bash
+    git checkout -b feature/lidar-integration
+    # ... make changes ...
+    git add .
+    git commit -m "Integrate RPLIDAR A1M8 sensor"
+    git push -u origin feature/lidar-integration
+    ```
+  </Step>
+
+  <Step title="Create Pull Request on GitHub">
+    1. Go to repository on GitHub
+    2. Click **Pull requests → New pull request**
+    3. Base: `main` ← Compare: `feature/lidar-integration`
+    4. Add title: "Add LiDAR sensor integration"
+    5. Add description:
+       ```markdown
+       ## Summary
+       Integrates RPLIDAR A1M8 sensor with ESP32
+
+       ## Changes
+       - Add rplidar library dependency
+       - Implement serial communication protocol
+       - Add scan data parsing
+
+       ## Testing
+       - ✓ Sensor initializes correctly
+       - ✓ Distance readings accurate to ±5cm
+       - ✓ No memory leaks after 1 hour runtime
+       ```
+    6. Click **Create pull request**
+  </Step>
+
+  <Step title="Code Review">
+    Teammates review code:
+    - Leave comments on specific lines
+    - Request changes if needed
+    - Approve when satisfied
+
+    Author addresses feedback:
+    - Make changes in feature branch
+    - Push updates (PR auto-updates)
+  </Step>
+
+  <Step title="Merge Pull Request">
+    Once approved:
+    1. Click **Merge pull request**
+    2. Confirm merge
+    3. ✓ **Delete branch** (cleanup)
+  </Step>
+
+  <Step title="Update Local Repository">
+    ```bash
+    # Switch to main branch
+    git checkout main
+
+    # Pull merged changes
+    git pull
+
+    # Delete local feature branch
+    git branch -d feature/lidar-integration
+    ```
+  </Step>
+</Steps>
+
+---
+
+## .gitignore File
+
+Prevent unnecessary files from being committed:
+
+```bash title=".gitignore"
+# PlatformIO
+.pio/
+.vscode/
+.history/
+
+# Build artifacts
+*.o
+*.elf
+*.bin
+*.hex
+
+# IDE files
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Credentials (NEVER commit secrets!)
+*.env
+credentials.json
+secrets.h
+
+# Large data files
+logs/
+*.log
+*.csv
+data/
+```
+
+<Warning>
+**NEVER commit:**
+- Passwords or API keys
+- Large binary files (videos, datasets > 100MB)
+- Build artifacts (can be regenerated)
+- IDE-specific settings
+</Warning>
+
+---
+
+## Common Scenarios
+
+### Scenario 1: Undo Last Commit (Not Pushed)
+
+```bash
+# Keep changes, undo commit
+git reset --soft HEAD~1
+
+# Discard changes AND undo commit
+git reset --hard HEAD~1
+```
+
+### Scenario 2: Discard Uncommitted Changes
+
+```bash
+# Discard changes in specific file
+git checkout -- src/main.cpp
+
+# Discard all changes
+git reset --hard HEAD
+```
+
+### Scenario 3: View Changes Before Committing
+
+```bash
+# See what changed
+git diff
+
+# See what's staged for commit
+git diff --staged
+```
+
+### Scenario 4: Stash Changes Temporarily
+
+```bash
+# Save changes without committing
+git stash
+
+# Do other work (switch branches, pull, etc.)
+git checkout main
+git pull
+
+# Restore stashed changes
+git stash pop
+```
+
+### Scenario 5: Sync Fork with Original Repository
+
+```bash
+# Add upstream remote (original repo)
+git remote add upstream git@github.com:original-owner/repo.git
+
+# Fetch upstream changes
+git fetch upstream
+
+# Merge into your main branch
+git checkout main
+git merge upstream/main
+
+# Push to your fork
+git push origin main
+```
+
+---
+
+## Team Collaboration Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Commit Often" icon="code-commit">
+    - Commit small, logical changes frequently
+    - Don't wait until end of day
+    - Each commit should be buildable
+    - Write descriptive commit messages
+  </Card>
+
+  <Card title="Pull Before Push" icon="arrow-down-to-line">
+    - Always `git pull` before starting work
+    - Resolve conflicts locally before pushing
+    - Prevents overwriting teammates' code
+    - Run tests after pulling
+  </Card>
+
+  <Card title="Use Branches" icon="code-branch">
+    - Never commit directly to `main`
+    - Create feature branches for new work
+    - Delete branches after merging
+    - Keep `main` always deployable
+  </Card>
+
+  <Card title="Code Reviews" icon="comments">
+    - Review teammates' pull requests
+    - Be constructive and respectful
+    - Look for bugs, style issues, logic errors
+    - Approve only when confident in changes
+  </Card>
+
+  <Card title="Write Good Commits" icon="message">
+    **Format:**
+    ```
+    Add motor PID control implementation
+
+    - Implement PID class with Kp, Ki, Kd
+    - Add encoder-based velocity feedback
+    - Tune constants for 333 RPM motors
+    ```
+    First line: summary (50 chars)
+    Body: details (optional)
+  </Card>
+
+  <Card title="Protect Main Branch" icon="shield">
+    GitHub Settings → Branches:
+    - ✓ Require pull request reviews
+    - ✓ Require status checks to pass
+    - ✓ Dismiss stale reviews
+    - ✓ Require conversation resolution
+  </Card>
+</CardGroup>
+
+---
+
+## GitHub Features for Teams
+
+### Issues
+
+Track bugs, features, and tasks:
+
+```markdown
+## Bug: Motors rotate in wrong direction
+
+**Expected:** Forward command rotates wheels forward
+**Actual:** Forward command rotates wheels backward
+
+**Steps to reproduce:**
+1. Upload firmware
+2. Send "vx=0.5" command
+3. Observe wheels rotating backward
+
+**Proposed fix:** Invert motor direction pins in motor_driver.cpp
+```
+
+**Labels:** `bug`, `feature`, `enhancement`, `documentation`
+
+### Projects (Kanban Board)
+
+Organize work visually:
+
+```
+To Do          In Progress      Done
+├─ Add IMU     ├─ Motor PID     ├─ Environment setup
+├─ LiDAR       └─ Encoder ISR   ├─ URDF model
+└─ Nav2 setup                   └─ Teleoperation
+```
+
+Create at: Repository → **Projects → New project**
+
+### Wiki
+
+Document project knowledge:
+- Setup instructions
+- Hardware wiring diagrams
+- Troubleshooting guides
+- Meeting notes
+
+Access: Repository → **Wiki**
+
+### Releases
+
+Tag stable versions:
+
+```bash
+# Create tag
+git tag -a v1.0.0 -m "WP3 submission - ESP32 motor control"
+git push origin v1.0.0
+```
+
+On GitHub: **Releases → Create new release** → Upload binaries (firmware.bin)
+
+---
+
+## Git Cheat Sheet
+
+```bash
+# Setup
+git config --global user.name "Name"
+git config --global user.email "email"
+
+# Create repository
+git init                          # Initialize local repo
+git clone <url>                   # Clone from GitHub
+
+# Basic workflow
+git status                        # Check status
+git add <file>                    # Stage file
+git add .                         # Stage all changes
+git commit -m "message"           # Commit staged changes
+git push                          # Push to remote
+git pull                          # Pull from remote
+
+# Branching
+git branch                        # List branches
+git branch <name>                 # Create branch
+git checkout <name>               # Switch branch
+git checkout -b <name>            # Create and switch
+git merge <branch>                # Merge branch into current
+git branch -d <name>              # Delete branch
+
+# History
+git log                           # View commits
+git log --oneline --graph         # Compact graph view
+git diff                          # View changes
+git show <commit>                 # Show commit details
+
+# Undo changes
+git checkout -- <file>            # Discard file changes
+git reset HEAD <file>             # Unstage file
+git reset --soft HEAD~1           # Undo last commit (keep changes)
+git reset --hard HEAD~1           # Undo last commit (discard changes)
+
+# Remotes
+git remote -v                     # List remotes
+git remote add origin <url>       # Add remote
+git fetch                         # Download remote changes
+git push -u origin main           # Push and set upstream
+```
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Permission denied (publickey) error">
+    **Symptoms:** `git@github.com: Permission denied (publickey)`
+
+    **Solutions:**
+    1. Verify SSH key added to GitHub:
+       - GitHub → Settings → SSH and GPG keys
+
+    2. Test SSH connection:
+       ```bash
+       ssh -T git@github.com
+       ```
+
+    3. If still failing, use HTTPS instead:
+       ```bash
+       # Change remote URL to HTTPS
+       git remote set-url origin https://github.com/username/repo.git
+       ```
+
+    4. Regenerate SSH key and add to GitHub
+  </Accordion>
+
+  <Accordion title="Merge conflict">
+    **Symptoms:** `CONFLICT (content): Merge conflict in src/main.cpp`
+
+    **Solutions:**
+    1. Open conflicted file in editor
+    2. Look for conflict markers:
+       ```
+       <<<<<<< HEAD
+       // Your version
+       =======
+       // Incoming version
+       >>>>>>> branch-name
+       ```
+
+    3. Edit file to choose correct version (remove markers)
+
+    4. Stage and commit resolved file:
+       ```bash
+       git add src/main.cpp
+       git commit -m "Resolve merge conflict in main.cpp"
+       ```
+  </Accordion>
+
+  <Accordion title="Accidentally committed to main instead of feature branch">
+    **Solutions:**
+    1. Create feature branch with current changes:
+       ```bash
+       git branch feature/my-feature
+       ```
+
+    2. Reset main to previous commit:
+       ```bash
+       git reset --hard HEAD~1
+       ```
+
+    3. Switch to feature branch:
+       ```bash
+       git checkout feature/my-feature
+       ```
+
+    4. Now commit is on feature branch only
+  </Accordion>
+
+  <Accordion title="Push rejected: non-fast-forward">
+    **Symptoms:** `! [rejected] main -> main (non-fast-forward)`
+
+    **Cause:** Remote has commits you don't have locally
+
+    **Solutions:**
+    1. Pull first, then push:
+       ```bash
+       git pull --rebase
+       git push
+       ```
+
+    2. If conflicts occur, resolve and continue:
+       ```bash
+       # Fix conflicts in files
+       git add .
+       git rebase --continue
+       git push
+       ```
+  </Accordion>
+
+  <Accordion title="Large file error: file exceeds 100 MB">
+    **Symptoms:** `remote: error: File data.csv exceeds 100 MB`
+
+    **Solutions:**
+    1. Remove file from commit:
+       ```bash
+       git rm --cached data.csv
+       git commit --amend
+       ```
+
+    2. Add to .gitignore:
+       ```bash
+       echo "data.csv" >> .gitignore
+       ```
+
+    3. Use **Git LFS** for large files (optional):
+       ```bash
+       git lfs install
+       git lfs track "*.csv"
+       ```
+
+    4. Or store large files externally (Google Drive, OneDrive)
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Learning Resources
+
+<CardGroup cols={2}>
+  <Card title="Interactive Git Tutorial" icon="graduation-cap" href="https://learngitbranching.js.org/">
+    Visual, hands-on Git tutorial (highly recommended!)
+  </Card>
+
+  <Card title="GitHub Skills" icon="github" href="https://skills.github.com/">
+    Official GitHub interactive courses
+  </Card>
+
+  <Card title="Pro Git Book" icon="book" href="https://git-scm.com/book/en/v2">
+    Complete Git reference (free online)
+  </Card>
+
+  <Card title="Git Cheat Sheet PDF" icon="file-pdf" href="https://education.github.com/git-cheat-sheet-education.pdf">
+    Printable command reference
+  </Card>
+</CardGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Team Management" icon="users" href="/getting-started/team-management">
+    Set up team collaboration workflow
+  </Card>
+
+  <Card title="VSCode & PlatformIO" icon="code" href="/reference/software/vscode-platformio">
+    Integrate Git with your development environment
+  </Card>
+
+  <Card title="Project Structure" icon="folder-tree" href="/wp3-embedded/environment-setup">
+    Organize code for version control
+  </Card>
+
+  <Card title="GitHub Actions" icon="gears">
+    **Advanced:** Automate testing and builds (CI/CD)
+    - Auto-run tests on every commit
+    - Deploy documentation automatically
+  </Card>
+</CardGroup>
+
+---
+
+## References
+
+- [Git Documentation](https://git-scm.com/doc)
+- [GitHub Docs](https://docs.github.com/)
+- [Atlassian Git Tutorials](https://www.atlassian.com/git/tutorials)
+- [Oh Shit, Git!?!](https://ohshitgit.com/) - Fix common Git mistakes
+- [GitHub Student Developer Pack](https://education.github.com/pack)

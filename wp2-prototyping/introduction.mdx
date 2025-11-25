@@ -1,0 +1,206 @@
+---
+title: "WP2: Prototyping - Introduction"
+description: "Introduction to CAD design, PCB design, and mechanical assembly for the Mecanum robot"
+---
+
+## Overview
+
+Work Package 2 transforms your MATLAB simulation into physical reality through mechanical and electrical design. You'll create:
+
+- **3D CAD model** of the robot chassis and components
+- **PCB/wiring diagram** for all electrical connections
+- **Bill of Materials** with exact part specifications
+- **Assembly documentation** for building the robot
+
+<Note>
+  **Duration:** 4 weeks (runs in parallel with WP1 and WP3)
+  **Can be split:** Different team members work on CAD vs PCB simultaneously
+</Note>
+
+## Deliverables
+
+### D2.1: CAD Design
+**Suggested Time:** 4 weeks
+
+**What to deliver:**
+- Complete 3D model of robot in CAD software (Fusion 360, SolidWorks, or FreeCAD)
+- Assembly with all components (chassis, motors, wheels, electronics mounting)
+- Bill of Materials (BOM) including all fasteners
+- Key dimensions and technical drawing
+- STL files ready for 3D printing
+
+**Success Criteria:**
+- Model is mechanically sound (proper clearances, mounting holes)
+- All parts fit together in assembly
+- Realistic and buildable design
+- Professional-quality renderings for documentation
+
+### D2.2: PCB Design
+**Suggested Time:** 4 weeks
+
+**What to deliver:**
+- Complete wiring diagram or PCB schematic (EasyEDA, Cadence, or KiCad)
+- Clear connection diagram showing all components
+- Power distribution design
+- Cable routing plan
+- Safety considerations documented
+
+**Success Criteria:**
+- All electrical connections clearly shown
+- No short circuit risks
+- Proper gauge wires for current levels
+- Organized and maintainable layout
+- Can be replicated by another team
+
+<Warning>
+  **3D Printing Limit:** Each group has maximum **2 prints**. Design carefully and learn from other groups before printing!
+</Warning>
+
+## Why Prototyping Matters
+
+<AccordionGroup>
+  <Accordion title="Design Validation" icon="check-double">
+    CAD lets you verify mechanical fit before ordering parts. Check clearances, mounting holes, and assembly sequence virtually.
+  </Accordion>
+
+  <Accordion title="Manufacturing Planning" icon="industry">
+    Understand what needs to be fabricated (3D printed, laser cut, purchased). Generate accurate BOM with quantities.
+  </Accordion>
+
+  <Accordion title="Electrical Safety" icon="bolt">
+    PCB/wiring design prevents shorts, fires, and component damage. Plan for proper fusing, wire gauge, and connections.
+  </Accordion>
+
+  <Accordion title="Team Communication" icon="comments">
+    CAD and schematics are universal language. Mechanical and electrical team members coordinate through drawings.
+  </Accordion>
+</AccordionGroup>
+
+## Design Requirements
+
+### Mechanical Requirements
+
+Your robot must accommodate:
+
+**Motors & Wheels:**
+- 4× DC motors (12V, 333RPM) with encoders
+- 4× Mecanum wheels (typically 100mm diameter)
+- Motor mounting brackets with proper alignment
+
+**Electronics:**
+- ESP32 microcontroller board
+- 4× IBT-2 motor drivers (BTS7960)
+- ICM-20948 IMU sensor
+- Raspberry Pi 4/5 (onboard computer)
+- LiDAR A1M8 sensor
+- Camera module (optional)
+
+**Power:**
+- Battery pack (LiPo/Li-Ion, 12V, 5000mAh+)
+- Power distribution (12V for motors, 5V for logic)
+- Emergency stop switch (recommended)
+
+**Dimensions:**
+- Wheelbase (L): ~300mm (suggested)
+- Track width (W): ~250mm (suggested)
+- Overall footprint: flexible, but consider maneuverability
+- Height: accommodate all electronics and sensors
+
+### Electrical Requirements
+
+**Power Distribution:**
+- 12V main bus for motors
+- 5V regulated for ESP32, Raspberry Pi, sensors
+- Proper current handling for each motor driver (~3A peak per motor)
+
+**Signal Connections:**
+- ESP32 GPIO to motor drivers (PWM, EN)
+- ESP32 GPIO to encoders (quadrature A/B)
+- ESP32 I2C to IMU
+- USB between Raspberry Pi and ESP32 (optional, can use serial)
+- LiDAR to Raspberry Pi (USB)
+
+**Safety:**
+- Fuses on power lines
+- Emergency stop capability
+- Proper wire gauge (see AWG charts)
+- Heat dissipation for motor drivers
+
+## Work Package Timeline
+
+<Steps>
+  <Step title="Week 1: Research & Concept">
+    - Study existing Mecanum robot designs
+    - Define key dimensions from MATLAB simulation
+    - Sketch concept layouts
+    - Begin component research for BOM
+  </Step>
+
+  <Step title="Week 2-3: CAD Modeling">
+    - Model individual parts (chassis, motor mounts)
+    - Import or model purchased components
+    - Create assembly
+    - Check clearances and fit
+    - Start PCB/wiring diagram in parallel
+  </Step>
+
+  <Step title="Week 3-4: Refinement">
+    - Iterate design based on feedback
+    - Finalize dimensions
+    - Complete BOM with sources and prices
+    - Generate technical drawings
+    - Prepare files for 3D printing
+  </Step>
+
+  <Step title="Week 4: Documentation">
+    - Render high-quality images
+    - Export STL files
+    - Finalize wiring diagram
+    - Write assembly instructions
+    - Order components!
+  </Step>
+</Steps>
+
+<Tip>
+  **Parallel Work:** CAD designer and PCB designer can work simultaneously. Coordinate on mounting holes and component placement.
+</Tip>
+
+## Next Steps
+
+Choose your path based on your role:
+
+<CardGroup cols={2}>
+  <Card
+    title="CAD Design"
+    icon="cube"
+    href="/wp2-prototyping/cad-design"
+  >
+    Learn CAD modeling for robot chassis
+  </Card>
+  <Card
+    title="PCB Design"
+    icon="microchip"
+    href="/wp2-prototyping/pcb-design"
+  >
+    Create electrical wiring diagrams
+  </Card>
+  <Card
+    title="Mechanical Assembly"
+    icon="screwdriver-wrench"
+    href="/wp2-prototyping/mechanical-assembly"
+  >
+    Assembly guidelines and 3D printing
+  </Card>
+  <Card
+    title="Hardware Reference"
+    icon="book"
+    href="/reference/hardware/esp32"
+  >
+    Component specifications and datasheets
+  </Card>
+</CardGroup>
+
+## References
+
+[1] KUKA OmniMove Platform: https://www.kuka.com/
+[2] Mecanum Wheel Suppliers: VEX Robotics, AndyMark, RobotShop

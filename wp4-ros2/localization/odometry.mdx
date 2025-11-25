@@ -1,0 +1,512 @@
+---
+title: "Wheel Odometry"
+description: "Publish robot pose estimation from wheel encoder data"
+---
+
+## Overview
+
+**Odometry** estimates robot pose (position + orientation) by integrating wheel encoder measurements over time. For Mecanum wheels, we use forward kinematics to compute robot velocity from individual wheel speeds.
+
+<Note>
+  **Odometry** provides local pose estimate (where robot thinks it is). It drifts over time due to wheel slippage. Later we'll fuse with IMU and correct with SLAM.
+</Note>
+
+## Odometry Concepts
+
+### Pose Representation
+
+**Pose** = Position + Orientation in 2D:
+
+```
+x: X-coordinate (meters, forward)
+y: Y-coordinate (meters, left)
+θ: Heading angle (radians, counterclockwise from X-axis)
+```
+
+### Odometry Integration
+
+**Process:**
+1. Read wheel velocities from encoders (rad/s)
+2. Compute robot velocity using forward kinematics (Vx, Vy, ω)
+3. Integrate velocity to update pose: `x += Vx * dt`, `y += Vy * dt`, `θ += ω * dt`
+4. Publish updated pose as `/odom` topic
+
+### Coordinate Frames
+
+**Two frames involved:**
+- **`odom`** - World-fixed reference frame (origin where robot started)
+- **`base_link`** - Robot body frame (moves with robot)
+
+**Transform:** `odom → base_link` represents robot pose
+
+## ROS2 Odometry Message
+
+Odometry published as `nav_msgs/msg/Odometry`:
+
+```python
+Header header
+  stamp: time                  # Timestamp
+  frame_id: "odom"             # Parent frame
+
+string child_frame_id: "base_link"  # Child frame
+
+# Pose (position + orientation)
+geometry_msgs/PoseWithCovariance pose
+  pose:
+    position:
+      x: 1.234                 # meters
+      y: 0.567
+      z: 0.0                   # Always 0 for 2D robot
+    orientation:               # Quaternion (from θ)
+      x: 0.0
+      y: 0.0
+      z: 0.123
+      w: 0.992
+  covariance: [...]            # 6x6 uncertainty matrix
+
+# Twist (linear + angular velocity)
+geometry_msgs/TwistWithCovariance twist
+  twist:
+    linear:
+      x: 0.5                   # m/s
+      y: 0.0
+      z: 0.0
+    angular:
+      x: 0.0
+      y: 0.0
+      z: 0.3                   # rad/s
+  covariance: [...]            # 6x6 uncertainty matrix
+```
+
+## Odometry in ros2_control
+
+Good news: **mecanum_drive_controller** computes and publishes odometry automatically!
+
+**In controller config:**
+```yaml
+mecanum_drive_controller:
+  ros__parameters:
+    # Odometry settings
+    publish_odom: true                # Enable odometry publishing
+    odom_frame_id: odom               # Parent frame
+    base_frame_id: base_link          # Child frame
+    publish_rate: 50.0                # Hz (20ms updates)
+
+    # Kinematics (MUST match physical robot!)
+    wheel_separation_x: 0.30          # Front-rear distance (m)
+    wheel_separation_y: 0.35          # Left-right distance (m)
+    wheel_radius: 0.05                # Wheel radius (m)
+```
+
+### What Controller Does
+
+**Every control cycle (50Hz):**
+1. Reads wheel velocities from hardware interface (state interfaces)
+2. Computes robot velocity: `(Vx, Vy, ω) = forward_kinematics(w_FL, w_FR, w_RL, w_RR)`
+3. Integrates velocity to update pose: `x += Vx*dt`, `y += Vy*dt`, `θ += ω*dt`
+4. Publishes `/odom` topic (nav_msgs/Odometry)
+5. Broadcasts TF transform: `odom → base_link`
+
+<Tip>
+  **No extra code needed!** If your hardware interface provides wheel velocities, odometry works automatically.
+</Tip>
+
+## Verifying Odometry
+
+### Check Odometry Topic
+
+```bash
+# List topics
+ros2 topic list
+# Should see: /mecanum_drive_controller/odom
+
+# Echo odometry
+ros2 topic echo /mecanum_drive_controller/odom
+```
+
+**Expected output (robot stationary):**
+```yaml
+header:
+  stamp:
+    sec: 1234567
+    nanosec: 890000000
+  frame_id: odom
+child_frame_id: base_link
+pose:
+  pose:
+    position:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+    orientation:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      w: 1.0
+  covariance: [0.001, 0, 0, 0, 0, 0, ...]
+twist:
+  twist:
+    linear:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+    angular:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+  covariance: [...]
+```
+
+### Check TF Transform
+
+```bash
+# Check TF tree
+ros2 run tf2_tools view_frames
+evince frames.pdf
+
+# Expected tree:
+# odom → base_link → (wheels, sensors...)
+
+# Echo transform
+ros2 run tf2_ros tf2_echo odom base_link
+```
+
+**Output (robot at origin):**
+```
+At time 0.0
+- Translation: [0.000, 0.000, 0.000]
+- Rotation: in Quaternion [0.000, 0.000, 0.000, 1.000]
+```
+
+### Visualize in RViz
+
+**Launch RViz:**
+```bash
+rviz2
+```
+
+**Configure displays:**
+1. **Fixed Frame:** `odom`
+2. **Add:** Odometry display
+   - Topic: `/mecanum_drive_controller/odom`
+   - Covariance: Show position (optional)
+3. **Add:** TF display
+4. **Add:** RobotModel
+
+**Test:**
+- Drive robot forward using teleop
+- Red arrow in RViz should extend forward (shows odometry path)
+- Robot model moves in RViz
+
+<img
+  src="/images/odometry-rviz.png"
+  alt="Odometry visualization in RViz"
+  caption="RViz showing odometry path (red arrow) as robot moves"
+/>
+
+## Odometry Calibration
+
+### Why Calibrate?
+
+**Odometry accuracy depends on:**
+1. **Wheel radius** - Affects distance traveled per rotation
+2. **Wheel separation** - Affects rotation radius
+3. **Encoder CPR** - Resolution of position measurement
+
+**If wrong:** Robot odometry drifts faster than normal.
+
+### Calibration Procedure
+
+<Steps>
+  <Step title="Measure Wheel Radius">
+    **Method 1: Direct measurement**
+    ```
+    radius = diameter / 2
+    ```
+    Use calipers to measure wheel diameter.
+
+    **Method 2: Rollout test**
+    1. Mark wheel position
+    2. Roll wheel exactly 1 revolution
+    3. Measure distance traveled: `d`
+    4. Calculate: `radius = d / (2 * π)`
+  </Step>
+
+  <Step title="Measure Wheel Separation">
+    **Wheel Separation X (front-rear):**
+    - Measure from front wheel axle to rear wheel axle
+
+    **Wheel Separation Y (left-right):**
+    - Measure from left wheel axle to right wheel axle
+
+    **Use:** Calipers or ruler
+
+    <Warning>
+      Measure center-to-center (axle to axle), NOT outer edge to outer edge!
+    </Warning>
+  </Step>
+
+  <Step title="Test Forward Motion">
+    1. Place robot on measured distance (e.g., 1 meter)
+    2. Reset odometry: Restart robot control node
+    3. Drive robot forward using teleop
+    4. Stop at 1-meter mark
+    5. Check odometry:
+       ```bash
+       ros2 topic echo /mecanum_drive_controller/odom --field pose.pose.position.x
+       ```
+
+    **If mismatch:**
+    - Odometry reads 0.9m but robot moved 1.0m → Increase wheel_radius
+    - Odometry reads 1.1m but robot moved 1.0m → Decrease wheel_radius
+
+    **Correction factor:**
+    ```
+    corrected_radius = measured_radius * (actual_distance / odom_distance)
+    ```
+  </Step>
+
+  <Step title="Test Rotation">
+    1. Place robot on flat surface
+    2. Mark orientation (tape arrow on floor)
+    3. Reset odometry
+    4. Rotate robot exactly 360° (one full turn)
+    5. Check odometry angle:
+       ```bash
+       ros2 topic echo /mecanum_drive_controller/odom --field pose.pose.orientation
+       # Convert quaternion to angle (or use tf2_tools)
+       ```
+
+    **If mismatch:**
+    - Adjust `wheel_separation_x` and `wheel_separation_y`
+
+    **Formula:**
+    ```
+    corrected_separation = measured_separation * (actual_angle / odom_angle)
+    ```
+  </Step>
+
+  <Step title="Update URDF and Config">
+    **File:** `urdf/mecanum_robot.urdf.xacro`
+    ```xml
+    <xacro:property name="wheel_radius" value="0.051"/>  <!-- Calibrated -->
+    ```
+
+    **File:** `config/mecanum_controller.yaml`
+    ```yaml
+    mecanum_drive_controller:
+      ros__parameters:
+        wheel_separation_x: 0.305  # Calibrated
+        wheel_separation_y: 0.348  # Calibrated
+        wheel_radius: 0.051        # Calibrated
+    ```
+
+    **Rebuild:**
+    ```bash
+    colcon build --packages-select mecanum_description
+    source install/setup.bash
+    ```
+  </Step>
+</Steps>
+
+### Encoder CPR Verification
+
+**Check encoder counts per revolution (CPR):**
+
+```cpp
+// ESP32 code check:
+#define ENCODER_CPR 330  // Verify this matches actual encoder!
+```
+
+**Test:**
+1. Manually rotate wheel exactly 1 revolution
+2. Check encoder count change
+3. Should match CPR (±2%)
+
+**If mismatch:** Update CPR in ESP32 firmware
+
+## Odometry Uncertainty (Covariance)
+
+**Covariance matrix** represents pose uncertainty.
+
+**In controller config:**
+```yaml
+mecanum_drive_controller:
+  ros__parameters:
+    # Position covariance (x, y, yaw)
+    pose_covariance_diagonal: [0.001, 0.001, 0.0, 0.0, 0.0, 0.03]
+    #                          [x,     y,     z,   rx,   ry,   yaw]
+
+    # Velocity covariance
+    twist_covariance_diagonal: [0.001, 0.001, 0.0, 0.0, 0.0, 0.03]
+```
+
+**Interpretation:**
+- **0.001** - Low uncertainty (1mm standard deviation)
+- **0.03** - Higher uncertainty for yaw (0.03 rad ≈ 1.7°)
+
+<Note>
+  **Tuning:** Increase covariance if odometry drifts quickly. Sensor fusion (EKF) will rely less on odometry and more on IMU.
+</Note>
+
+## Common Odometry Errors
+
+<AccordionGroup>
+  <Accordion title="Odometry drifts (general)" icon="compass">
+    **Symptom:** Over time, odometry pose diverges from true pose
+
+    **Causes:**
+    - Wheel slippage (especially Mecanum wheels!)
+    - Incorrect wheel radius/separation
+    - Encoder noise
+
+    **Solutions:**
+    - Calibrate wheel parameters
+    - Fuse with IMU (robot_localization)
+    - Use SLAM for global correction
+  </Accordion>
+
+  <Accordion title="Robot drives straight but odometry curves" icon="arrow-right">
+    **Cause:** Wheel radii differ (one wheel larger/smaller)
+
+    **Solutions:**
+    - Check physical wheels (all same size?)
+    - Individual wheel calibration (advanced):
+      ```yaml
+      # Per-wheel radius scaling
+      wheel_radius_multiplier: [1.0, 0.98, 1.02, 1.0]
+      ```
+  </Accordion>
+
+  <Accordion title="Rotation angle wrong" icon="rotate">
+    **Symptom:** Rotate 360°, odometry shows 340° or 380°
+
+    **Cause:** Incorrect wheel separation values
+
+    **Solution:**
+    - Measure wheel separation accurately
+    - Use calibration procedure (Step 4 above)
+  </Accordion>
+
+  <Accordion title="Odometry jumps or glitches" icon="chart-line">
+    **Cause:** Encoder noise, missed counts, or communication errors
+
+    **Solutions:**
+    - Check encoder wiring (noise?)
+    - Add capacitors to encoder lines (0.1µF)
+    - Increase serial baud rate (reduce latency)
+    - Filter encoder data on ESP32
+  </Accordion>
+
+  <Accordion title="Odometry published but TF not updating" icon="sitemap">
+    **Symptom:** `/odom` topic has data but RViz doesn't show robot moving
+
+    **Cause:** TF transform not broadcasted by controller
+
+    **Solutions:**
+    - Check controller config: `publish_odom: true`
+    - Verify `odom_frame_id` and `base_frame_id` correct
+    - Check TF tree: `ros2 run tf2_tools view_frames`
+  </Accordion>
+</AccordionGroup>
+
+## Testing Procedure
+
+### Test 1: Straight Line
+
+**Procedure:**
+1. Place robot, note starting position
+2. Reset odometry (restart node)
+3. Drive forward 2 meters
+4. Measure actual distance with tape measure
+5. Compare with odometry
+
+**Pass criteria:** Within 5% (1.9m - 2.1m)
+
+### Test 2: Square Path
+
+**Procedure:**
+1. Reset odometry
+2. Drive square: 1m forward, rotate 90°, repeat 4x
+3. Check final pose (should return to start)
+
+**Pass criteria:** Position error < 20cm, angle error < 10°
+
+### Test 3: Strafe (Mecanum-specific)
+
+**Procedure:**
+1. Reset odometry
+2. Strafe left 1 meter
+3. Check odometry Y position
+
+**Pass criteria:** Y = 1.0m ± 10%
+
+<Warning>
+  **Strafing errors:** Mecanum wheels slip more when strafing. Expect higher odometry error during lateral motion.
+</Warning>
+
+## Improving Odometry
+
+<CardGroup cols={2}>
+  <Card title="Higher Update Rate" icon="gauge">
+    Increase control loop frequency:
+    ```yaml
+    update_rate: 100  # Hz (10ms updates)
+    ```
+    Reduces numerical integration error.
+  </Card>
+
+  <Card title="Wheel Calibration" icon="ruler">
+    Measure and calibrate all wheel parameters accurately. Even 1mm error compounds over distance.
+  </Card>
+
+  <Card title="Sensor Fusion" icon="layer-group">
+    Combine odometry with IMU using Extended Kalman Filter (next section).
+  </Card>
+
+  <Card title="SLAM Correction" icon="map">
+    Use SLAM to periodically correct odometry drift with map landmarks.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="IMU Fusion"
+    icon="compass"
+    href="/wp4-ros2/localization/imu-fusion"
+  >
+    Fuse IMU data with odometry using robot_localization
+  </Card>
+
+  <Card
+    title="EKF Configuration"
+    icon="filter"
+    href="/wp4-ros2/localization/ekf"
+  >
+    Configure Extended Kalman Filter for sensor fusion
+  </Card>
+
+  <Card
+    title="Localization Testing"
+    icon="flask"
+    href="/wp4-ros2/localization/testing"
+  >
+    Validate complete localization system
+  </Card>
+
+  <Card
+    title="SLAM Mapping"
+    icon="map"
+    href="/wp4-ros2/mapping/slam-toolbox"
+  >
+    Create maps while correcting odometry drift
+  </Card>
+</CardGroup>
+
+## References
+
+[1] nav_msgs/Odometry: https://docs.ros.org/en/api/nav_msgs/html/msg/Odometry.html
+[2] Odometry Tutorial: https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Tf2/Writing-A-Tf2-Broadcaster-Py.html
+[3] Mecanum Kinematics: https://research.ijcaonline.org/volume113/number3/pxc3901586.pdf

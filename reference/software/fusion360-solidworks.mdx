@@ -1,0 +1,695 @@
+---
+title: 'Fusion 360 & SolidWorks'
+description: 'CAD software for designing mecanum robot chassis and mechanical components'
+icon: 'cube'
+---
+
+## Overview
+
+Computer-Aided Design (CAD) software is used in WP2 to design the mecanum robot's mechanical structure, including the chassis, motor mounts, sensor brackets, and wheel assemblies. This course supports both **Autodesk Fusion 360** (cloud-based, beginner-friendly) and **SolidWorks** (industry-standard, more advanced).
+
+<CardGroup cols={2}>
+  <Card title="Fusion 360" icon="cloud">
+    Free for students, cloud-based, easy to learn, great for parametric design
+  </Card>
+  <Card title="SolidWorks" icon="cube">
+    Industry-standard, powerful features, extensive simulation tools
+  </Card>
+</CardGroup>
+
+<Note>
+**Recommendation:** Use **Fusion 360** if you're new to CAD. Use **SolidWorks** if you have prior CAD experience or need advanced simulation features.
+</Note>
+
+---
+
+## Autodesk Fusion 360
+
+### Installation
+
+<Steps>
+  <Step title="Create Autodesk Account">
+    Visit [autodesk.com/education](https://www.autodesk.com/education/edu-software/overview)
+
+    Click **Get started** and create account with your RMIT email
+  </Step>
+
+  <Step title="Verify Student Status">
+    Complete educational license verification:
+    - Upload proof of enrollment (student ID or enrollment letter)
+    - Or use RMIT institutional email for automatic verification
+  </Step>
+
+  <Step title="Download Fusion 360">
+    Once verified, download **Fusion 360** for your platform:
+    - **Windows 10/11** (x64, 8GB RAM minimum)
+    - **macOS 10.15+** (Intel or Apple Silicon, 8GB RAM minimum)
+
+    <Warning>
+    Fusion 360 is **not available for Linux**. Use Windows/macOS or run Windows VM.
+    </Warning>
+  </Step>
+
+  <Step title="Install Fusion 360">
+    **Windows/macOS:** Run the installer and follow the wizard
+
+    Login with your Autodesk account when prompted
+  </Step>
+
+  <Step title="Verify License">
+    Open Fusion 360 → Click your name (top-right) → **About Fusion 360**
+
+    Should show "Educational License" with expiration ~1 year
+  </Step>
+</Steps>
+
+### Interface Overview
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ File | Design | Render | Animation | Tools   [Profile]   │  Toolbar
+├──────────────────────────────────────────────────────────┤
+│ CREATE  MODIFY  ASSEMBLE  CONSTRUCT  INSPECT             │  Design Toolbar
+├──────┬───────────────────────────────────────────┬───────┤
+│      │                                           │       │
+│ Data │         Viewport                          │ Canvas│
+│ Panel│  (3D model view)                          │ & Mk  │
+│      │                                           │       │
+│      │                                           │       │
+├──────┴───────────────────────────────────────────┴───────┤
+│ Timeline: [Sketch1] [Extrude1] [Fillet1] ...            │  History
+└──────────────────────────────────────────────────────────┘
+```
+
+**Key components:**
+- **Data Panel (left):** Browse projects, files, and design components
+- **Viewport (center):** 3D visualization and modeling workspace
+- **Canvas & Markups (right):** Drawings and annotations (collapsed by default)
+- **Toolbar (top):** Design, Render, Simulation, Animation workspaces
+- **Timeline (bottom):** Design history (parametric, can edit past operations)
+
+### Basic Workflow
+
+<Steps>
+  <Step title="Create New Design">
+    File → **New Design** (Ctrl+N / Cmd+N)
+
+    Save immediately: File → **Save** (Ctrl+S / Cmd+S)
+
+    Name: `mecanum_chassis_v1`
+  </Step>
+
+  <Step title="Create Sketch">
+    Click **CREATE → Sketch**
+
+    Select plane (XY, XZ, YZ) to draw on
+
+    **Common sketch tools:**
+    - **Rectangle** (R): Draw rectangular profiles
+    - **Circle** (C): Draw circular profiles
+    - **Line** (L): Draw straight lines
+    - **Dimension** (D): Add measurements and constraints
+  </Step>
+
+  <Step title="Add Constraints">
+    Use constraints to define geometric relationships:
+    - **Horizontal/Vertical:** Lock line orientation
+    - **Coincident:** Connect points
+    - **Tangent:** Smooth curve transitions
+    - **Dimensions:** Specify exact sizes
+
+    <Tip>
+    Fully constrain sketches (all lines turn black) for parametric designs
+    </Tip>
+  </Step>
+
+  <Step title="Create 3D Features">
+    **Finish Sketch** → Use creation tools:
+
+    - **Extrude** (E): Convert 2D sketch to 3D solid
+    - **Revolve:** Rotate sketch around axis
+    - **Sweep:** Follow path with profile
+    - **Loft:** Blend between multiple profiles
+  </Step>
+
+  <Step title="Modify Geometry">
+    **MODIFY** toolbar:
+    - **Fillet:** Round edges
+    - **Chamfer:** Bevel edges
+    - **Shell:** Hollow out solid
+    - **Mirror:** Create symmetric copies
+    - **Pattern:** Rectangular or circular arrays
+  </Step>
+
+  <Step title="Assemble Components">
+    **ASSEMBLE** toolbar:
+    - **New Component:** Create sub-assemblies
+    - **Joint:** Connect parts with relationships (rigid, revolute, slider)
+    - **As-Built Joint:** Align components in current positions
+    - **Contact Set:** Define touching surfaces
+  </Step>
+</Steps>
+
+### Mecanum Chassis Example
+
+```
+Design sequence for robot base plate:
+
+1. SKETCH (top XY plane)
+   └─ Rectangle: 200mm × 200mm (chassis size)
+   └─ 4× Circle: Ø5mm at corners (mounting holes)
+   └─ Dimension constraints: 10mm from edges
+
+2. EXTRUDE
+   └─ Distance: 3mm (acrylic sheet thickness)
+   └─ Operation: New Body
+
+3. MODIFY → Fillet
+   └─ Select 4 outer edges
+   └─ Radius: 5mm (rounded corners for safety)
+
+4. PATTERN (motor mount holes)
+   └─ Rectangular pattern: 2×2 grid
+   └─ Spacing: 150mm × 150mm
+
+Result: Base chassis plate ready for assembly
+```
+
+### Export for Manufacturing
+
+<Tabs>
+  <Tab title="3D Printing (STL)">
+    1. Right-click component in **Browser**
+    2. **Save As STL**
+    3. Settings:
+       - Format: Binary (smaller file size)
+       - Refinement: High
+       - Structure: One File Per Body
+    4. Upload to PrusaSlicer / Cura for slicing
+  </Tab>
+
+  <Tab title="Laser Cutting (DXF)">
+    1. Open sketch or create **2D projection** of part
+    2. **File → Export → DXF**
+    3. Settings:
+       - Version: AutoCAD 2018 DXF
+       - Export selected sketch only
+    4. Import into laser cutting software
+  </Tab>
+
+  <Tab title="CNC Machining (STEP)">
+    1. **File → Export**
+    2. Type: **STEP (*.step, *.stp)**
+    3. Settings:
+       - Geometry: Solids only
+       - Save selected components
+    4. Import into CAM software (Fusion 360 has built-in CAM)
+  </Tab>
+
+  <Tab title="Drawings (PDF)">
+    1. **Design → Create Drawing**
+    2. Choose template (ISO A4, ANSI A, etc.)
+    3. Insert views (front, top, isometric)
+    4. Add dimensions and notes
+    5. **File → Export → PDF**
+  </Tab>
+</Tabs>
+
+### Collaboration
+
+```bash
+# Share design with team members
+1. Click Share icon (top-right)
+2. Enter teammate's email
+3. Set permissions:
+   - View only (read-only)
+   - Edit (full access)
+4. Click Send invitation
+
+# Version control (automatic in cloud)
+File → Version History
+- Fusion auto-saves every ~5 minutes
+- Can restore previous versions
+- See who made changes and when
+```
+
+---
+
+## SolidWorks
+
+### Installation (RMIT Students)
+
+<Steps>
+  <Step title="Access RMIT Software Portal">
+    Visit [RMIT Software Download](https://www.rmit.edu.au/students/student-essentials/information-technology/software-for-students)
+
+    Login with RMIT credentials
+  </Step>
+
+  <Step title="Download SolidWorks">
+    Select **SolidWorks 2023** or later
+
+    Download the **full installation package** (~15GB)
+
+    <Note>
+    SolidWorks is **Windows-only**. macOS users must use Boot Camp or Parallels Desktop.
+    </Note>
+  </Step>
+
+  <Step title="Install SolidWorks">
+    1. Extract downloaded archive
+    2. Run **setup.exe** as Administrator
+    3. Choose installation type: **Individual (on this computer)**
+    4. Select products:
+       - ✓ SolidWorks (required)
+       - ✓ SolidWorks Simulation (recommended)
+       - ✓ PhotoView 360 (for rendering)
+       - ⬜ eDrawings (optional)
+  </Step>
+
+  <Step title="Activate License">
+    Use **RMIT network license server** (on-campus or VPN required)
+
+    Or request standalone educational license from RMIT IT
+  </Step>
+</Steps>
+
+### Interface Overview
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ File Edit View Insert Tools Window Help        [?] [×]   │  Menu Bar
+├──────────────────────────────────────────────────────────┤
+│ [≡] Sketch | Features | Assembly | ... [Search]          │  CommandManager
+├─────────┬──────────────────────────────────────┬─────────┤
+│         │                                      │         │
+│ Feature │        Graphics Area                 │ Property│
+│  Tree   │     (3D viewport)                    │ Manager │
+│         │                                      │         │
+│ ├─Base  │                                      │         │
+│ ├─Hole  │                                      │         │
+│ └─Fillet│                                      │         │
+├─────────┴──────────────────────────────────────┴─────────┤
+│ ◀ Ready                            [View tools]          │  Status Bar
+└──────────────────────────────────────────────────────────┘
+```
+
+**Key components:**
+- **Feature Tree (left):** Shows design history and components
+- **Graphics Area (center):** 3D modeling viewport
+- **PropertyManager (right):** Context-sensitive tool settings
+- **CommandManager (top):** Tabbed toolbar (Sketch, Features, Assembly, etc.)
+
+### Basic Workflow
+
+<Steps>
+  <Step title="Create Part">
+    File → **New → Part** (Ctrl+N)
+
+    Select units: **MMGS (millimeter, gram, second)**
+
+    Save as: `chassis_plate.SLDPRT`
+  </Step>
+
+  <Step title="Create Sketch">
+    1. Select plane (Front, Top, Right)
+    2. Click **Sketch** tab → **Sketch** tool
+    3. Draw profile using:
+       - **Rectangle:** Corner/Center rectangle
+       - **Circle:** Center/Perimeter circle
+       - **Line:** Straight line segments
+       - **Arc:** 3-point or tangent arcs
+  </Step>
+
+  <Step title="Add Dimensions">
+    **Smart Dimension** (D):
+    - Click two points for distance
+    - Click line for length
+    - Click circle for diameter
+    - Enter exact value in dialog
+
+    Fully define sketch (all entities turn black)
+  </Step>
+
+  <Step title="Create Features">
+    **Features** tab:
+    - **Extruded Boss/Base:** Create solid from sketch
+    - **Extruded Cut:** Remove material
+    - **Revolved Boss/Base:** Rotate sketch 360°
+    - **Fillet:** Round edges
+    - **Chamfer:** Bevel edges
+    - **Hole Wizard:** Standard holes (M3, M4, etc.)
+  </Step>
+
+  <Step title="Create Assembly">
+    File → **New → Assembly** (Ctrl+Shift+N)
+
+    1. Insert components: **Insert Components** → Browse to parts
+    2. Add mates:
+       - **Coincident:** Align faces/edges
+       - **Concentric:** Align cylindrical features
+       - **Distance:** Set spacing between components
+       - **Angle:** Set rotation between components
+  </Step>
+</Steps>
+
+### Design Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Design Intent" icon="lightbulb">
+    - Start with sketches on standard planes (Front/Top/Right)
+    - Use symmetry whenever possible
+    - Build features in logical order (base → details)
+    - Name features descriptively (not "Extrude1", use "Motor Mount")
+  </Card>
+
+  <Card title="Parametric Modeling" icon="gears">
+    - Use equations for related dimensions (e.g., `"wheel_diameter"/2`)
+    - Create design tables for variants (different sizes)
+    - Link dimensions to global variables
+    - Avoid over-constraining sketches
+  </Card>
+
+  <Card title="Assembly Efficiency" icon="object-group">
+    - Use sub-assemblies for repeated structures (e.g., wheel assembly)
+    - Leverage patterns (circular, linear) for repeated components
+    - Apply lightweight mode for large assemblies
+    - Use configurations for multiple variants
+  </Card>
+
+  <Card title="File Management" icon="folder">
+    - Keep all files in single project folder
+    - Use consistent naming: `projectname_partname_v1.SLDPRT`
+    - Pack and go before sharing (includes references)
+    - Back up regularly (SolidWorks doesn't auto-save to cloud)
+  </Card>
+</CardGroup>
+
+### Simulation (Optional)
+
+SolidWorks Simulation allows stress testing of mechanical designs:
+
+```
+Example: Motor mount bracket stress analysis
+
+1. SIMULATION → Study Advisor → New Study
+   └─ Type: Static (constant forces)
+
+2. Apply fixtures (Fixed constraints)
+   └─ Select mounting holes → Fixed Geometry
+
+3. Apply external loads
+   └─ Select motor mounting surface
+   └─ Force: 10N downward (motor weight)
+
+4. Mesh the model
+   └─ Right-click Mesh → Create Mesh
+   └─ Mesh density: Fine (smaller elements = more accurate)
+
+5. Run simulation
+   └─ Right-click study → Run
+
+6. View results
+   └─ Stress plot (von Mises)
+   └─ Displacement plot
+   └─ Factor of Safety (FOS)
+
+Accept design if:
+- Max stress < Material yield strength
+- Factor of Safety > 2.0 (for student projects)
+```
+
+<Note>
+SolidWorks Simulation requires significant RAM (16GB+ recommended) and is optional for this course
+</Note>
+
+---
+
+## CAD Comparison
+
+| Feature | Fusion 360 | SolidWorks |
+|---------|------------|------------|
+| **Cost** | Free (students) | Free (RMIT license) |
+| **Platform** | Win, Mac | Windows only |
+| **Learning Curve** | Beginner-friendly | Steeper (more powerful) |
+| **Cloud Storage** | Built-in (auto-save) | Local files only |
+| **Collaboration** | Easy (cloud sharing) | Manual (file exchange) |
+| **Rendering** | Good (built-in) | Excellent (PhotoView) |
+| **Simulation** | Basic (FEA add-on) | Advanced (built-in) |
+| **CAM (Manufacturing)** | Integrated | Separate (SolidWorks CAM) |
+| **File Format** | .f3d (proprietary) | .SLDPRT (industry std) |
+| **Industry Use** | Startups, hobbyists | Automotive, aerospace |
+
+**Bottom line:**
+- **New to CAD?** → Use **Fusion 360**
+- **Want industry skills?** → Use **SolidWorks**
+- **Need portability?** → Use **Fusion 360** (cloud)
+- **Advanced simulation?** → Use **SolidWorks**
+
+---
+
+## Common CAD Tasks
+
+### Creating Motor Mount
+
+<Tabs>
+  <Tab title="Fusion 360">
+    ```
+    1. Sketch on XY plane
+       ├─ Rectangle: 40mm × 30mm (mount base)
+       ├─ 4× Circle: Ø3mm (M3 mounting holes)
+       └─ Dimension: 25mm × 20mm spacing
+
+    2. Extrude: 5mm (base plate thickness)
+
+    3. Sketch on top face
+       └─ 2× Circle: Ø2mm (motor shaft holes)
+
+    4. Extrude Cut: -10mm (through motor mount)
+
+    5. Fillet: 2mm radius (all outer edges)
+
+    6. Export → STL for 3D printing
+    ```
+  </Tab>
+
+  <Tab title="SolidWorks">
+    ```
+    1. New Part → Front Plane → Sketch
+       ├─ Center Rectangle: 40mm × 30mm
+       ├─ Hole positions: 25mm × 20mm from center
+       └─ Smart Dimension: Fully define
+
+    2. Features → Extruded Boss/Base
+       └─ Depth: 5mm
+
+    3. Top face → Sketch
+       └─ 2× Circles for motor shaft
+
+    4. Features → Hole Wizard
+       └─ Type: M3 tapped hole
+       └─ Positions: Reference sketch circles
+
+    5. Fillet: 2mm (select edges)
+
+    6. Save → File → Save As → STL
+    ```
+  </Tab>
+</Tabs>
+
+### Creating Wheel Assembly
+
+```
+Assembly structure:
+
+mecanum_robot_assembly.asm
+├─ chassis_v1.prt
+├─ wheel_assembly (sub-assembly) ×4
+│  ├─ mecanum_wheel_v1.prt
+│  ├─ motor_shaft_v1.prt
+│  ├─ shaft_coupler_v1.prt
+│  └─ M3_bolt.prt ×4
+├─ motor_mount_v1.prt ×4
+├─ raspberry_pi_mount_v1.prt
+└─ lidar_bracket_v1.prt
+
+Mates:
+- Chassis (fixed reference)
+- 4× Wheel assemblies (concentric to motor shafts)
+- Motor mounts (coincident to chassis holes)
+- Electronics mounts (distance offset from chassis)
+```
+
+### Bill of Materials (BOM)
+
+Generate parts list automatically:
+
+**Fusion 360:**
+```
+1. Open assembly
+2. Tools → BOM
+3. Select:
+   - Structure: Parts Only (no sub-assemblies)
+   - Columns: Part Name, Quantity, Material
+4. Export → Excel/CSV
+```
+
+**SolidWorks:**
+```
+1. Open assembly
+2. Insert → Tables → Bill of Materials
+3. Place on drawing
+4. Right-click table → Save As → Excel
+```
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Fusion 360: 'Login failed' or license issues">
+    **Solutions:**
+    1. Verify educational license status at [manage.autodesk.com](https://manage.autodesk.com/)
+    2. Re-verify student status (licenses expire yearly)
+    3. Clear browser cache and re-login
+    4. Contact Autodesk Education support
+  </Accordion>
+
+  <Accordion title="SolidWorks: 'Unable to obtain license' error">
+    **Solutions:**
+    1. Connect to RMIT network (on-campus or VPN)
+    2. Check firewall allows SolidWorks license manager
+    3. Contact RMIT IT Support (ithelp@rmit.edu.au)
+    4. Verify correct license server in SolidWorks License Manager
+  </Accordion>
+
+  <Accordion title="Sketch won't fully define / turns blue">
+    **Symptoms:** Can't extrude sketch, dimensions don't lock geometry
+
+    **Solutions:**
+    1. Add missing dimensions (click **Smart Dimension**, select entities)
+    2. Add geometric constraints (horizontal, vertical, tangent, etc.)
+    3. Fix over-defined sketches (delete conflicting dimensions)
+    4. Check for duplicate/overlapping lines
+  </Accordion>
+
+  <Accordion title="Assembly mates fail or components move unexpectedly">
+    **Solutions:**
+    1. Check mate types (Coincident ≠ Concentric)
+    2. Verify mate references (faces vs. edges vs. points)
+    3. Delete and recreate problematic mates
+    4. Use **As-Built Mate** (Fusion) or **In Place Mate** (SolidWorks) for pre-positioned parts
+    5. Suppress other mates temporarily to isolate issue
+  </Accordion>
+
+  <Accordion title="Model turns black / rendering issues">
+    **Symptoms:** Viewport shows solid black or missing surfaces
+
+    **Solutions:**
+    1. Reset graphics: **View → Display → Reset Standard Views**
+    2. Update graphics drivers (NVIDIA/AMD)
+    3. Disable hardware acceleration (if crashing)
+       - Fusion: Preferences → General → Graphics
+       - SolidWorks: Tools → Options → Performance
+    4. Check for corrupted geometry (use **Check Entity** tool)
+  </Accordion>
+
+  <Accordion title="Exported STL has gaps or errors">
+    **Symptoms:** 3D printer slicer reports non-manifold edges
+
+    **Solutions:**
+    1. **Fusion 360:**
+       - Check mesh refinement: High (before export)
+       - Tools → Inspect → Interference Detection
+       - Repair: Modify → Mesh → Repair
+
+    2. **SolidWorks:**
+       - Tools → Evaluate → Check
+       - File → Print3D → Preview to validate
+       - Increase export resolution in STL options
+
+    3. Use external repair tool: **Meshmixer** or **Microsoft 3D Builder**
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Learning Resources
+
+### Fusion 360
+
+<CardGroup cols={2}>
+  <Card title="Official Tutorials" icon="graduation-cap" href="https://help.autodesk.com/view/fusion360/ENU/courses/">
+    Autodesk's free video courses for beginners
+  </Card>
+
+  <Card title="YouTube: Learn Fusion 360" icon="youtube" href="https://www.youtube.com/@LearnEverythingAboutDesign">
+    Comprehensive channel with project-based learning
+  </Card>
+
+  <Card title="Fusion 360 Shortcuts" icon="keyboard">
+    **Essential shortcuts:**
+    - E: Extrude
+    - R: Rectangle
+    - C: Circle
+    - L: Line
+    - D: Dimension
+    - S: Sketch
+    - Shift+S: Section view
+  </Card>
+
+  <Card title="Community Forum" icon="comments" href="https://forums.autodesk.com/t5/fusion-360/ct-p/1234">
+    Ask questions and share designs
+  </Card>
+</CardGroup>
+
+### SolidWorks
+
+<CardGroup cols={2}>
+  <Card title="SolidWorks Tutorials" icon="book" href="https://www.solidworks.com/support/getting-started">
+    Built-in tutorials: Help → SolidWorks Tutorials
+  </Card>
+
+  <Card title="YouTube: SolidWorks" icon="youtube" href="https://www.youtube.com/@SolidWorks">
+    Official channel with tips and techniques
+  </Card>
+
+  <Card title="CSWP Certification" icon="certificate">
+    Certified SolidWorks Professional exam for students (free via RMIT)
+  </Card>
+
+  <Card title="GrabCAD Library" icon="download" href="https://grabcad.com/library">
+    Download free CAD models (motors, sensors, fasteners)
+  </Card>
+</CardGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="CAD Design Guide" icon="pen-ruler" href="/wp2-prototyping/cad-design">
+    Step-by-step mecanum chassis design tutorial
+  </Card>
+
+  <Card title="Mechanical Assembly" icon="screwdriver-wrench" href="/wp2-prototyping/mechanical-assembly">
+    Assemble 3D printed and laser-cut parts
+  </Card>
+
+  <Card title="Bill of Materials" icon="list" href="/reference/hardware/components">
+    Complete parts list for the robot
+  </Card>
+
+  <Card title="PCB Design" icon="microchip" href="/reference/software/easyeda-cadence">
+    Learn EasyEDA for electrical design
+  </Card>
+</CardGroup>
+
+---
+
+## References
+
+- [Fusion 360 Documentation](https://help.autodesk.com/view/fusion360/)
+- [SolidWorks Help](https://help.solidworks.com/)
+- [McMaster-Carr CAD Library](https://www.mcmaster.com/) - Download 3D models of standard parts
+- [Thingiverse](https://www.thingiverse.com/) - Community 3D printing models

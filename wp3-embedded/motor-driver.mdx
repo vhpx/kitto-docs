@@ -1,0 +1,456 @@
+---
+title: "Motor Driver Guide (IBT-2)"
+description: "Complete guide to understanding and using the IBT-2 (BTS7960) H-bridge motor driver"
+---
+
+## Overview
+
+The IBT-2 motor driver (based on BTS7960 chip) is a high-current H-bridge that allows bidirectional control of DC motors. Understanding how it works is essential for motor control.
+
+## IBT-2 Specifications
+
+### Key Features
+
+- **Chip:** BTS7960 dual H-bridge
+- **Supply Voltage:** 5.5V - 27V
+- **Motor Voltage:** 6V - 27V  
+- **Max Current:** 43A continuous (per motor)
+- **Peak Current:** ~100A (brief surges)
+- **PWM Frequency:** Up to 25kHz
+- **Logic Voltage:** 3.3V or 5V compatible
+- **Protection:** Over-current, over-temperature, under-voltage
+
+<img
+  src="/images/ibt2-motor-driver.png"
+  alt="IBT-2 Motor Driver Board"
+  caption="IBT-2 motor driver based on BTS7960 H-bridge"
+/>
+
+## How H-Bridges Work
+
+An H-bridge allows motor direction control by switching which motor terminal is connected to power/ground:
+
+```
+Motor Direction Control:
+
+Forward:          Backward:         Brake:
+┌─[+12V]         ┌─[+12V]          ┌─[+12V]
+│                │                 │
+S1 ON            S1 OFF            S1 OFF
+│                │                 │
+├─[M]─┤          ├─[M]─┤           ├─[M]─┤
+│     │          │     │           │     │
+S4 ON S2 OFF     S4 OFF S2 ON      S4 ON S2 ON
+│     │          │     │           │     │
+└─[GND]          └─[GND]           └─[GND]
+
+Current: →       Current: ←        Current: 0
+```
+
+**Four switches** form an "H" shape around the motor, hence "H-bridge".
+
+## IBT-2 Pin Configuration
+
+### Power Pins
+
+| Pin | Function | Connection |
+|-----|----------|------------|
+| B+ | Motor Power (+) | 12V battery positive |
+| B- | Motor Ground (-) | 12V battery negative / GND |
+| M+ | Motor Terminal + | Motor wire 1 |
+| M- | Motor Terminal - | Motor wire 2 |
+
+### Logic Pins
+
+| Pin | Function | Connection | Notes |
+|-----|----------|------------|-------|
+| RPWM | Right PWM | ESP32 GPIO (e.g., GPIO 4) | Forward direction PWM |
+| LPWM | Left PWM | ESP32 GPIO (e.g., GPIO 16) | Reverse direction PWM |
+| R_EN | Right Enable | 3.3V or 5V | Enable right side (can connect to GPIO for enable/disable) |
+| L_EN | Left Enable | 3.3V or 5V | Enable left side |
+| R_IS | Right Current Sense | Optional | Analog output proportional to current |
+| L_IS | Left Current Sense | Optional | Analog output proportional to current |
+| VCC | Logic Power | 5V from ESP32 | Powers control logic |
+| GND | Logic Ground | ESP32 GND | **MUST connect to ESP32 GND** |
+
+<Warning>
+  **Critical:** Connect GND between ESP32 and IBT-2! Otherwise PWM signals won't work correctly.
+</Warning>
+
+## Wiring Diagram
+
+### Basic Connection
+
+```
+ESP32                    IBT-2 Driver              DC Motor
+                                                   
+GPIO 4  ─────────────→  RPWM                      
+GPIO 16 ─────────────→  LPWM                      
+3.3V    ─────────────→  R_EN                      
+3.3V    ─────────────→  L_EN                      
+5V      ─────────────→  VCC                       
+GND     ─────────────→  GND                       
+                                                   
+                         B+   ←──── 12V Battery (+)
+                         B-   ←──── Battery (-)    
+                         M+   ────→  Motor (+)     
+                         M-   ────→  Motor (-)     
+```
+
+### With Enable Control (Optional)
+
+```
+ESP32                    IBT-2                     
+                                                   
+GPIO 4  ─────────────→  RPWM                      
+GPIO 16 ─────────────→  LPWM                      
+GPIO 17 ─────────────→  R_EN  (enable/disable control)
+GPIO 17 ─────────────→  L_EN  (same GPIO for both)
+5V      ─────────────→  VCC                       
+GND     ─────────────→  GND                       
+```
+
+## Control Methods
+
+### Method 1: Dual PWM (Recommended)
+
+Control speed AND direction with two PWM signals:
+
+**Forward:**
+- RPWM: PWM signal (0-255)
+- LPWM: 0 (LOW)
+
+**Backward:**
+- RPWM: 0 (LOW)
+- LPWM: PWM signal (0-255)
+
+**Brake:**
+- RPWM: 0
+- LPWM: 0
+
+```cpp
+// Function to drive motor
+void driveMotor(int speed) {
+  // speed: -255 (full reverse) to +255 (full forward)
+  
+  if (speed > 0) {
+    // Forward
+    ledcWrite(RPWM_CHANNEL, speed);
+    ledcWrite(LPWM_CHANNEL, 0);
+  }
+  else if (speed < 0) {
+    // Reverse
+    ledcWrite(RPWM_CHANNEL, 0);
+    ledcWrite(LPWM_CHANNEL, -speed);  // Make positive
+  }
+  else {
+    // Stop / Brake
+    ledcWrite(RPWM_CHANNEL, 0);
+    ledcWrite(LPWM_CHANNEL, 0);
+  }
+}
+```
+
+### Method 2: Sign-Magnitude (Alternative)
+
+- One PWM for speed (magnitude)
+- One digital pin for direction (sign)
+
+Not recommended for IBT-2 as it wastes one PWM-capable pin.
+
+## Example Code
+
+### Complete Motor Control
+
+```cpp
+#include <Arduino.h>
+
+// Pin definitions
+#define RPWM_PIN  4
+#define LPWM_PIN  16
+#define R_EN_PIN  17
+#define L_EN_PIN  17  // Can use same pin for both enables
+
+// PWM configuration
+#define RPWM_CHANNEL  0
+#define LPWM_CHANNEL  1
+#define PWM_FREQ      5000  // 5kHz
+#define PWM_RES       8     // 8-bit (0-255)
+
+void setupMotorDriver() {
+  // Configure PWM channels
+  ledcSetup(RPWM_CHANNEL, PWM_FREQ, PWM_RES);
+  ledcSetup(LPWM_CHANNEL, PWM_FREQ, PWM_RES);
+  
+  // Attach pins to channels
+  ledcAttachPin(RPWM_PIN, RPWM_CHANNEL);
+  ledcAttachPin(LPWM_PIN, LPWM_CHANNEL);
+  
+  // Enable pins
+  pinMode(R_EN_PIN, OUTPUT);
+  pinMode(L_EN_PIN, OUTPUT);
+  digitalWrite(R_EN_PIN, HIGH);  // Enable driver
+  digitalWrite(L_EN_PIN, HIGH);
+  
+  // Start stopped
+  ledcWrite(RPWM_CHANNEL, 0);
+  ledcWrite(LPWM_CHANNEL, 0);
+}
+
+void setMotorSpeed(int speed) {
+  // Constrain to valid range
+  speed = constrain(speed, -255, 255);
+  
+  if (speed > 0) {
+    ledcWrite(RPWM_CHANNEL, speed);
+    ledcWrite(LPWM_CHANNEL, 0);
+  }
+  else if (speed < 0) {
+    ledcWrite(RPWM_CHANNEL, 0);
+    ledcWrite(LPWM_CHANNEL, -speed);
+  }
+  else {
+    ledcWrite(RPWM_CHANNEL, 0);
+    ledcWrite(LPWM_CHANNEL, 0);
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  setupMotorDriver();
+  Serial.println("Motor driver initialized");
+}
+
+void loop() {
+  // Test sequence
+  Serial.println("Forward slow");
+  setMotorSpeed(100);
+  delay(2000);
+  
+  Serial.println("Forward fast");
+  setMotorSpeed(200);
+  delay(2000);
+  
+  Serial.println("Stop");
+  setMotorSpeed(0);
+  delay(1000);
+  
+  Serial.println("Reverse slow");
+  setMotorSpeed(-100);
+  delay(2000);
+  
+  Serial.println("Stop");
+  setMotorSpeed(0);
+  delay(2000);
+}
+```
+
+## PWM Frequency Selection
+
+### Frequency Trade-offs
+
+| Frequency | Pros | Cons | Use Case |
+|-----------|------|------|----------|
+| 1-5 kHz | Quiet motor | Visible PWM flicker | Good default |
+| 10-20 kHz | Very smooth | Audible whine | Silent operation |
+| 25+ kHz | Ultrasonic (silent) | Higher switching losses | Professional |
+
+**Recommendation:** Start with 5kHz, adjust if needed.
+
+```cpp
+#define PWM_FREQ  5000  // 5kHz - good balance
+```
+
+## Current Sensing (Optional)
+
+IBT-2 has R_IS and L_IS pins that output voltage proportional to current:
+
+```
+Current (A) = V_IS / 0.00044  (approximately)
+```
+
+```cpp
+#define R_IS_PIN  34  // ADC pin
+
+void readMotorCurrent() {
+  int adc_value = analogRead(R_IS_PIN);
+  float voltage = adc_value * (3.3 / 4095.0);
+  float current = voltage / 0.00044;  // Approximation
+  
+  Serial.print("Motor current: ");
+  Serial.print(current);
+  Serial.println(" A");
+}
+```
+
+<Note>
+  Current sensing calibration varies by board. Measure with multimeter to verify.
+</Note>
+
+## Thermal Management
+
+### Heat Dissipation
+
+BTS7960 chips can get HOT (60-80°C) during operation:
+
+**Cooling Methods:**
+- Ensure airflow around drivers
+- Don't enclose in sealed box
+- Add heatsinks if running high current
+- Monitor temperature during testing
+
+**Thermal Shutdown:**
+- BTS7960 has built-in thermal protection
+- Shuts down if overheating (~150°C junction temp)
+- Automatically recovers when cooled
+
+## Protection Features
+
+### Over-Current Protection
+
+- Automatic current limiting
+- No external fuse needed
+- Protects both motor and battery
+
+### Under-Voltage Lockout
+
+- Prevents operation below ~5.5V
+- Protects against brownout conditions
+
+### Diagnostic Outputs
+
+- R_IS and L_IS can indicate faults
+- Very high voltage = over-current event
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Motor doesn't spin" icon="circle-xmark">
+    **Check:**
+    - [ ] Power connected (B+, B-)
+    - [ ] Motor connected (M+, M-)
+    - [ ] Enable pins HIGH (R_EN, L_EN)
+    - [ ] PWM signal present (measure with oscilloscope or LED)
+    - [ ] Common ground ESP32 ↔ IBT-2
+
+    **Debug:**
+    ```cpp
+    digitalWrite(R_EN_PIN, HIGH);
+    ledcWrite(RPWM_CHANNEL, 128);  // 50% duty
+    // Motor should spin
+    ```
+  </Accordion>
+
+  <Accordion title="Motor spins wrong direction" icon="rotate">
+    **Solution:**
+    - Swap M+ and M- motor wires
+    - OR swap RPWM/LPWM in code
+  </Accordion>
+
+  <Accordion title="Motor stutters or jerks" icon="wave-pulse">
+    **Causes:**
+    - PWM frequency too low
+    - Voltage drop under load
+    - Loose connections
+
+    **Solutions:**
+    - Increase PWM frequency (10-20kHz)
+    - Use thicker wires for power
+    - Add bulk capacitor near driver (1000µF, 16V+)
+    - Check all connections
+  </Accordion>
+
+  <Accordion title="Driver gets very hot" icon="temperature-high">
+    **Normal if:**
+    - Running high current (>2A)
+    - Continuous operation
+
+    **Reduce heat:**
+    - Add heatsink
+    - Improve airflow
+    - Reduce motor load
+    - Use lower PWM frequency (reduces switching loss)
+  </Accordion>
+
+  <Accordion title="Driver shuts down" icon="power-off">
+    **Causes:**
+    - Over-current protection triggered
+    - Over-temperature protection
+    - Under-voltage
+
+    **Solutions:**
+    - Reduce motor load
+    - Improve cooling
+    - Check battery voltage (should be >11V under load)
+    - Wait for driver to cool, then retry
+  </Accordion>
+</AccordionGroup>
+
+## Safety Practices
+
+<Warning>
+  **Important Safety Rules:**
+</Warning>
+
+1. **Never connect/disconnect while powered**
+2. **Verify polarity before applying power**
+3. **Start with low PWM (20-30%) for testing**
+4. **Monitor current draw (should be &lt;3A per motor typically)**
+5. **Have emergency stop method ready**
+6. **Keep clear of moving parts during testing**
+
+## Comparison with Other Drivers
+
+| Driver | Max Current | Voltage | Cost | Notes |
+|--------|-------------|---------|------|-------|
+| IBT-2 (BTS7960) | 43A | 5.5-27V | ~$7 | Best for this project |
+| L298N | 2A | 5-35V | ~$3 | Too weak for 12V motors |
+| DRV8833 | 1.2A per channel | 2.7-10.8V | ~$5 | Too weak |
+| VNH5019 | 12A | 5.5-24V | ~$15 | Good alternative |
+| ESC (Electronic Speed Controller) | Varies | Varies | $10-30 | For brushless motors only |
+
+<Tip>
+  **Why IBT-2?** High current capacity, low cost, easy to use, perfect for our 12V DC motors with encoders.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="DC Motor Control"
+    icon="rotate"
+    href="/wp3-embedded/dc-motor-control"
+  >
+    Implement closed-loop motor control with PID
+  </Card>
+
+  <Card
+    title="Unit Testing"
+    icon="flask"
+    href="/wp3-embedded/unit-testing"
+  >
+    Test motor driver systematically
+  </Card>
+
+  <Card
+    title="Hardware Reference"
+    icon="book"
+    href="/reference/hardware/motor-drivers"
+  >
+    Detailed motor driver specifications
+  </Card>
+
+  <Card
+    title="Code Examples"
+    icon="code"
+    href="/reference/code-examples/pid-controller"
+  >
+    Complete PID controller code
+  </Card>
+</CardGroup>
+
+## References
+
+[1] BTS7960 Datasheet: https://www.infineon.com/dgdl/Infineon-BTS7960-DS-v01_00-EN.pdf
+[2] DroneBot Workshop - DC Motor Drivers: https://dronebotworkshop.com/dc-motor-drivers/
+[3] IBT-2 Guide: https://www.14core.com/wiring-the-ibt-2-h-bridge-motor-driver/

@@ -1,0 +1,543 @@
+---
+title: "WP5: System Integration"
+description: "Integrate all subsystems into complete autonomous Mecanum robot"
+---
+
+## Overview
+
+**Work Package 5 (WP5)** is the final integration phase where all subsystems developed in WP1-WP4 come together to create a fully functional autonomous Mecanum wheel robot.
+
+<Note>
+  **Goal:** Combine embedded control (WP3) with ROS2 autonomy (WP4) into a reliable system ready for final demonstration and assessment.
+</Note>
+
+## WP5 Objectives
+
+<CardGroup cols={2}>
+  <Card title="System Integration" icon="diagram-project">
+    Connect all hardware and software components into unified system
+  </Card>
+
+  <Card title="Performance Optimization" icon="gauge">
+    Tune parameters for optimal speed, accuracy, and reliability
+  </Card>
+
+  <Card title="Testing & Validation" icon="flask">
+    Verify system meets all functional requirements
+  </Card>
+
+  <Card title="Deployment" icon="rocket">
+    Prepare robot for autonomous operation and demonstration
+  </Card>
+</CardGroup>
+
+## Integration Checklist
+
+### Hardware Integration
+
+- [ ] **Mechanical Assembly Complete:**
+  - All components securely mounted
+  - No loose connections
+  - Cable management organized
+  - Weight distribution balanced
+
+- [ ] **Electrical System:**
+  - All power supplies verified (12V, 5V)
+  - Voltage regulation stable
+  - Emergency stop functional
+  - Current draw within limits
+
+- [ ] **Sensor Mounting:**
+  - LiDAR level and centered
+  - IMU oriented correctly
+  - Camera (if used) aligned
+  - All sensors secured rigidly
+
+### Software Integration
+
+- [ ] **Embedded System (ESP32):**
+  - Motor control firmware uploaded
+  - PID tuning completed
+  - IMU publishing correctly
+  - Serial communication tested
+
+- [ ] **ROS2 System (Raspberry Pi):**
+  - All packages built successfully
+  - Hardware interface configured
+  - Launch files tested
+  - TF tree complete
+
+- [ ] **Sensor Integration:**
+  - LiDAR publishing `/scan`
+  - IMU publishing `/imu/data`
+  - Odometry publishing at 50 Hz
+  - EKF fusion working
+
+- [ ] **Navigation Stack:**
+  - Map created and loaded
+  - Localization working (AMCL or SLAM)
+  - Path planning functional
+  - Obstacle avoidance tested
+
+### System-Level Tests
+
+- [ ] **Basic Motion:**
+  - Teleoperation in all directions
+  - Accurate position tracking
+  - Smooth velocity control
+  - Emergency stop works
+
+- [ ] **Autonomous Navigation:**
+  - Navigate to single goal (>90% success)
+  - Avoid static obstacles
+  - Avoid dynamic obstacles (people)
+  - Recover from stuck situations
+
+- [ ] **Reliability:**
+  - Runs continuously for 30+ minutes
+  - No crashes or lockups
+  - Battery life sufficient
+  - No overheating
+
+## System Architecture
+
+### Complete System Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    AUTONOMOUS MECANUM ROBOT                  │
+└─────────────────────────────────────────────────────────────┘
+
+┌──────────────────────┐          ┌──────────────────────────┐
+│   RASPBERRY PI 5     │          │      ESP32-WROOM-32      │
+│   (ROS2 Jazzy)       │          │   (PlatformIO/Arduino)   │
+│                      │  Serial  │                          │
+│  - Navigation        │ ◄──────► │  - Motor Control         │
+│  - Mapping           │  USB     │  - PID Controllers       │
+│  - Localization      │          │  - Encoder Reading       │
+│  - Sensor Fusion     │          │  - IMU Reading           │
+└──────────────────────┘          └──────────────────────────┘
+         │                                     │
+         │ USB                                 │ GPIO
+         │                                     │
+    ┌────┴────┐                         ┌─────┴─────┐
+    │ RPLIDAR │                         │ 4× DC     │
+    │  A1M8   │                         │ Motors    │
+    │ (LiDAR) │                         │ +Encoders │
+    └─────────┘                         └───────────┘
+         │                                     │
+         └─────────────┬───────────────────────┘
+                       │
+                ┌──────▼──────┐
+                │  12V LiPo   │
+                │  Battery    │
+                │  (3S 5000mAh)│
+                └─────────────┘
+```
+
+### Data Flow
+
+```
+┌─────────────┐
+│ User Input  │ (RViz 2D Nav Goal, or waypoint mission)
+└──────┬──────┘
+       │
+       ▼
+┌─────────────────────────────────────────────┐
+│         ROS2 Navigation Stack (Nav2)        │
+│  ┌─────────────┐         ┌───────────────┐ │
+│  │   Planner   │────────►│  Controller   │ │
+│  │  (NavFn)    │  Path   │    (DWB)      │ │
+│  └─────────────┘         └───────┬───────┘ │
+└─────────────────────────────────┼──────────┘
+                                   │
+                                   ▼
+                            /cmd_vel (twist)
+                                   │
+                                   ▼
+┌──────────────────────────────────────────────┐
+│      mecanum_drive_controller                │
+│  (Inverse Kinematics: twist → wheel vels)   │
+└──────────────────────┬───────────────────────┘
+                       │
+                       ▼
+        wheel_cmd (4 wheel velocity setpoints)
+                       │
+                       ▼ (serial)
+┌──────────────────────────────────────────────┐
+│              ESP32 Firmware                  │
+│  ┌──────────┐  ┌──────────┐  ┌───────────┐ │
+│  │  PID 1   │  │  PID 2   │  │  PID 3,4  │ │
+│  │ (FL)     │  │ (FR)     │  │ (RL, RR)  │ │
+│  └────┬─────┘  └────┬─────┘  └─────┬─────┘ │
+└───────┼────────────┼──────────────┼────────┘
+        │            │              │
+        ▼            ▼              ▼
+    ┌─────────────────────────────────┐
+    │   4× DC Motors with Encoders    │
+    │   (via IBT-2 H-Bridge Drivers)  │
+    └─────────────────────────────────┘
+             │
+             ▼
+        Robot moves!
+             │
+             ▼ (feedback)
+    ┌────────────────────┐
+    │ Encoder Counts     │────┐
+    │ IMU Orientation    │    │
+    │ LiDAR Scan         │    │
+    └────────────────────┘    │
+             │                │
+             │ (serial)       │ (USB)
+             ▼                │
+┌───────────────────────┐     │
+│  ESP32 → ROS2         │     │
+│  (encoder feedback)   │     │
+└──────────┬────────────┘     │
+           │                  │
+           ▼                  ▼
+    ┌────────────────────────────┐
+    │   EKF Sensor Fusion        │
+    │   (robot_localization)     │
+    │   Odometry + IMU           │
+    └──────────┬─────────────────┘
+               │
+               ▼
+        /odometry/filtered
+               │
+               ▼
+    ┌──────────────────────┐
+    │  SLAM / AMCL         │
+    │  (Localization)      │
+    └──────────┬───────────┘
+               │
+               ▼
+           map → odom TF
+               │
+               └──► (back to Nav2 for next planning cycle)
+```
+
+## Key Integration Points
+
+### 1. ESP32 ↔ Raspberry Pi Communication
+
+**Protocol:** Serial over USB
+
+**Direction 1: ROS2 → ESP32 (Commands)**
+```
+Topic: /wheel_cmd (custom msg)
+Rate: 20-50 Hz
+Format: CSV over serial
+Example: "v1,v2,v3,v4\n"
+  v1-v4: Wheel velocity setpoints (rad/s)
+```
+
+**Direction 2: ESP32 → ROS2 (Feedback)**
+```
+Topic: /joint_states (sensor_msgs/JointState)
+Rate: 50 Hz
+Format: CSV over serial
+Example: "p1,p2,p3,p4,v1,v2,v3,v4\n"
+  p1-p4: Encoder positions (rad)
+  v1-v4: Encoder velocities (rad/s)
+```
+
+### 2. Sensor Fusion (EKF)
+
+**Inputs:**
+- Wheel odometry: `/mecanum_drive_controller/odom` (50 Hz)
+- IMU: `/imu/data` (100 Hz)
+
+**Output:**
+- Fused odometry: `/odometry/filtered` (50 Hz)
+- TF: `odom` → `base_link`
+
+**Configuration:** `config/ekf.yaml`
+
+### 3. Navigation Stack (Nav2)
+
+**Inputs:**
+- Map: `/map` (from SLAM or map_server)
+- Fused odometry: `/odometry/filtered`
+- LiDAR scan: `/scan` (5.5 Hz)
+- Robot pose: TF `map` → `base_link`
+
+**Output:**
+- Velocity commands: `/cmd_vel` (20 Hz)
+
+**Configuration:** `config/nav2_params.yaml`
+
+### 4. Localization
+
+**Option A: SLAM Mode (mapping + localization)**
+- slam_toolbox publishes `map` → `odom` TF
+- Continuously updates map
+
+**Option B: AMCL (localization only)**
+- Requires pre-built map
+- AMCL publishes `map` → `odom` TF
+- More accurate for known environments
+
+## Integration Phases
+
+<Steps>
+  <Step title="Phase 1: Hardware Validation">
+    **Goal:** Verify all hardware components functional
+
+    **Tasks:**
+    - Test power supplies (no voltage drops)
+    - Test motor control (manual PWM)
+    - Test encoders (count accuracy)
+    - Test IMU (orientation correct)
+    - Test LiDAR (scan quality)
+
+    **Deliverable:** All sensors publishing data, motors responding to commands
+  </Step>
+
+  <Step title="Phase 2: Embedded-ROS2 Interface">
+    **Goal:** Establish communication between ESP32 and ROS2
+
+    **Tasks:**
+    - Implement serial protocol (ESP32 ↔ ROS2)
+    - Create hardware interface (ros2_control)
+    - Test bidirectional communication
+    - Verify latency acceptable (&lt;10ms)
+
+    **Deliverable:** Teleop control working via ROS2
+  </Step>
+
+  <Step title="Phase 3: Odometry & Localization">
+    **Goal:** Accurate position tracking
+
+    **Tasks:**
+    - Calibrate wheel odometry
+    - Fuse IMU with EKF
+    - Test motion tracking accuracy
+    - Tune EKF parameters
+
+    **Deliverable:** Odometry error <5% over 10m
+  </Step>
+
+  <Step title="Phase 4: Mapping">
+    **Goal:** Create environment map
+
+    **Tasks:**
+    - Run SLAM Toolbox
+    - Map target environment
+    - Save map
+    - Validate map quality
+
+    **Deliverable:** Accurate map of demo environment
+  </Step>
+
+  <Step title="Phase 5: Autonomous Navigation">
+    **Goal:** Navigate to goals autonomously
+
+    **Tasks:**
+    - Configure Nav2 stack
+    - Tune path planner
+    - Tune local controller (DWB)
+    - Test obstacle avoidance
+
+    **Deliverable:** >90% navigation success rate
+  </Step>
+
+  <Step title="Phase 6: System Optimization">
+    **Goal:** Optimize performance and reliability
+
+    **Tasks:**
+    - Tune velocity limits
+    - Optimize CPU usage
+    - Improve battery life
+    - Add recovery behaviors
+
+    **Deliverable:** Robust system ready for demo
+  </Step>
+
+  <Step title="Phase 7: Final Testing & Demo Prep">
+    **Goal:** Validate system for demonstration
+
+    **Tasks:**
+    - Run stress tests (1 hour continuous)
+    - Test in demo environment
+    - Practice demo scenario
+    - Prepare contingency plans
+
+    **Deliverable:** Confident system ready for final demo
+  </Step>
+</Steps>
+
+## Timeline
+
+**Recommended schedule for WP5:**
+
+| Week | Phase | Focus |
+|------|-------|-------|
+| **Week 9** | Phase 1-2 | Hardware validation, ESP32-ROS2 interface |
+| **Week 10** | Phase 3 | Odometry calibration, sensor fusion |
+| **Week 11** | Phase 4 | SLAM mapping |
+| **Week 12** | Phase 5 | Navigation tuning, obstacle avoidance |
+| **Week 13** | Phase 6 | System optimization, reliability testing |
+| **Week 14** | Phase 7 | Final demo preparation |
+
+## Deliverables
+
+### Documentation
+
+- [ ] **System Architecture Document**
+  - Component diagram
+  - Data flow diagram
+  - Interface specifications
+
+- [ ] **Integration Test Report**
+  - Test procedures
+  - Results and analysis
+  - Issues encountered and solutions
+
+- [ ] **User Manual**
+  - Startup procedure
+  - Operation instructions
+  - Troubleshooting guide
+
+### Software
+
+- [ ] **Complete ROS2 Package**
+  - All launch files
+  - Configuration files
+  - Hardware interface code
+  - Well-commented and documented
+
+- [ ] **ESP32 Firmware**
+  - Final firmware version
+  - Calibration parameters
+  - Build instructions
+
+### Hardware
+
+- [ ] **Fully Assembled Robot**
+  - All components mounted
+  - Clean cable management
+  - Labeled connections
+  - Ready for demonstration
+
+### Demonstration
+
+- [ ] **Demo Video**
+  - Show autonomous navigation
+  - Obstacle avoidance
+  - Multiple waypoints
+  - Narrated explanation
+
+- [ ] **Live Demonstration**
+  - Navigate through course
+  - Avoid obstacles
+  - Complete mission autonomously
+  - Answer questions
+
+## Assessment Criteria
+
+**WP5 is assessed on:**
+
+<CardGroup cols={2}>
+  <Card title="Integration Quality" icon="puzzle-piece">
+    - All subsystems working together
+    - Clean interfaces
+    - Robust communication
+    - **Weight: 25%**
+  </Card>
+
+  <Card title="Performance" icon="gauge">
+    - Navigation success rate >90%
+    - Smooth motion
+    - Accurate position tracking
+    - **Weight: 25%**
+  </Card>
+
+  <Card title="Reliability" icon="shield">
+    - Runs without crashes
+    - Handles errors gracefully
+    - Recovery behaviors work
+    - **Weight: 20%**
+  </Card>
+
+  <Card title="Documentation" icon="book">
+    - Complete and clear
+    - Architecture explained
+    - User manual provided
+    - **Weight: 15%**
+  </Card>
+
+  <Card title="Demonstration" icon="video">
+    - Live demo successful
+    - Autonomous navigation shown
+    - Questions answered well
+    - **Weight: 15%**
+  </Card>
+</CardGroup>
+
+## Common Challenges
+
+<Warning>
+  **Integration Always Takes Longer Than Expected**
+
+  Plan for at least 2 weeks of integration and debugging. Start early!
+</Warning>
+
+### Typical Issues
+
+1. **Communication delays/dropouts**
+   - Solution: Robust serial protocol with timeouts
+
+2. **Sensor timing mismatches**
+   - Solution: Proper timestamp synchronization
+
+3. **TF tree errors**
+   - Solution: Careful frame management
+
+4. **Navigation failures**
+   - Solution: Systematic parameter tuning
+
+5. **Battery life insufficient**
+   - Solution: Optimize algorithms, larger battery
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="System Integration Guide"
+    icon="diagram-project"
+    href="/wp5-integration/system-integration"
+  >
+    Step-by-step integration procedure
+  </Card>
+
+  <Card
+    title="Performance Optimization"
+    icon="gauge"
+    href="/wp5-integration/performance-optimization"
+  >
+    Tune system for optimal performance
+  </Card>
+
+  <Card
+    title="Deployment Guide"
+    icon="rocket"
+    href="/wp5-integration/deployment"
+  >
+    Prepare robot for autonomous operation
+  </Card>
+
+  <Card
+    title="Final Demo Preparation"
+    icon="video"
+    href="/wp5-integration/final-demo"
+  >
+    Practice and prepare for demonstration
+  </Card>
+</CardGroup>
+
+## References
+
+[1] ROS2 System Integration: https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Launch/Launch-Main.html
+[2] Nav2 Integration: https://docs.nav2.org/setup_guides/index.html
+[3] ros2_control Integration: https://control.ros.org/master/doc/getting_started/getting_started.html

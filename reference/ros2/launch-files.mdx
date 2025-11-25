@@ -1,0 +1,629 @@
+---
+title: 'Launch Files'
+description: 'Automating node startup and configuration with ROS2 launch files'
+icon: 'rocket'
+---
+
+## Overview
+
+**Launch files** allow starting multiple ROS2 nodes with a single command, configuring parameters, setting remappings, and orchestrating complex robot systems. Instead of manually starting each node in separate terminals, launch files automate the entire startup process.
+
+<CardGroup cols={2}>
+  <Card title="Automation" icon="gears">
+    Start entire robot system with one command
+  </Card>
+  <Card title="Configuration" icon="sliders">
+    Set parameters, remappings, and environments
+  </Card>
+</CardGroup>
+
+---
+
+## Why Use Launch Files?
+
+**Without launch files:**
+```bash
+# Terminal 1
+ros2 run rplidar_ros rplidar_node
+
+# Terminal 2
+ros2 run mecanum_control motor_controller
+
+# Terminal 3
+ros2 run robot_localization ekf_node --ros-args --params-file ekf.yaml
+
+# Terminal 4
+ros2 run nav2_bringup navigation_launch.py
+
+# ... (10+ terminals)
+```
+
+**With launch file:**
+```bash
+# Single command
+ros2 launch mecanum_bringup robot.launch.py
+```
+
+---
+
+## Launch File Basics
+
+### Simple Launch File
+
+```python title="simple.launch.py"
+from launch import LaunchDescription
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    return LaunchDescription([
+        Node(
+            package='rplidar_ros',
+            executable='rplidar_node',
+            name='lidar',
+            output='screen',
+        ),
+
+        Node(
+            package='mecanum_control',
+            executable='motor_controller',
+            name='motor_ctrl',
+            output='screen',
+        ),
+    ])
+```
+
+**Run:**
+```bash
+ros2 launch mecanum_bringup simple.launch.py
+```
+
+**Key components:**
+- `generate_launch_description()`: Required function returning `LaunchDescription`
+- `Node()`: Launches a ROS2 node
+- `package`: Package containing the node
+- `executable`: Node executable name (from `setup.py` entry_points)
+- `name`: Node name (overrides default)
+- `output='screen'`: Show node output in terminal
+
+---
+
+## Launch File with Parameters
+
+### Loading Parameters from YAML
+
+```python title="ekf.launch.py"
+import os
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    # Get path to config file
+    pkg_share = get_package_share_directory('mecanum_localization')
+    ekf_config = os.path.join(pkg_share, 'config', 'ekf.yaml')
+
+    return LaunchDescription([
+        Node(
+            package='robot_localization',
+            executable='ekf_node',
+            name='ekf_filter_node',
+            output='screen',
+            parameters=[ekf_config],  # Load YAML parameters
+        ),
+    ])
+```
+
+```yaml title="config/ekf.yaml"
+/ekf_filter_node:
+  ros__parameters:
+    frequency: 30.0
+    odom0: /mecanum_drive_controller/odom
+    odom0_config: [true, true, false, false, false, false,
+                   true, true, false, false, false, false,
+                   false, false, false]
+    imu0: /imu/data
+    imu0_config: [false, false, false, false, false, true,
+                  false, false, false, false, false, true,
+                  false, false, false]
+```
+
+### Inline Parameters
+
+```python title="motor.launch.py"
+from launch import LaunchDescription
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    return LaunchDescription([
+        Node(
+            package='mecanum_control',
+            executable='motor_controller',
+            name='motor_ctrl',
+            parameters=[{
+                'wheel_radius': 0.05,
+                'wheelbase': 0.20,
+                'max_speed': 1.0,
+                'pid_kp': 2.5,
+                'pid_ki': 0.1,
+                'pid_kd': 0.05,
+            }],
+        ),
+    ])
+```
+
+---
+
+## Launch Arguments
+
+Make launch files configurable with command-line arguments:
+
+```python title="configurable.launch.py"
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    # Declare arguments
+    use_sim_time_arg = DeclareLaunchArgument(
+        'use_sim_time',
+        default_value='false',
+        description='Use simulation time if true'
+    )
+
+    map_file_arg = DeclareLaunchArgument(
+        'map',
+        default_value='lab_map.yaml',
+        description='Path to map file'
+    )
+
+    # Use arguments in nodes
+    use_sim_time = LaunchConfiguration('use_sim_time')
+    map_file = LaunchConfiguration('map')
+
+    return LaunchDescription([
+        use_sim_time_arg,
+        map_file_arg,
+
+        Node(
+            package='nav2_map_server',
+            executable='map_server',
+            name='map_server',
+            parameters=[{
+                'use_sim_time': use_sim_time,
+                'yaml_filename': map_file,
+            }],
+        ),
+    ])
+```
+
+**Usage:**
+```bash
+# Use defaults
+ros2 launch mecanum_navigation configurable.launch.py
+
+# Override arguments
+ros2 launch mecanum_navigation configurable.launch.py \
+    use_sim_time:=true \
+    map:=/path/to/custom_map.yaml
+```
+
+---
+
+## Including Other Launch Files
+
+Compose complex systems from smaller launch files:
+
+```python title="robot.launch.py"
+import os
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch.actions import IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+
+def generate_launch_description():
+    # Get package directories
+    control_pkg = get_package_share_directory('mecanum_control')
+    localization_pkg = get_package_share_directory('mecanum_localization')
+    navigation_pkg = get_package_share_directory('mecanum_navigation')
+
+    # Include launch files from other packages
+    control_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(control_pkg, 'launch', 'control.launch.py')
+        )
+    )
+
+    localization_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(localization_pkg, 'launch', 'localization.launch.py')
+        )
+    )
+
+    navigation_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(navigation_pkg, 'launch', 'navigation.launch.py')
+        )
+    )
+
+    return LaunchDescription([
+        control_launch,
+        localization_launch,
+        navigation_launch,
+    ])
+```
+
+---
+
+## Conditional Launching
+
+Launch nodes based on conditions:
+
+```python title="conditional.launch.py"
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition, UnlessCondition
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    use_lidar_arg = DeclareLaunchArgument(
+        'use_lidar',
+        default_value='true',
+        description='Enable LiDAR sensor'
+    )
+
+    use_lidar = LaunchConfiguration('use_lidar')
+
+    return LaunchDescription([
+        use_lidar_arg,
+
+        # Launch LiDAR only if use_lidar=true
+        Node(
+            package='rplidar_ros',
+            executable='rplidar_node',
+            name='lidar',
+            condition=IfCondition(use_lidar),
+        ),
+
+        # Launch fake scan if use_lidar=false
+        Node(
+            package='fake_scan',
+            executable='fake_scan_node',
+            name='fake_lidar',
+            condition=UnlessCondition(use_lidar),
+        ),
+    ])
+```
+
+**Usage:**
+```bash
+# With LiDAR
+ros2 launch mecanum_bringup conditional.launch.py use_lidar:=true
+
+# Without LiDAR (uses fake scan)
+ros2 launch mecanum_bringup conditional.launch.py use_lidar:=false
+```
+
+---
+
+## Remapping Topics
+
+Remap topic names to integrate nodes:
+
+```python title="remap.launch.py"
+from launch import LaunchDescription
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    return LaunchDescription([
+        # ESP32 bridge publishes to /esp32/odom
+        # But EKF expects /odom
+        # Solution: Remap the topic
+        Node(
+            package='mecanum_control',
+            executable='esp32_bridge',
+            name='esp32_bridge',
+            remappings=[
+                ('/esp32/odom', '/odom'),  # Remap /esp32/odom → /odom
+                ('/esp32/cmd_vel', '/cmd_vel'),
+            ],
+        ),
+
+        Node(
+            package='robot_localization',
+            executable='ekf_node',
+            name='ekf_node',
+            # Now subscribes to /odom (remapped from /esp32/odom)
+        ),
+    ])
+```
+
+---
+
+## Namespacing
+
+Group nodes under namespaces to avoid topic collisions:
+
+```python title="namespace.launch.py"
+from launch import LaunchDescription
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    return LaunchDescription([
+        # Robot 1
+        Node(
+            package='mecanum_control',
+            executable='motor_controller',
+            name='motor_ctrl',
+            namespace='robot1',  # Topics: /robot1/cmd_vel, etc.
+        ),
+
+        # Robot 2
+        Node(
+            package='mecanum_control',
+            executable='motor_controller',
+            name='motor_ctrl',
+            namespace='robot2',  # Topics: /robot2/cmd_vel, etc.
+        ),
+    ])
+```
+
+**Result:**
+```
+/robot1/cmd_vel
+/robot1/odom
+/robot2/cmd_vel
+/robot2/odom
+```
+
+---
+
+## Complete Example: Mecanum Robot Launch
+
+```python title="mecanum_robot.launch.py"
+import os
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    # Package directories
+    description_pkg = get_package_share_directory('mecanum_description')
+    control_pkg = get_package_share_directory('mecanum_control')
+    localization_pkg = get_package_share_directory('mecanum_localization')
+
+    # Launch arguments
+    use_sim_time_arg = DeclareLaunchArgument(
+        'use_sim_time', default_value='false'
+    )
+    use_rviz_arg = DeclareLaunchArgument(
+        'use_rviz', default_value='true'
+    )
+
+    use_sim_time = LaunchConfiguration('use_sim_time')
+    use_rviz = LaunchConfiguration('use_rviz')
+
+    # Config files
+    ekf_config = os.path.join(
+        localization_pkg, 'config', 'ekf.yaml'
+    )
+    rviz_config = os.path.join(
+        description_pkg, 'rviz', 'robot.rviz'
+    )
+
+    # Nodes
+    lidar_node = Node(
+        package='rplidar_ros',
+        executable='rplidar_node',
+        name='lidar',
+        parameters=[{'frame_id': 'lidar_link'}],
+    )
+
+    motor_controller_node = Node(
+        package='mecanum_control',
+        executable='motor_controller',
+        name='motor_controller',
+        parameters=[{
+            'wheel_radius': 0.05,
+            'wheelbase': 0.20,
+        }],
+    )
+
+    ekf_node = Node(
+        package='robot_localization',
+        executable='ekf_node',
+        name='ekf_filter_node',
+        parameters=[ekf_config, {'use_sim_time': use_sim_time}],
+    )
+
+    rviz_node = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
+        arguments=['-d', rviz_config],
+        condition=IfCondition(use_rviz),
+    )
+
+    # Robot state publisher (from description package)
+    robot_state_publisher = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(description_pkg, 'launch', 'display.launch.py')
+        )
+    )
+
+    return LaunchDescription([
+        use_sim_time_arg,
+        use_rviz_arg,
+        lidar_node,
+        motor_controller_node,
+        ekf_node,
+        robot_state_publisher,
+        rviz_node,
+    ])
+```
+
+**Usage:**
+```bash
+# Full system with RViz
+ros2 launch mecanum_bringup mecanum_robot.launch.py
+
+# Without RViz (headless)
+ros2 launch mecanum_bringup mecanum_robot.launch.py use_rviz:=false
+
+# Simulation mode
+ros2 launch mecanum_bringup mecanum_robot.launch.py use_sim_time:=true
+```
+
+---
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="File Organization" icon="folder">
+    - `launch/` directory in package root
+    - Descriptive names: `robot.launch.py`, `navigation.launch.py`
+    - One launch file per system/subsystem
+    - Use `_bringup` package for top-level launches
+  </Card>
+
+  <Card title="Modularity" icon="cubes">
+    - Break into small, reusable launch files
+    - Use `IncludeLaunchDescription` for composition
+    - Separate hardware from logic (control vs. description)
+    - Make launch files configurable with arguments
+  </Card>
+
+  <Card title="Parameters" icon="sliders">
+    - Load parameters from YAML files (not inline)
+    - Use package share directory for paths
+    - Document all launch arguments
+    - Provide sensible defaults
+  </Card>
+
+  <Card title="Output Control" icon="terminal">
+    - `output='screen'` for debugging
+    - `output='log'` for production (quieter)
+    - Use `--log-level` for verbosity control
+    - Redirect logs to files for long-running tests
+  </Card>
+</CardGroup>
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Launch file not found">
+    **Symptoms:** `Unable to find launch file`
+
+    **Solutions:**
+    1. Verify launch file in `setup.py`:
+       ```python
+       data_files=[
+           (os.path.join('share', package_name, 'launch'),
+            glob('launch/*.launch.py')),
+       ],
+       ```
+
+    2. Rebuild package:
+       ```bash
+       colcon build --packages-select mecanum_bringup
+       source install/setup.bash
+       ```
+
+    3. Check file permissions:
+       ```bash
+       chmod +x launch/robot.launch.py
+       ```
+  </Accordion>
+
+  <Accordion title="Config file not found">
+    **Symptoms:** `Unable to open file: config/ekf.yaml`
+
+    **Solutions:**
+    1. Use `get_package_share_directory`:
+       ```python
+       pkg_share = get_package_share_directory('mecanum_localization')
+       config_file = os.path.join(pkg_share, 'config', 'ekf.yaml')
+       ```
+
+    2. Install config files in `setup.py`:
+       ```python
+       (os.path.join('share', package_name, 'config'),
+        glob('config/*.yaml')),
+       ```
+
+    3. Rebuild and re-source
+  </Accordion>
+
+  <Accordion title="Node doesn't start / no output">
+    **Solutions:**
+    1. Add `output='screen'` to `Node()`:
+       ```python
+       Node(..., output='screen')
+       ```
+
+    2. Check node logs:
+       ```bash
+       ros2 launch mecanum_bringup robot.launch.py --log-level debug
+       ```
+
+    3. Verify node executable exists:
+       ```bash
+       ros2 pkg executables mecanum_control
+       ```
+  </Accordion>
+
+  <Accordion title="Parameters not loading">
+    **Solutions:**
+    1. Verify YAML format (indentation, colons):
+       ```yaml
+       /node_name:
+         ros__parameters:
+           param1: value1
+       ```
+
+    2. Check parameter namespace matches node name
+
+    3. Debug with:
+       ```bash
+       ros2 param list  # After launching
+       ros2 param get /node_name param1
+       ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="URDF/Xacro" icon="robot" href="/reference/ros2/urdf-xacro">
+    Define robot structure for visualization and simulation
+  </Card>
+
+  <Card title="TF Transforms" icon="arrows-spin" href="/reference/ros2/tf-transforms">
+    Manage coordinate frames between sensors
+  </Card>
+
+  <Card title="Navigation Launch" icon="map-location-dot" href="/wp4-ros2/navigation/nav2-introduction">
+    Configure Nav2 navigation stack launch files
+  </Card>
+
+  <Card title="ROS2 Packages" icon="box" href="/reference/ros2/packages">
+    Organize launch files into packages
+  </Card>
+</CardGroup>
+
+---
+
+## References
+
+- [ROS2 Launch System](https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Launch/Launch-Main.html)
+- [Launch File Examples](https://github.com/ros2/launch/tree/jazzy/launch/examples)
+- [Nav2 Launch Files](https://github.com/ros-planning/navigation2/tree/main/nav2_bringup/launch) - Real-world examples

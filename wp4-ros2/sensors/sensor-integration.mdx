@@ -1,0 +1,732 @@
+---
+title: "Sensor Integration"
+description: "Combine LiDAR, IMU, odometry, and camera into unified perception system"
+---
+
+## Overview
+
+**Sensor integration** combines data from multiple sensors (LiDAR, IMU, wheel encoders, camera) into a unified perception system for robust autonomous navigation.
+
+<Note>
+  **Goal:** Achieve reliable perception by fusing complementary sensor data using proper time synchronization and coordinate frame transforms.
+</Note>
+
+## Sensor Stack
+
+### Required Sensors (WP4)
+
+<CardGroup cols={2}>
+  <Card title="Wheel Encoders" icon="gear">
+    **Purpose:** Position estimation (odometry)
+    - **Accuracy:** Good short-term
+    - **Drift:** Accumulates over time
+    - **Update Rate:** 50 Hz
+    - **Frame:** `odom` → `base_link`
+  </Card>
+
+  <Card title="IMU (ICM-20948)" icon="compass">
+    **Purpose:** Orientation and angular velocity
+    - **Accuracy:** Excellent for rotation
+    - **Drift:** Minimal (gyro integration)
+    - **Update Rate:** 100 Hz
+    - **Frame:** `imu_link`
+  </Card>
+
+  <Card title="LiDAR (RPLIDAR A1M8)" icon="radar">
+    **Purpose:** Obstacle detection and mapping
+    - **Range:** 0.15m - 12m, 360°
+    - **Accuracy:** ±2cm
+    - **Update Rate:** 5.5 Hz
+    - **Frame:** `lidar_link`
+  </Card>
+
+  <Card title="Camera (Optional)" icon="camera">
+    **Purpose:** Visual feedback and monitoring
+    - **Resolution:** 640×480 (VGA)
+    - **FPS:** 30
+    - **Use:** Teleoperation, visual SLAM
+    - **Frame:** `camera_link`
+  </Card>
+</CardGroup>
+
+## Coordinate Frame Tree
+
+**Complete TF tree for Mecanum robot:**
+
+```
+map                        (World frame, from SLAM or pre-built map)
+ └─ odom                   (Odometry frame, drift-free short-term)
+     └─ base_footprint     (Robot ground projection)
+         └─ base_link      (Robot center)
+             ├─ lidar_link              (LiDAR sensor, front-top)
+             ├─ imu_link                (IMU sensor, center)
+             ├─ camera_link             (Camera, front)
+             │   └─ camera_optical_link (Camera optical frame)
+             ├─ front_left_wheel
+             ├─ front_right_wheel
+             ├─ rear_left_wheel
+             └─ rear_right_wheel
+```
+
+### Frame Descriptions
+
+**Static Frames (fixed transforms):**
+
+| Frame | Parent | Transform | Purpose |
+|-------|--------|-----------|---------|
+| `base_footprint` | `odom` | (0, 0, 0) | Ground projection |
+| `base_link` | `base_footprint` | (0, 0, 0.05) | Robot center, 5cm above ground |
+| `lidar_link` | `base_link` | (0, 0, 0.20) | LiDAR 20cm above base |
+| `imu_link` | `base_link` | (0, 0, 0.05) | IMU at robot center |
+| `camera_link` | `base_link` | (0.15, 0, 0.18), pitch=15° | Camera front, tilted down |
+
+**Dynamic Frames (published by nodes):**
+
+| Frame | Parent | Published By | Rate |
+|-------|--------|--------------|------|
+| `odom` | `map` | `ekf_filter_node` or `amcl` | 50 Hz |
+| `base_footprint` | `odom` | `ekf_filter_node` | 50 Hz |
+
+## Sensor Fusion Architecture
+
+```
+┌─────────────┐
+│ Wheel Odom  │ ──┐
+└─────────────┘   │
+                  │     ┌────────────────┐
+┌─────────────┐   ├────→│ EKF Fusion     │──→ /odometry/filtered
+│ IMU         │ ──┘     │ (robot_local.) │    (fused pose + velocity)
+└─────────────┘         └────────────────┘
+                               │
+                               ↓
+                          odom → base_link TF
+
+┌─────────────┐
+│ LiDAR Scan  │ ──→ /scan ──→ SLAM / Nav2
+└─────────────┘
+
+┌─────────────┐
+│ Camera      │ ──→ /image_raw ──→ Visual feedback (optional)
+└─────────────┘
+```
+
+### Integration Points
+
+1. **Odometry + IMU → EKF:**
+   - Fuses wheel odometry with IMU angular velocity
+   - Produces drift-corrected `/odometry/filtered`
+   - Publishes `odom` → `base_link` transform
+
+2. **LiDAR + Map → SLAM/AMCL:**
+   - SLAM: Creates map, publishes `map` → `odom`
+   - AMCL: Localizes in map, publishes `map` → `odom`
+
+3. **Camera (Optional):**
+   - Independent visual feedback
+   - Can be fused for visual SLAM (advanced)
+
+## Complete Launch File
+
+**File:** `launch/sensors_all.launch.py`
+
+```python
+from launch import LaunchDescription
+from launch.actions import IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import PathJoinSubstitution
+from launch_ros.substitutions import FindPackageShare
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    pkg_share = FindPackageShare('mecanum_description').find('mecanum_description')
+
+    # 1. Robot control (motors, encoders, base odometry)
+    robot_control = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('mecanum_description'),
+                'launch',
+                'robot_full.launch.py'
+            ])
+        ])
+    )
+
+    # 2. IMU
+    imu_node = Node(
+        package='mecanum_description',
+        executable='imu_publisher',
+        name='imu_publisher',
+        output='screen'
+    )
+
+    # 3. EKF sensor fusion (odometry + IMU)
+    ekf_node = Node(
+        package='robot_localization',
+        executable='ekf_node',
+        name='ekf_filter_node',
+        output='screen',
+        parameters=[
+            PathJoinSubstitution([pkg_share, 'config', 'ekf.yaml'])
+        ]
+    )
+
+    # 4. LiDAR
+    lidar_node = Node(
+        package='rplidar_ros',
+        executable='rplidar_node',
+        name='rplidar_node',
+        parameters=[{
+            'serial_port': '/dev/ttyUSB0',
+            'serial_baudrate': 115200,
+            'frame_id': 'lidar_link',
+            'inverted': False,
+            'angle_compensate': True,
+            'scan_mode': 'Standard'
+        }],
+        output='screen'
+    )
+
+    # 5. Camera (optional)
+    camera_node = Node(
+        package='v4l2_camera',
+        executable='v4l2_camera_node',
+        name='pi_camera',
+        parameters=[{
+            'video_device': '/dev/video0',
+            'image_size': [640, 480],
+            'camera_frame_id': 'camera_link',
+            'framerate': 30.0
+        }],
+        output='screen'
+    )
+
+    # 6. Static transforms (defined in URDF, but can add extras here if needed)
+    # Most transforms come from robot_state_publisher in robot_full.launch.py
+
+    return LaunchDescription([
+        robot_control,
+        imu_node,
+        ekf_node,
+        lidar_node,
+        camera_node,
+    ])
+```
+
+**Usage:**
+
+```bash
+# Launch all sensors
+ros2 launch mecanum_description sensors_all.launch.py
+
+# Verify all running
+ros2 node list
+```
+
+**Expected nodes:**
+- `/controller_manager`
+- `/mecanum_drive_controller`
+- `/joint_state_broadcaster`
+- `/robot_state_publisher`
+- `/imu_publisher`
+- `/ekf_filter_node`
+- `/rplidar_node`
+- `/pi_camera`
+
+## Time Synchronization
+
+**Critical:** All sensor data must be timestamped correctly for fusion to work.
+
+### ROS2 Time Sources
+
+**System time vs. ROS time:**
+
+```yaml
+# In all sensor node parameters
+use_sim_time: false  # Use system time (hardware)
+# use_sim_time: true  # For Gazebo simulation
+```
+
+### Timestamp Verification
+
+```bash
+# Check timestamps are recent and incrementing
+ros2 topic echo /scan --field header.stamp
+
+# Check time difference between sensors
+ros2 topic echo /imu/data --field header.stamp
+ros2 topic echo /odometry/filtered --field header.stamp
+
+# All should be within ~50ms of each other
+```
+
+### Common Time Issues
+
+<Warning>
+  **Symptom:** EKF warning: "Sensor data is X seconds old"
+
+  **Cause:** Sensor publishing old timestamps or delayed messages
+
+  **Fix:**
+  1. Ensure `use_sim_time: false` on real hardware
+  2. Check sensor node publishing rate (`ros2 topic hz`)
+  3. Verify NTP time sync on Raspberry Pi
+</Warning>
+
+## Sensor Data Validation
+
+### Check All Topics Publishing
+
+```bash
+# List all sensor topics
+ros2 topic list
+
+# Expected topics:
+# /scan                           (LiDAR)
+# /imu/data                       (IMU raw)
+# /mecanum_drive_controller/odom  (Wheel odometry)
+# /odometry/filtered              (Fused odometry)
+# /joint_states                   (Wheel positions)
+# /pi_camera/image_raw            (Camera, optional)
+# /cmd_vel                        (Velocity commands)
+```
+
+### Verify Publishing Rates
+
+```bash
+# LiDAR: ~5.5 Hz
+ros2 topic hz /scan
+
+# IMU: ~100 Hz
+ros2 topic hz /imu/data
+
+# Odometry: ~50 Hz
+ros2 topic hz /mecanum_drive_controller/odom
+
+# Fused odometry: ~50 Hz
+ros2 topic hz /odometry/filtered
+
+# Camera: ~30 Hz
+ros2 topic hz /pi_camera/image_raw
+```
+
+**Acceptable ranges:**
+- LiDAR: 4-6 Hz (target 5.5 Hz)
+- IMU: 80-120 Hz (target 100 Hz)
+- Odometry: 40-60 Hz (target 50 Hz)
+- Camera: 25-30 Hz (target 30 Hz)
+
+### Verify TF Tree
+
+```bash
+# View TF tree
+ros2 run tf2_tools view_frames
+
+# Generates frames.pdf showing complete tree
+# Open with:
+evince frames.pdf
+```
+
+**Check for:**
+- Complete path: `map` → `odom` → `base_link` → sensors
+- No missing transforms
+- No transform warnings in logs
+
+```bash
+# Check specific transform
+ros2 run tf2_ros tf2_echo map base_link
+
+# Should output:
+# Translation: [x, y, z]
+# Rotation: [x, y, z, w]
+# No errors
+```
+
+### Validate Sensor Data Quality
+
+**LiDAR scan quality:**
+
+```bash
+# Check scan ranges
+ros2 topic echo /scan --field ranges
+
+# Should see:
+# - Array of 360 distance values
+# - Values in range [0.15, 12.0] meters
+# - Invalid readings as 'inf'
+```
+
+**IMU data quality:**
+
+```bash
+# Check angular velocity (should be ~0 when stationary)
+ros2 topic echo /imu/data --field angular_velocity
+
+# Check linear acceleration (should be ~9.8 in Z when stationary)
+ros2 topic echo /imu/data --field linear_acceleration.z
+```
+
+**Odometry quality:**
+
+```bash
+# Check odometry velocity (should be ~0 when stationary)
+ros2 topic echo /odometry/filtered --field twist.twist.linear
+```
+
+## Sensor Calibration
+
+### 1. IMU Calibration
+
+**Calibrate magnetometer and accelerometer:**
+
+```bash
+# Run IMU calibration
+ros2 run mecanum_description imu_calibration
+
+# Follow prompts:
+# - Keep robot stationary for 10 seconds (accel/gyro calibration)
+# - Rotate robot in figure-8 pattern (magnetometer calibration)
+# - Calibration values saved to config file
+```
+
+### 2. LiDAR Alignment
+
+**Ensure LiDAR 0° points forward:**
+
+```bash
+# Launch LiDAR and RViz
+ros2 launch mecanum_description lidar.launch.py
+rviz2
+
+# In RViz:
+# - Add LaserScan (/scan)
+# - Place object directly in front of robot
+# - Check object appears at 0° (straight ahead)
+```
+
+**If misaligned:**
+
+Adjust LiDAR joint in URDF:
+
+```xml
+<!-- Correct misalignment with yaw offset -->
+<joint name="lidar_joint" type="fixed">
+  <parent link="base_link"/>
+  <child link="lidar_link"/>
+  <origin xyz="0 0 0.20" rpy="0 0 ${pi/2}"/>
+  <!--                         Yaw offset if needed ↑ -->
+</joint>
+```
+
+### 3. Camera Calibration
+
+**Covered in camera-setup.mdx:**
+
+```bash
+ros2 run camera_calibration cameracalibrator \
+  --size 8x6 --square 0.025 \
+  --ros-args -r image:=/pi_camera/image_raw
+```
+
+### 4. Odometry Calibration
+
+**Tune wheel radius and base dimensions:**
+
+```python
+# In mecanum_drive_controller parameters
+wheel_separation_x: 0.35  # Adjust based on measurements
+wheel_separation_y: 0.30
+wheel_radius: 0.05        # Measure actual wheel radius
+```
+
+**Validation test:**
+
+1. Command robot to move 1.0m forward
+2. Measure actual distance traveled
+3. Adjust `wheel_radius` if error > 5%:
+   ```
+   new_radius = old_radius × (measured_dist / commanded_dist)
+   ```
+
+## Integration Testing
+
+### Test 1: Stationary Sensor Check
+
+**Robot should be stationary:**
+
+```bash
+# Launch all sensors
+ros2 launch mecanum_description sensors_all.launch.py
+
+# Check all data publishing at correct rates
+ros2 topic hz /scan
+ros2 topic hz /imu/data
+ros2 topic hz /odometry/filtered
+
+# Verify TF tree complete
+ros2 run tf2_ros tf2_echo map base_link
+```
+
+**Success criteria:**
+- All topics publishing
+- No TF errors
+- Odometry velocity ≈ 0
+- IMU angular velocity ≈ 0
+
+### Test 2: Motion Test
+
+**Move robot with teleoperation:**
+
+```bash
+# Terminal 1: Launch sensors
+ros2 launch mecanum_description sensors_all.launch.py
+
+# Terminal 2: Teleop
+ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r /cmd_vel:=/mecanum_drive_controller/cmd_vel
+
+# Terminal 3: Monitor odometry
+ros2 topic echo /odometry/filtered --field pose.pose.position
+```
+
+**Test motions:**
+- Forward 1m → check X position increases by ~1.0
+- Strafe right 1m → check Y position decreases by ~1.0
+- Rotate 90° → check orientation changes by ~π/2
+
+**Success criteria:**
+- Odometry tracks motion accurately (±10%)
+- LiDAR scan updates in real-time
+- IMU detects rotation
+
+### Test 3: Sensor Fusion Validation
+
+**Compare raw odometry vs. fused odometry:**
+
+```bash
+# Terminal 1: Echo wheel odometry
+ros2 topic echo /mecanum_drive_controller/odom --field pose.pose.position
+
+# Terminal 2: Echo fused odometry
+ros2 topic echo /odometry/filtered --field pose.pose.position
+```
+
+**Rotate robot slowly:**
+
+- Raw odometry: May drift significantly
+- Fused odometry: Should stay stable (IMU corrects rotation)
+
+**Success criteria:**
+- Fused odometry more stable than raw
+- Rotation matches IMU angular velocity
+
+### Test 4: LiDAR-Odometry Alignment
+
+**Check LiDAR scan matches robot motion:**
+
+```bash
+# Launch sensors + RViz
+ros2 launch mecanum_description sensors_all.launch.py
+rviz2
+
+# In RViz:
+# - Fixed Frame: odom
+# - Add LaserScan (/scan)
+# - Add Odometry (/odometry/filtered)
+# - Add TF
+
+# Drive robot forward
+# → LiDAR scan should stay aligned with odometry path
+```
+
+**Success criteria:**
+- Scan appears stationary relative to environment
+- Robot TF moves correctly through scan
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="TF transform timeout errors" icon="clock">
+    **Error:** "Could not transform from base_link to lidar_link"
+
+    **Causes:**
+    - Missing static transform
+    - Robot state publisher not running
+    - Frame ID mismatch
+
+    **Solutions:**
+    ```bash
+    # Check TF tree
+    ros2 run tf2_tools view_frames
+
+    # Check for missing transforms
+    ros2 run tf2_ros tf2_echo base_link lidar_link
+
+    # Verify robot_state_publisher running
+    ros2 node list | grep robot_state_publisher
+
+    # Check URDF published
+    ros2 topic echo /robot_description --once
+    ```
+  </Accordion>
+
+  <Accordion title="EKF not publishing fused odometry" icon="route">
+    **Symptom:** No `/odometry/filtered` topic
+
+    **Debug:**
+    ```bash
+    # Check EKF node running
+    ros2 node list | grep ekf
+
+    # Check EKF logs
+    ros2 node logs /ekf_filter_node
+
+    # Common errors:
+    # - "Sensor data is X seconds old" → time sync issue
+    # - "Could not obtain transform" → TF issue
+    ```
+
+    **Solutions:**
+    - Verify `use_sim_time: false` in all configs
+    - Check IMU and odometry topics publishing
+    - Verify frame IDs match between sensors and EKF config
+  </Accordion>
+
+  <Accordion title="Sensor data out of sync" icon="clock">
+    **Symptom:** Jerky motion, oscillation, or poor localization
+
+    **Cause:** Sensor timestamps misaligned
+
+    **Debug:**
+    ```bash
+    # Check timestamp differences
+    ros2 topic echo /scan --field header.stamp
+    ros2 topic echo /imu/data --field header.stamp
+    ros2 topic echo /odometry/filtered --field header.stamp
+
+    # All should be within ~50ms
+    ```
+
+    **Solutions:**
+    - Sync system clocks (use NTP on Raspberry Pi)
+    - Check sensor node implementations use `node.now()`
+    - Reduce sensor publishing delays
+  </Accordion>
+
+  <Accordion title="High CPU usage" icon="microchip">
+    **Symptom:** System slow, dropped sensor data
+
+    **Monitor CPU:**
+    ```bash
+    top
+    # Look for processes using >50% CPU
+    ```
+
+    **Solutions:**
+    - Reduce camera resolution/framerate
+    - Lower LiDAR scan rate (if supported)
+    - Reduce EKF update frequency
+    - Disable camera if not needed
+    - Use compressed image transport
+  </Accordion>
+
+  <Accordion title="LiDAR scan doesn't match odometry" icon="radar">
+    **Symptom:** Scan appears to drift or rotate incorrectly
+
+    **Causes:**
+    - LiDAR frame misaligned
+    - Odometry scaling incorrect
+    - TF tree broken
+
+    **Solutions:**
+    - Check LiDAR joint in URDF (yaw should be 0 or π/2)
+    - Calibrate odometry wheel radius
+    - Verify `lidar_link` → `base_link` transform correct
+    - Test with stationary robot (scan should not move)
+  </Accordion>
+</AccordionGroup>
+
+## Performance Monitoring
+
+### Create Monitoring Script
+
+```bash
+#!/bin/bash
+# File: scripts/monitor_sensors.sh
+
+echo "=== Sensor Integration Monitor ==="
+echo
+
+echo "1. Checking node status..."
+ros2 node list
+
+echo
+echo "2. Checking topic rates..."
+echo "LiDAR:"
+timeout 5 ros2 topic hz /scan
+echo
+echo "IMU:"
+timeout 5 ros2 topic hz /imu/data
+echo
+echo "Odometry:"
+timeout 5 ros2 topic hz /odometry/filtered
+
+echo
+echo "3. Checking TF tree..."
+ros2 run tf2_ros tf2_echo map base_link
+
+echo
+echo "4. Checking for errors..."
+ros2 node logs /ekf_filter_node --tail 10
+
+echo
+echo "=== Monitor Complete ==="
+```
+
+**Usage:**
+
+```bash
+chmod +x scripts/monitor_sensors.sh
+./scripts/monitor_sensors.sh
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="SLAM Mapping"
+    icon="map"
+    href="/wp4-ros2/mapping/slam-toolbox"
+  >
+    Use integrated sensors for SLAM mapping
+  </Card>
+
+  <Card
+    title="Navigation Setup"
+    icon="route"
+    href="/wp4-ros2/navigation/nav2-intro"
+  >
+    Configure autonomous navigation with Nav2
+  </Card>
+
+  <Card
+    title="System Integration"
+    icon="diagram-project"
+    href="/wp5-integration/system-integration"
+  >
+    Complete robot system integration (WP5)
+  </Card>
+
+  <Card
+    title="Localization Testing"
+    icon="crosshairs"
+    href="/wp4-ros2/localization/testing"
+  >
+    Validate sensor fusion accuracy
+  </Card>
+</CardGroup>
+
+## References
+
+[1] ROS2 TF2: https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Tf2/Tf2-Main.html
+[2] robot_localization: http://docs.ros.org/en/noetic/api/robot_localization/html/index.html
+[3] Sensor Fusion Tutorial: https://automaticaddison.com/sensor-fusion-using-the-ros-robot-pose-ekf-package/
+[4] Nav2 Sensor Integration: https://docs.nav2.org/setup_guides/sensors/setup_sensors.html

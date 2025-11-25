@@ -1,0 +1,804 @@
+---
+title: "ROS2 Basics"
+description: "Learn fundamental ROS2 concepts: nodes, topics, packages, and workspaces"
+---
+
+## Overview
+
+ROS2 (Robot Operating System 2) is a middleware framework for robot software development. It provides tools and libraries for building modular, distributed robotic systems.
+
+<Note>
+  **ROS2 vs ROS1:** ROS2 is a complete redesign with real-time support, better security, and multi-platform compatibility. We use ROS2 Jazzy (latest LTS).
+</Note>
+
+## Core Concepts
+
+<CardGroup cols={2}>
+  <Card title="Nodes" icon="circle-nodes">
+    Modular processes performing specific tasks (e.g., motor control, sensor reading, navigation).
+  </Card>
+
+  <Card title="Topics" icon="broadcast-tower">
+    Named buses for asynchronous message passing between nodes (publish-subscribe pattern).
+  </Card>
+
+  <Card title="Services" icon="handshake">
+    Synchronous request-reply communication between nodes (client-server pattern).
+  </Card>
+
+  <Card title="Parameters" icon="sliders">
+    Configuration values that nodes can get/set at runtime (e.g., PID gains, speeds).
+  </Card>
+</CardGroup>
+
+## Nodes
+
+**Definition:** A node is an executable process that performs a specific task.
+
+**Examples:**
+- `motor_controller` - Controls 4 DC motors
+- `lidar_driver` - Publishes laser scan data
+- `slam_node` - Builds map from sensor data
+- `nav2_controller` - Computes velocity commands
+
+### Creating a Simple Node (Python)
+
+```python
+import rclpy
+from rclpy.node import Node
+
+class MinimalNode(Node):
+    def __init__(self):
+        super().__init__('minimal_node')
+        self.get_logger().info('Node started!')
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = MinimalNode()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+```
+
+### Running a Node
+
+```bash
+# Run a node from a package
+ros2 run <package_name> <executable_name>
+
+# Example: Run turtlesim
+ros2 run turtlesim turtlesim_node
+
+# Run with remapping
+ros2 run turtlesim turtlesim_node --ros-args --remap __node:=my_turtle
+```
+
+### Node Commands
+
+```bash
+# List all active nodes
+ros2 node list
+
+# Get info about a node
+ros2 node info /node_name
+
+# Example output shows:
+# - Subscribers (topics it listens to)
+# - Publishers (topics it publishes)
+# - Services it provides
+# - Actions it hosts
+```
+
+## Topics
+
+**Definition:** Topics are named channels for asynchronous message exchange using publish-subscribe pattern.
+
+**Key Points:**
+- **Publish-Subscribe:** Multiple publishers, multiple subscribers
+- **Typed Messages:** Each topic has a specific message type (e.g., `geometry_msgs/Twist`)
+- **Decoupled:** Publishers and subscribers don't need to know about each other
+
+### Topic Architecture
+
+```
+┌─────────────┐        /cmd_vel        ┌─────────────┐
+│  Teleop     │────────(Twist)─────────>│   Motor     │
+│  Node       │                         │  Controller │
+└─────────────┘                         └─────────────┘
+
+┌─────────────┐        /scan           ┌─────────────┐
+│   LiDAR     │────(LaserScan)────────>│    SLAM     │
+│   Driver    │                         │    Node     │
+└─────────────┘                         └─────────────┘
+```
+
+### Publishing to a Topic (Python)
+
+```python
+from rclpy.node import Node
+from std_msgs.msg import String
+
+class PublisherNode(Node):
+    def __init__(self):
+        super().__init__('publisher_node')
+        self.publisher = self.create_publisher(String, 'chatter', 10)
+        self.timer = self.create_timer(1.0, self.timer_callback)
+        self.counter = 0
+
+    def timer_callback(self):
+        msg = String()
+        msg.data = f'Hello World: {self.counter}'
+        self.publisher.publish(msg)
+        self.get_logger().info(f'Publishing: "{msg.data}"')
+        self.counter += 1
+```
+
+### Subscribing to a Topic (Python)
+
+```python
+from rclpy.node import Node
+from std_msgs.msg import String
+
+class SubscriberNode(Node):
+    def __init__(self):
+        super().__init__('subscriber_node')
+        self.subscription = self.create_subscription(
+            String,
+            'chatter',
+            self.listener_callback,
+            10)
+
+    def listener_callback(self, msg):
+        self.get_logger().info(f'Received: "{msg.data}"')
+```
+
+### Topic Commands
+
+```bash
+# List all topics
+ros2 topic list
+
+# Show topic type
+ros2 topic type /topic_name
+
+# Echo topic messages (see real-time data)
+ros2 topic echo /topic_name
+
+# Get topic info (publishers, subscribers)
+ros2 topic info /topic_name
+
+# Show message structure
+ros2 interface show geometry_msgs/msg/Twist
+
+# Publish from command line
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist \
+  "{linear: {x: 0.5, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.3}}"
+
+# Show publishing rate
+ros2 topic hz /topic_name
+```
+
+## Common Message Types
+
+### Geometry Messages
+
+```bash
+# Twist (velocity commands)
+geometry_msgs/msg/Twist
+  linear:
+    x: 0.5   # Forward velocity (m/s)
+    y: 0.0   # Lateral velocity (m/s)
+    z: 0.0
+  angular:
+    x: 0.0
+    y: 0.0
+    z: 0.3   # Rotation velocity (rad/s)
+
+# Pose (position + orientation)
+geometry_msgs/msg/Pose
+  position:
+    x: 1.0
+    y: 2.0
+    z: 0.0
+  orientation:  # Quaternion
+    x: 0.0
+    y: 0.0
+    z: 0.0
+    w: 1.0
+```
+
+### Sensor Messages
+
+```bash
+# LaserScan (LiDAR)
+sensor_msgs/msg/LaserScan
+  angle_min: -3.14
+  angle_max: 3.14
+  ranges: [1.2, 1.5, 2.0, ...]  # Distance measurements
+
+# Imu
+sensor_msgs/msg/Imu
+  orientation: {...}           # Quaternion
+  angular_velocity: {...}      # rad/s
+  linear_acceleration: {...}   # m/s²
+
+# JointState (encoder feedback)
+sensor_msgs/msg/JointState
+  name: ['wheel_FL', 'wheel_FR', 'wheel_RL', 'wheel_RR']
+  position: [0.0, 0.0, 0.0, 0.0]  # radians
+  velocity: [0.0, 0.0, 0.0, 0.0]  # rad/s
+```
+
+### Navigation Messages
+
+```bash
+# Odometry
+nav_msgs/msg/Odometry
+  pose:
+    pose: {...}      # Position + orientation
+    covariance: []   # Uncertainty
+  twist:
+    twist: {...}     # Linear + angular velocity
+
+# Path
+nav_msgs/msg/Path
+  poses: [...]       # Array of PoseStamped
+```
+
+## Services
+
+**Definition:** Synchronous request-reply communication (client-server).
+
+**Use Cases:**
+- Trigger actions (e.g., start mapping, save map)
+- Get/set parameters
+- Request computations
+
+### Service Example (Python)
+
+**Server:**
+```python
+from example_interfaces.srv import AddTwoInts
+
+class ServiceNode(Node):
+    def __init__(self):
+        super().__init__('service_node')
+        self.srv = self.create_service(
+            AddTwoInts,
+            'add_two_ints',
+            self.add_callback)
+
+    def add_callback(self, request, response):
+        response.sum = request.a + request.b
+        self.get_logger().info(f'{request.a} + {request.b} = {response.sum}')
+        return response
+```
+
+**Client:**
+```python
+from example_interfaces.srv import AddTwoInts
+
+class ClientNode(Node):
+    def __init__(self):
+        super().__init__('client_node')
+        self.client = self.create_client(AddTwoInts, 'add_two_ints')
+
+    def send_request(self, a, b):
+        request = AddTwoInts.Request()
+        request.a = a
+        request.b = b
+        future = self.client.call_async(request)
+        return future
+```
+
+### Service Commands
+
+```bash
+# List services
+ros2 service list
+
+# Call service from CLI
+ros2 service call /service_name example_interfaces/srv/AddTwoInts "{a: 2, b: 3}"
+
+# Show service type
+ros2 service type /service_name
+```
+
+## Parameters
+
+**Definition:** Configuration values that can be set at runtime.
+
+**Examples:**
+- PID gains: `Kp`, `Ki`, `Kd`
+- Speed limits: `max_linear_vel`, `max_angular_vel`
+- Sensor settings: `update_rate`, `frame_id`
+
+### Using Parameters (Python)
+
+```python
+class ParameterNode(Node):
+    def __init__(self):
+        super().__init__('parameter_node')
+
+        # Declare parameters with default values
+        self.declare_parameter('max_speed', 1.0)
+        self.declare_parameter('robot_name', 'alpha')
+
+        # Get parameters
+        max_speed = self.get_parameter('max_speed').value
+        robot_name = self.get_parameter('robot_name').value
+
+        self.get_logger().info(f'Max speed: {max_speed}, Robot: {robot_name}')
+```
+
+### Parameter Commands
+
+```bash
+# List node's parameters
+ros2 param list /node_name
+
+# Get parameter value
+ros2 param get /node_name parameter_name
+
+# Set parameter
+ros2 param set /node_name max_speed 2.0
+
+# Load parameters from YAML file
+ros2 param load /node_name params.yaml
+
+# Dump parameters to YAML
+ros2 param dump /node_name > params.yaml
+```
+
+**Example YAML (`params.yaml`):**
+```yaml
+node_name:
+  ros__parameters:
+    max_speed: 1.5
+    robot_name: "alpha"
+    pid_gains:
+      kp: 1.0
+      ki: 0.1
+      kd: 0.05
+```
+
+## Packages
+
+**Definition:** A package is the organizational unit for ROS2 code (nodes, libraries, config files).
+
+### Package Structure
+
+```
+my_robot_package/
+├── package.xml          # Package metadata
+├── setup.py             # Python setup (Python packages)
+├── CMakeLists.txt       # Build config (C++ packages)
+├── resource/            # Package marker
+├── my_robot_package/    # Python module
+│   ├── __init__.py
+│   ├── node1.py
+│   └── node2.py
+├── launch/              # Launch files
+│   └── robot.launch.py
+├── config/              # Configuration files
+│   └── params.yaml
+└── README.md
+```
+
+### Creating a Package
+
+<Tabs>
+  <Tab title="Python Package">
+    ```bash
+    # Navigate to workspace src/
+    cd ~/ros2_ws/src
+
+    # Create package
+    ros2 pkg create --build-type ament_python my_robot_package \
+      --dependencies rclpy std_msgs geometry_msgs
+
+    # Build package
+    cd ~/ros2_ws
+    colcon build --packages-select my_robot_package
+
+    # Source workspace
+    source install/setup.bash
+    ```
+  </Tab>
+
+  <Tab title="C++ Package">
+    ```bash
+    # Create C++ package
+    ros2 pkg create --build-type ament_cmake my_cpp_package \
+      --dependencies rclcpp std_msgs geometry_msgs
+
+    # Build
+    cd ~/ros2_ws
+    colcon build --packages-select my_cpp_package
+    source install/setup.bash
+    ```
+  </Tab>
+</Tabs>
+
+### Package Commands
+
+```bash
+# List installed packages
+ros2 pkg list
+
+# Show package info
+ros2 pkg xml <package_name>
+
+# Find package path
+ros2 pkg prefix <package_name>
+
+# List package executables
+ros2 pkg executables <package_name>
+```
+
+## Workspaces
+
+**Definition:** A workspace is a directory containing ROS2 packages.
+
+### Workspace Structure
+
+```
+ros2_ws/                # Workspace root
+├── src/                # Source code (your packages)
+│   ├── package1/
+│   ├── package2/
+│   └── package3/
+├── build/              # Build artifacts (auto-generated)
+├── install/            # Installed packages (auto-generated)
+└── log/                # Build logs (auto-generated)
+```
+
+### Creating a Workspace
+
+```bash
+# Create workspace
+mkdir -p ~/ros2_ws/src
+cd ~/ros2_ws
+
+# Build (even if empty)
+colcon build
+
+# Source workspace
+source install/setup.bash
+
+# Add to .bashrc for automatic sourcing
+echo "source ~/ros2_ws/install/setup.bash" >> ~/.bashrc
+```
+
+<Warning>
+  **Overlaying Workspaces:** Source order matters!
+  1. First: `source /opt/ros/jazzy/setup.bash` (base ROS2)
+  2. Then: `source ~/ros2_ws/install/setup.bash` (your workspace)
+
+  Your workspace "overlays" the base ROS2 installation.
+</Warning>
+
+### Building Packages
+
+```bash
+# Build all packages
+colcon build
+
+# Build specific package
+colcon build --packages-select my_package
+
+# Build up to a package (includes dependencies)
+colcon build --packages-up-to my_package
+
+# Symlink install (Python packages only - no rebuild needed)
+colcon build --symlink-install
+
+# Parallel builds (faster)
+colcon build --parallel-workers 4
+```
+
+## Launch Files
+
+**Definition:** Launch files start multiple nodes with configuration in one command.
+
+### Basic Launch File (Python)
+
+**File:** `launch/robot_bringup.launch.py`
+```python
+from launch import LaunchDescription
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    return LaunchDescription([
+        # Start motor controller node
+        Node(
+            package='mecanum_control',
+            executable='motor_controller',
+            name='motor_controller',
+            parameters=[{'max_speed': 1.0}]
+        ),
+
+        # Start IMU node
+        Node(
+            package='mecanum_control',
+            executable='imu_publisher',
+            name='imu_publisher',
+            parameters=[{'frame_id': 'imu_link'}]
+        ),
+
+        # Start teleop keyboard
+        Node(
+            package='teleop_twist_keyboard',
+            executable='teleop_twist_keyboard',
+            name='teleop',
+            prefix='xterm -e',  # Run in separate terminal
+            output='screen'
+        ),
+    ])
+```
+
+### Launch File with Parameters from YAML
+
+```python
+import os
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    # Get package directory
+    pkg_dir = get_package_share_directory('mecanum_control')
+
+    # Load parameter file
+    params_file = os.path.join(pkg_dir, 'config', 'robot_params.yaml')
+
+    return LaunchDescription([
+        Node(
+            package='mecanum_control',
+            executable='motor_controller',
+            name='motor_controller',
+            parameters=[params_file]
+        ),
+    ])
+```
+
+### Running Launch Files
+
+```bash
+# Run launch file
+ros2 launch <package_name> <launch_file>
+
+# Example
+ros2 launch mecanum_control robot_bringup.launch.py
+
+# Run with arguments
+ros2 launch mecanum_control robot_bringup.launch.py use_sim:=true
+```
+
+## ROS2 CLI Cheat Sheet
+
+### Discovery & Inspection
+
+```bash
+# Nodes
+ros2 node list
+ros2 node info /node_name
+
+# Topics
+ros2 topic list
+ros2 topic echo /topic_name
+ros2 topic info /topic_name
+ros2 topic hz /topic_name
+
+# Services
+ros2 service list
+ros2 service type /service_name
+
+# Parameters
+ros2 param list
+ros2 param get /node_name param_name
+ros2 param set /node_name param_name value
+
+# Packages
+ros2 pkg list
+ros2 pkg executables <package>
+```
+
+### Running & Control
+
+```bash
+# Run node
+ros2 run <package> <executable>
+
+# Launch file
+ros2 launch <package> <launch_file>
+
+# Publish to topic
+ros2 topic pub /topic_name msg_type "data"
+
+# Call service
+ros2 service call /service_name srv_type "request"
+
+# Kill node
+ros2 lifecycle set /node_name shutdown
+# OR: Ctrl+C in terminal
+```
+
+### Introspection
+
+```bash
+# Show message/service definition
+ros2 interface show geometry_msgs/msg/Twist
+ros2 interface show std_srvs/srv/Trigger
+
+# Show all messages
+ros2 interface list
+
+# Record bag (log data)
+ros2 bag record /topic1 /topic2
+
+# Play bag
+ros2 bag play bagfile
+```
+
+## Practical Exercise: Talker-Listener
+
+### Step 1: Create Workspace
+
+```bash
+mkdir -p ~/ros2_ws/src
+cd ~/ros2_ws/src
+ros2 pkg create --build-type ament_python my_first_package \
+  --dependencies rclpy std_msgs
+```
+
+### Step 2: Create Talker Node
+
+**File:** `my_first_package/my_first_package/talker.py`
+```python
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import String
+
+class TalkerNode(Node):
+    def __init__(self):
+        super().__init__('talker')
+        self.publisher = self.create_publisher(String, 'chatter', 10)
+        self.timer = self.create_timer(1.0, self.publish_message)
+        self.counter = 0
+
+    def publish_message(self):
+        msg = String()
+        msg.data = f'Hello ROS2: {self.counter}'
+        self.publisher.publish(msg)
+        self.get_logger().info(f'Publishing: "{msg.data}"')
+        self.counter += 1
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = TalkerNode()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+```
+
+### Step 3: Create Listener Node
+
+**File:** `my_first_package/my_first_package/listener.py`
+```python
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import String
+
+class ListenerNode(Node):
+    def __init__(self):
+        super().__init__('listener')
+        self.subscription = self.create_subscription(
+            String,
+            'chatter',
+            self.listener_callback,
+            10)
+
+    def listener_callback(self, msg):
+        self.get_logger().info(f'Received: "{msg.data}"')
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = ListenerNode()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+```
+
+### Step 4: Update setup.py
+
+**File:** `setup.py`
+```python
+from setuptools import setup
+
+package_name = 'my_first_package'
+
+setup(
+    name=package_name,
+    version='0.0.1',
+    packages=[package_name],
+    install_requires=['setuptools'],
+    zip_safe=True,
+    entry_points={
+        'console_scripts': [
+            'talker = my_first_package.talker:main',
+            'listener = my_first_package.listener:main',
+        ],
+    },
+)
+```
+
+### Step 5: Build and Run
+
+```bash
+# Build
+cd ~/ros2_ws
+colcon build --packages-select my_first_package
+source install/setup.bash
+
+# Terminal 1: Run talker
+ros2 run my_first_package talker
+
+# Terminal 2: Run listener
+ros2 run my_first_package listener
+```
+
+**Expected Output:**
+- **Talker:** Publishing messages every second
+- **Listener:** Receiving and printing messages
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Communication Testing"
+    icon="network-wired"
+    href="/wp4-ros2/setup/communication-testing"
+  >
+    Test multi-machine ROS2 (PC ↔ Raspberry Pi)
+  </Card>
+
+  <Card
+    title="Robot Description"
+    icon="robot"
+    href="/wp4-ros2/description/urdf-introduction"
+  >
+    Create URDF model of your Mecanum robot
+  </Card>
+
+  <Card
+    title="ROS2 Concepts Reference"
+    icon="book"
+    href="/reference/ros2/nodes-topics"
+  >
+    Deep dive into ROS2 architecture
+  </Card>
+
+  <Card
+    title="Code Examples"
+    icon="code"
+    href="/reference/code-examples/publisher-subscriber"
+  >
+    More ROS2 code examples
+  </Card>
+</CardGroup>
+
+## References
+
+[1] ROS2 Documentation: https://docs.ros.org/en/jazzy/
+[2] ROS2 Tutorials: https://docs.ros.org/en/jazzy/Tutorials.html
+[3] ROS2 Design: https://design.ros2.org/

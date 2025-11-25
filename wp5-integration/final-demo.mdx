@@ -1,0 +1,637 @@
+---
+title: "Final Demonstration"
+description: "Prepare and execute successful final project demonstration"
+---
+
+## Overview
+
+The **final demonstration** is your opportunity to showcase your autonomous Mecanum robot performing its navigation tasks. This is the culmination of all work packages and a key component of your assessment.
+
+<Note>
+  **Demonstration Goal:** Prove that your robot can autonomously navigate from point A to point B, avoid obstacles, and complete a mission reliably.
+</Note>
+
+## Demonstration Requirements
+
+### Core Capabilities to Demonstrate
+
+<CardGroup cols={2}>
+  <Card title="Autonomous Navigation" icon="route">
+    **Must show:**
+    - Navigate to user-specified goal
+    - Follow reasonable path
+    - Reach goal accurately (<20cm error)
+    - No human intervention
+  </Card>
+
+  <Card title="Obstacle Avoidance" icon="shield">
+    **Must show:**
+    - Detect static obstacles (boxes, furniture)
+    - Avoid dynamic obstacles (people walking)
+    - Maintain safe clearance (>10cm)
+    - No collisions
+  </Card>
+
+  <Card title="Localization" icon="crosshairs">
+    **Must show:**
+    - Robot knows where it is on map
+    - Localization stable during motion
+    - Correct pose maintained
+    - No severe drift or jumps
+  </Card>
+
+  <Card title="Recovery" icon="life-ring">
+    **Should show (bonus):**
+    - Recover from stuck situations
+    - Handle temporary path blockage
+    - Resume navigation after recovery
+    - Graceful failure handling
+  </Card>
+</CardGroup>
+
+### Minimum Acceptable Performance
+
+**To pass demonstration:**
+
+- ✓ Successfully navigate to goal in ≥8/10 attempts (80% success)
+- ✓ Avoid all obstacles (0 collisions)
+- ✓ System runs without crashes for ≥10 minutes
+- ✓ Clear explanation of system architecture
+- ✓ Answer questions about implementation
+
+**For excellent grade:**
+
+- ✓ Successfully navigate to goal in ≥9/10 attempts (90% success)
+- ✓ Fast, smooth motion (>0.4 m/s average)
+- ✓ Advanced features (waypoint following, dynamic replanning)
+- ✓ Robust recovery behaviors
+- ✓ Professional presentation
+
+## Demonstration Scenarios
+
+### Scenario 1: Point-to-Point Navigation (Core)
+
+**Setup:**
+- Start position: Clearly marked spot
+- Goal position: 5-10m away, clear path
+- Obstacles: Static only (chairs, tables)
+
+**Procedure:**
+1. Place robot at start position
+2. Initialize system (localization)
+3. Send navigation goal via RViz
+4. Robot autonomously navigates to goal
+5. Robot stops within goal tolerance
+
+**Success criteria:**
+- Reaches goal (<20cm error)
+- No collisions
+- Reasonable path (not excessive detours)
+- Time: <2 minutes for 10m
+
+**Repeat:** 3-5 times with different goals
+
+### Scenario 2: Dynamic Obstacle Avoidance
+
+**Setup:**
+- Start and goal positions 5-8m apart
+- Clear initial path
+- Person will cross path during navigation
+
+**Procedure:**
+1. Start robot navigation to goal
+2. Assistant walks across robot's path
+3. Robot detects person and:
+   - Stops or slows down
+   - Waits for clearance OR replans around
+4. Resumes navigation after person passes
+5. Reaches goal successfully
+
+**Success criteria:**
+- No collision with person
+- Robot responds appropriately (stop/replan)
+- Resumes navigation automatically
+- Reaches goal
+
+### Scenario 3: Narrow Passage
+
+**Setup:**
+- Goal on opposite side of narrow passage (doorway)
+- Passage width: 0.8-1.0m (just wider than robot)
+
+**Procedure:**
+1. Send goal through narrow passage
+2. Robot approaches passage
+3. Robot navigates through carefully
+4. Robot exits on other side
+5. Continues to goal
+
+**Success criteria:**
+- Passes through without collision
+- Maintains clearance from walls (>5cm)
+- Doesn't get stuck oscillating
+
+### Scenario 4: Waypoint Mission (Advanced)
+
+**Setup:**
+- Define 4-5 waypoint sequence
+- Mix of open areas and obstacles
+- Loop returning to start
+
+**Procedure:**
+1. Start waypoint follower node
+2. Robot autonomously visits all waypoints in sequence
+3. Robot returns to start position
+4. Completes mission without intervention
+
+**Success criteria:**
+- Visits all waypoints (<20cm error)
+- Correct order
+- No failures requiring manual intervention
+- Completes within reasonable time
+
+**Demo script:**
+```bash
+ros2 run mecanum_description waypoint_follower \
+  --waypoints "[[2.0, 1.0, 0.0], [4.0, 2.0, 1.57], [3.0, 3.0, 3.14], [1.0, 2.5, -1.57], [0.0, 0.0, 0.0]]" \
+  --loop false
+```
+
+## Preparation Checklist
+
+### 2 Weeks Before Demo
+
+- [ ] **System Integration Complete:**
+  - All subsystems working together
+  - No critical bugs or crashes
+  - Success rate >90% in test environment
+
+- [ ] **Map Demo Environment:**
+  - Create accurate map of demo location
+  - Map saved and loadable
+  - Practice navigation in actual demo space
+
+- [ ] **Test Scenarios:**
+  - Run through all demo scenarios
+  - Measure success rates
+  - Identify weak points
+
+- [ ] **Documentation:**
+  - System architecture documented
+  - User manual written
+  - Code commented
+
+### 1 Week Before Demo
+
+- [ ] **Rehearsal:**
+  - Complete demo run-through
+  - Time each scenario
+  - Practice explanations
+
+- [ ] **Hardware Prep:**
+  - All components secure
+  - Spare parts available (battery, wheels)
+  - Backup robot (if available)
+
+- [ ] **Software Backup:**
+  - Complete SD card image backup
+  - Configuration files saved
+  - Firmware backed up
+
+- [ ] **Presentation:**
+  - Slides prepared (optional)
+  - Demo video recorded (backup)
+  - Question & answer practice
+
+### Day Before Demo
+
+- [ ] **Final Testing:**
+  - Full system test in demo environment
+  - Battery fully charged (+ spare charged)
+  - All sensors functioning
+
+- [ ] **Checklist:**
+  - Robot (obviously!)
+  - Laptop/development PC
+  - Power adapter for robot
+  - Spare battery
+  - Emergency repair kit (screwdrivers, tape)
+  - Backup SD card
+
+- [ ] **Preparation:**
+  - Get adequate sleep
+  - Review key concepts
+  - Relax and be confident!
+
+### Day of Demo (2 Hours Before)
+
+- [ ] **Setup:**
+  - Arrive early
+  - Set up robot in demo area
+  - Power on and test system
+  - Verify WiFi connection
+
+- [ ] **Pre-Flight Check:**
+  - Run health check script
+  - Test teleoperation
+  - Test single navigation goal
+  - Verify localization working
+
+- [ ] **Ready:**
+  - Robot at start position
+  - System running and stable
+  - Presentation materials ready
+  - Team members briefed
+
+## Demonstration Execution
+
+### Opening (2 minutes)
+
+**Introduction:**
+
+> "Hello, I'm [Name] from Team [X]. Today I'll demonstrate our autonomous Mecanum wheel robot that can navigate environments using ROS2 and Nav2."
+
+**Quick overview:**
+1. Show robot (physical hardware)
+2. Explain Mecanum wheels (omnidirectional capability)
+3. Point out key sensors (LiDAR, IMU)
+4. Mention key technologies (ROS2, Nav2, SLAM)
+
+**Show map:**
+- Display map in RViz on laptop
+- Explain: "This map was created using SLAM Toolbox as the robot explored the environment."
+- Point out: Start position, goal locations, obstacles
+
+### Main Demonstration (10-15 minutes)
+
+**Demo 1: Point-to-Point Navigation (5 minutes)**
+
+```
+1. "I'll now command the robot to navigate to this goal 8 meters away."
+2. Click "2D Nav Goal" in RViz
+3. Set goal on map
+4. "The robot is now planning a path..." (show green path in RViz)
+5. "...and executing the path while avoiding obstacles" (robot moves)
+6. "As you can see, the robot reaches the goal accurately."
+```
+
+**Narrate during navigation:**
+- "The green line shows the global path planned to the goal."
+- "The red trajectory shows the local planner adapting in real-time."
+- "The costmaps (colored areas) represent obstacle information."
+- "Notice the robot is maintaining safe distance from obstacles."
+
+**Demo 2: Dynamic Obstacle Avoidance (3 minutes)**
+
+```
+1. "Now I'll demonstrate dynamic obstacle avoidance."
+2. Send robot to goal
+3. "I'll now walk across the robot's path..."
+4. Walk in front of robot
+5. "Notice the robot detects me and stops/replans."
+6. Move away
+7. "The robot now resumes navigation to the goal."
+```
+
+**Demo 3: Waypoint Mission (5 minutes)**
+
+```
+1. "Finally, I'll demonstrate autonomous waypoint following."
+2. Launch waypoint follower
+3. "The robot will now visit these 5 waypoints autonomously."
+4. (Show waypoints on map in RViz)
+5. Robot navigates through waypoints
+6. "Mission complete - the robot returned to the start position."
+```
+
+### Closing & Q&A (5-10 minutes)
+
+**Summary:**
+> "To summarize, our robot successfully demonstrated:
+> 1. Autonomous point-to-point navigation
+> 2. Dynamic obstacle avoidance
+> 3. Waypoint-based missions
+>
+> The system achieved [X]% navigation success rate during testing and completed all tasks without human intervention."
+
+**Invite questions:**
+> "I'm happy to answer any questions about the implementation, algorithms, or challenges we faced."
+
+## Handling Common Questions
+
+<AccordionGroup>
+  <Accordion title="How does the robot know where it is?" icon="crosshairs">
+    **Answer:**
+    "The robot uses sensor fusion combining:
+    1. **Wheel odometry** from motor encoders (short-term position)
+    2. **IMU** for orientation and angular velocity
+    3. **AMCL (Adaptive Monte Carlo Localization)** which compares LiDAR scans to the map to correct odometry drift
+
+    The Extended Kalman Filter fuses odometry and IMU at 50 Hz, and AMCL provides the map → odom transform for global localization."
+  </Accordion>
+
+  <Accordion title="How does path planning work?" icon="route">
+    **Answer:**
+    "We use Nav2's two-level planning approach:
+    1. **Global Planner (NavFn):** Computes optimal path from start to goal using the static map. Uses Dijkstra's algorithm for complete path.
+    2. **Local Planner (DWB):** Follows the global path while avoiding dynamic obstacles. Samples velocity space, simulates trajectories, and selects the best one using cost functions.
+
+    The local planner runs at 20 Hz for real-time obstacle avoidance, while global replanning occurs at 1 Hz or when the path is blocked."
+  </Accordion>
+
+  <Accordion title="How do you avoid obstacles?" icon="shield">
+    **Answer:**
+    "Obstacle avoidance uses layered costmaps:
+    1. **Static layer:** From the pre-built map (walls, furniture)
+    2. **Obstacle layer:** Real-time obstacles from LiDAR scan
+    3. **Inflation layer:** Adds safety buffer around obstacles
+
+    The costmap marks obstacles as 'lethal' (can't drive there) and inflates them based on robot size plus safety margin. The local planner avoids trajectories that cross inflated areas."
+  </Accordion>
+
+  <Accordion title="What happens if the robot gets stuck?" icon="life-ring">
+    **Answer:**
+    "Nav2 uses Behavior Trees for recovery:
+    1. If navigation fails, the robot first clears the costmaps (removes old obstacle data)
+    2. Then it spins 90° in place to scan the environment
+    3. If still stuck, it backs up 30cm
+    4. Finally, it retries navigation
+
+    This recovery sequence runs up to 6 times before declaring failure. During testing, recovery succeeded in [X]% of stuck situations."
+  </Accordion>
+
+  <Accordion title="What challenges did you face?" icon="triangle-exclamation">
+    **Answer (be honest but positive):**
+    "The main challenges were:
+    1. **Odometry calibration:** Required iterative testing to get wheel radius accurate within 5%
+    2. **Localization tuning:** AMCL parameters needed adjustment for our environment (particle count, noise models)
+    3. **Controller tuning:** Balancing speed vs. smoothness in the DWB controller
+
+    We solved these through systematic testing, parameter tuning, and consulting Nav2 documentation."
+  </Accordion>
+
+  <Accordion title="How long did integration take?" icon="clock">
+    **Answer:**
+    "Full system integration took approximately [X] weeks:
+    - Week 1-2: Hardware integration, ESP32 ↔ ROS2 communication
+    - Week 3: Odometry calibration and sensor fusion
+    - Week 4: SLAM mapping and navigation tuning
+    - Week 5: Testing, optimization, and bug fixes
+
+    The key lesson: start integration early and test incrementally!"
+  </Accordion>
+</AccordionGroup>
+
+## Contingency Plans
+
+### Backup Strategies
+
+**If robot fails during demo:**
+
+<Steps>
+  <Step title="Quick Recovery (< 1 minute)">
+    **Common fixes:**
+    1. **Localization lost:**
+       - Re-initialize pose in RViz (2D Pose Estimate)
+       - Restart navigation goal
+
+    2. **Robot stuck:**
+       - Manually trigger recovery: `ros2 action send_goal /navigate_to_pose ...`
+       - Or teleop out of stuck position, then retry
+
+    3. **System unresponsive:**
+       - Emergency stop → restart
+       - If persists → switch to backup plan
+  </Step>
+
+  <Step title="Backup Plan A: Pre-Recorded Video">
+    **Preparation:**
+    - Record successful demo run beforehand
+    - Include narration explaining what's happening
+    - Have video ready on laptop
+
+    **Usage:**
+    > "Our robot is experiencing a technical issue. I have a pre-recorded video of a successful run that I'd like to show while I explain the system."
+
+    **Note:** This demonstrates preparation but may reduce marks. Use only if robot truly cannot be fixed quickly.
+  </Step>
+
+  <Step title="Backup Plan B: Teleoperation Demonstration">
+    **Show manual control:**
+    > "While autonomous navigation is experiencing issues, I can demonstrate the robot's omnidirectional capability and sensor integration through teleoperation."
+
+    **Demonstrate:**
+    - Omnidirectional motion (forward, strafe, diagonal)
+    - LiDAR visualization (show scan in RViz)
+    - Odometry tracking (show path trail)
+
+    **Then explain:**
+    - Navigation architecture
+    - Why it's failing (if known)
+    - How you would fix it
+
+    **Note:** Partial credit. Better than total failure.
+  </Step>
+
+  <Step title="Backup Plan C: Explain with Diagrams">
+    **If robot completely non-functional:**
+    - Show system architecture diagram
+    - Walk through navigation pipeline
+    - Explain algorithms and implementation
+    - Show code (hardware interface, launch files)
+    - Answer questions in depth
+
+    **Note:** Minimal credit for demonstration, but can still score on knowledge.
+  </Step>
+</Steps>
+
+### Common Demo-Day Failures
+
+**Preparation prevents most issues:**
+
+| Problem | Cause | Prevention |
+|---------|-------|------------|
+| Battery dead | Forgot to charge | Charge night before + bring spare |
+| WiFi disconnect | Network issue | Test connection beforehand, use 5GHz band |
+| Localization failure | Wrong map loaded | Verify map file in launch command |
+| Robot won't move | Controller not active | Run pre-flight check |
+| System crash | Software bug | Test thoroughly, have backup SD card |
+
+## Assessment Criteria
+
+### Demonstration (40% of WP5 Grade)
+
+**Breakdown:**
+
+| Criteria | Weight | Evaluated On |
+|----------|--------|--------------|
+| **Autonomous Navigation** | 35% | Success rate, accuracy, path quality |
+| **Obstacle Avoidance** | 25% | Static & dynamic obstacle handling |
+| **System Robustness** | 15% | Reliability, recovery, no crashes |
+| **Presentation Quality** | 15% | Clear explanation, professionalism |
+| **Q&A Performance** | 10% | Technical understanding, depth |
+
+### Grading Rubric
+
+**Excellent (85-100%):**
+- 90-100% navigation success rate
+- Smooth, fast motion (>0.4 m/s)
+- Perfect obstacle avoidance (0 collisions)
+- Advanced features demonstrated
+- Professional presentation
+- Expert-level technical answers
+
+**Good (70-84%):**
+- 80-89% navigation success rate
+- Acceptable motion quality
+- Minor collisions (1-2, non-damaging)
+- Core features demonstrated
+- Clear presentation
+- Good technical understanding
+
+**Satisfactory (50-69%):**
+- 70-79% navigation success rate
+- Slow or jerky motion
+- Multiple collisions
+- Basic features only
+- Adequate presentation
+- Acceptable technical knowledge
+
+**Failing (&lt;50%):**
+- &lt;70% navigation success rate
+- Frequent failures
+- Many collisions or crashes
+- System non-functional
+- Poor presentation
+- Lack of technical understanding
+
+## Tips for Success
+
+### Before Demo
+
+1. **Practice, practice, practice:**
+   - Run through demo 10+ times
+   - Test in actual demo environment
+   - Practice explanations out loud
+
+2. **Prepare for failure:**
+   - Have contingency plans ready
+   - Stay calm if things go wrong
+   - Explain what you would do to fix it
+
+3. **Know your system deeply:**
+   - Understand every component
+   - Be able to explain algorithms
+   - Know parameter values and why
+
+4. **Professional presentation:**
+   - Dress appropriately
+   - Speak clearly and confidently
+   - Maintain eye contact with assessors
+
+### During Demo
+
+1. **Narrate your demo:**
+   - Don't just stand silently
+   - Explain what's happening in real-time
+   - Point out interesting behaviors
+
+2. **Show understanding:**
+   - Reference specific algorithms (Dijkstra, AMCL, DWB)
+   - Explain trade-offs in your design
+   - Mention challenges overcome
+
+3. **Handle questions well:**
+   - Listen carefully to full question
+   - Think before answering
+   - It's OK to say "I don't know, but I would..."
+
+4. **Be enthusiastic:**
+   - Show pride in your work
+   - Engage with assessors
+   - Enjoy demonstrating!
+
+### Common Mistakes to Avoid
+
+- ❌ Not testing in demo environment beforehand
+- ❌ Forgetting to charge battery
+- ❌ Not having backup plans
+- ❌ Speaking too quietly or quickly
+- ❌ Making excuses for failures
+- ❌ Not being able to explain your code
+- ❌ Arriving late/unprepared
+- ❌ Not practicing demonstration
+
+## Post-Demo
+
+### After demonstration:
+
+- [ ] Thank assessors for their time
+- [ ] Note any feedback received
+- [ ] Reflect on what went well/poorly
+- [ ] Save all code and documentation
+- [ ] Back up final system state
+
+### Final Deliverables
+
+**Submit (check course requirements):**
+
+- [ ] Source code (GitHub repository)
+- [ ] Documentation (user manual, architecture)
+- [ ] Demo video (if required)
+- [ ] Technical report (if required)
+- [ ] Presentation slides (if used)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="System Integration"
+    icon="diagram-project"
+    href="/wp5-integration/system-integration"
+  >
+    Review complete integration guide
+  </Card>
+
+  <Card
+    title="Navigation Testing"
+    icon="flask"
+    href="/wp4-ros2/navigation/testing"
+  >
+    Practice testing procedures
+  </Card>
+
+  <Card
+    title="Troubleshooting"
+    icon="life-ring"
+    href="/troubleshooting/common-issues"
+  >
+    Prepare for common issues
+  </Card>
+
+  <Card
+    title="Course Overview"
+    icon="graduation-cap"
+    href="/getting-started/course-overview"
+  >
+    Review course objectives
+  </Card>
+</CardGroup>
+
+## Congratulations!
+
+**You've completed WP1-WP5!** From MATLAB simulation to CAD design, embedded programming to ROS2 navigation - you've built a complete autonomous robot system.
+
+**Your robot represents:**
+- Hundreds of hours of learning and work
+- Integration of mechanical, electrical, and software systems
+- Application of advanced robotics algorithms
+- Problem-solving and perseverance
+
+**Be proud of your achievement!** Good luck with your demonstration! 🤖🎉
+
+## References
+
+[1] Effective Presentations: https://www.nature.com/articles/d41586-018-07780-5
+[2] Demo Day Best Practices: https://www.ycombinator.com/demoday/
+[3] Technical Interview Tips: https://www.techinterviewhandbook.org/

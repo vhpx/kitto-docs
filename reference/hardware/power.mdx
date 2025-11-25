@@ -1,0 +1,650 @@
+---
+title: "Power System Design"
+description: "Complete power system specifications, design, and safety for autonomous robot"
+---
+
+## Overview
+
+The **power system** provides clean, stable power to all robot components from a single LiPo battery. Proper power design ensures reliability, safety, and optimal runtime.
+
+<Note>
+  **Design Goals:** Single battery source, multiple regulated voltages (12V, 5V, 3.3V), current capacity for all loads, safety protections (fuse, E-stop, voltage monitoring).
+</Note>
+
+## Power Architecture
+
+### Complete Power Distribution
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                    3S LiPo Battery                            │
+│                    11.1V (3.7V × 3 cells)                     │
+│                    5000-10000 mAh                             │
+└───────────────────────────┬──────────────────────────────────┘
+                            │
+                    ┌───────┴────────┐
+                    │  Main Switch   │ (10A rocker switch)
+                    └───────┬────────┘
+                            │
+                    ┌───────┴────────┐
+                    │  Fuse (10A)    │ ──→ Short circuit protection
+                    └───────┬────────┘
+                            │
+                ┌───────────┴───────────┐
+                │                       │
+                │              ┌────────┴──────────┐
+                │              │  Emergency Stop   │ (NC pushbutton)
+                │              └────────┬──────────┘
+                │                       │
+                │                       │
+        ┌───────┴────────┐     ┌───────┴───────────┐
+        │                │     │                   │
+        │  12V Rail      │     │  Buck Converter   │
+        │  (Motors)      │     │  12V → 5V 5A      │
+        │                │     │                   │
+        └───────┬────────┘     └──────────┬────────┘
+                │                         │
+                │                   ┌─────┴────────┐
+                │                   │              │
+        ┌───────┴────────┐   ┌──────┴──────┐ ┌────┴────────┐
+        │ 4× H-Bridges   │   │ Raspberry   │ │ 5V Devices  │
+        │ (IBT-2)        │   │ Pi 5        │ │ - LiDAR     │
+        │ Motor 1-4      │   │             │ │ - Encoders  │
+        └────────────────┘   └─────┬───────┘ └─────────────┘
+                                   │
+                             ┌─────┴─────┐
+                             │ ESP32     │ (3.3V via onboard reg)
+                             │ (via 5V)  │
+                             └───────────┘
+
+Notes:
+- 12V rail: Direct from battery (via E-stop)
+- 5V rail: From buck converter
+- 3.3V: ESP32 onboard regulator (5V → 3.3V)
+- Common ground throughout
+```
+
+## Battery Specifications
+
+### LiPo Battery (3S)
+
+**Recommended:** 3S (11.1V) 5000mAh 30C
+
+| Parameter | Specification | Notes |
+|-----------|--------------|-------|
+| **Configuration** | 3S (3 cells in series) | 3.7V × 3 = 11.1V nominal |
+| **Voltage Range** | 9.0V - 12.6V | Operating range |
+| **Nominal Voltage** | 11.1V | 3.7V per cell |
+| **Fully Charged** | 12.6V | 4.2V per cell |
+| **Storage Voltage** | 11.4V | 3.8V per cell (long-term storage) |
+| **Low Voltage** | 10.5V | 3.5V per cell (warning level) |
+| **Cutoff Voltage** | 9.0V | 3.0V per cell (absolute minimum) |
+| **Capacity** | 5000-10000 mAh | Runtime: 45-90 minutes |
+| **C-Rating** | 30C | Max discharge: 150A (5Ah × 30C) |
+| **Connector** | XT60 or T-plug | High-current connector |
+| **Weight** | 350-700g | Depends on capacity |
+| **Dimensions** | ~140×45×25mm (5Ah) | Varies by capacity |
+
+### Capacity Selection
+
+**Runtime calculation:**
+
+```
+Average current draw:
+- Motors (4× at 1.0A each): 4A
+- Raspberry Pi 5: 2.5A (at 12V) = 1.04A (at 5V → 12V equivalent)
+- LiDAR: 0.5A (at 5V) = 0.21A (at 12V equivalent)
+- ESP32: 0.12A (at 5V) = 0.05A (at 12V equivalent)
+- Total: ~5.3A at 12V (accounting for conversions)
+
+Runtime = Capacity / (Current × Safety Factor)
+        = 5000 mAh / (5300 mA × 0.8)  [80% depth of discharge]
+        = 5000 / 4240 = 1.18 hours ≈ 70 minutes
+
+Realistic: 45-60 minutes (accounting for acceleration, Nav2 overhead)
+```
+
+**Capacity recommendations:**
+
+| Capacity | Weight | Runtime (est.) | Use Case |
+|----------|--------|---------------|----------|
+| **5000 mAh** | ~350g | 45-60 min | Standard, demos |
+| **8000 mAh** | ~550g | 70-90 min | Longer missions |
+| **10000 mAh** | ~700g | 90-120 min | Extended operation |
+
+<Warning>
+  **Weight vs. Runtime Trade-off:** Larger batteries provide longer runtime but add weight, requiring more motor power and reducing efficiency.
+</Warning>
+
+### C-Rating
+
+**Definition:** Maximum safe discharge rate
+
+```
+Max current = Capacity (Ah) × C-rating
+            = 5Ah × 30C = 150A
+
+Robot peak current: ~10-12A (all motors stalled)
+Required C-rating: 12A / 5Ah = 2.4C
+
+Conclusion: 20C or higher sufficient, 30C provides safety margin
+```
+
+### LiPo Safety
+
+**Operating guidelines:**
+
+<CardGroup cols={2}>
+  <Card title="Charging" icon="battery-full">
+    - Use LiPo-specific balance charger
+    - Charge at 1C rate (5A for 5Ah battery)
+    - Never exceed 4.2V per cell
+    - Monitor during charging (don't leave unattended)
+  </Card>
+
+  <Card title="Discharging" icon="battery-empty">
+    - Never discharge below 3.0V per cell (9.0V total)
+    - Monitor voltage during use
+    - Stop at 10.5V (3.5V/cell) for safety margin
+    - Implement low-voltage cutoff in software
+  </Card>
+
+  <Card title="Storage" icon="warehouse">
+    - Store at 3.8V per cell (11.4V total)
+    - Use LiPo storage mode on charger
+    - Store in fireproof LiPo bag
+    - Cool, dry location (15-25°C)
+  </Card>
+
+  <Card title="Damage" icon="triangle-exclamation">
+    - **Never use** swollen/puffy battery
+    - **Never use** battery with damaged cells
+    - Dispose safely (discharge fully first)
+    - Contact local hazardous waste facility
+  </Card>
+</CardGroup>
+
+<Warning>
+  **LiPo Fire Hazard:** Punctured, over-charged, or over-discharged LiPo batteries can catch fire. Always use proper charging, storage, and handling procedures.
+</Warning>
+
+## Voltage Regulation
+
+### 12V Rail (Direct from Battery)
+
+**Usage:** Motor drivers (H-bridges)
+
+**Characteristics:**
+- No regulation (voltage varies with battery state: 9.0-12.6V)
+- Motors tolerate voltage variation well
+- Current capacity: Limited by battery (150A for 5Ah 30C)
+
+**Wiring:**
+```
+Battery (+) ──→ Switch ──→ Fuse ──→ E-Stop ──→ 12V Rail
+                                              ├──→ H-Bridge 1 (VCC)
+                                              ├──→ H-Bridge 2 (VCC)
+                                              └──→ Buck converter input
+```
+
+**Wire gauge:**
+- 12V main line: 16 AWG (10A capacity)
+- Motor power: 18 AWG (6A capacity per motor pair)
+
+### 5V Rail (Buck Converter)
+
+**Usage:** Raspberry Pi, LiDAR, encoders, ESP32
+
+**Buck Converter Specifications:**
+
+| Parameter | Specification | Product Example |
+|-----------|--------------|-----------------|
+| **Input Voltage** | 8-35V DC | Wide input range |
+| **Output Voltage** | 5.0V (adjustable) | Fixed or adjustable |
+| **Output Current** | 5A minimum | 8A recommended |
+| **Efficiency** | >92% | Less heat |
+| **Ripple** | &lt;50 mV | Clean power |
+| **Protection** | Overcurrent, overheat | Safety features |
+| **Chip** | LM2596, XL4015, or similar | Step-down converter |
+| **Price** | $8-15 | Per module |
+
+**Load calculation:**
+```
+Raspberry Pi 5: 2.5A (peak 3A)
+RPLIDAR A1M8: 0.5A (peak 0.8A)
+Encoder circuits: 0.04A (4× 10mA)
+ESP32: 0.15A (via USB)
+─────────────────────────
+Total: 3.19A (typical)
+Peak: 4.0A (with all devices at max)
+
+Recommended converter: 5A minimum, 8A preferred (for headroom)
+```
+
+**Buck converter setup:**
+
+```cpp
+// Voltage adjustment procedure:
+1. Disconnect all loads
+2. Connect multimeter to output
+3. Power on converter
+4. Adjust trimmer potentiometer until output = 5.00V ±0.05V
+5. Connect loads, verify voltage under load (should stay 4.9-5.1V)
+```
+
+**Wiring:**
+```
+Buck Converter
+├── IN+ ──→ 12V Rail (from E-stop)
+├── IN- ──→ GND (common ground)
+├── OUT+ ──→ 5V Rail
+│           ├──→ Raspberry Pi (USB-C)
+│           ├──→ LiDAR (USB or direct)
+│           ├──→ Encoder VCC (4×)
+│           └──→ ESP32 VIN pin
+└── OUT- ──→ GND (common ground)
+```
+
+### 3.3V Rail (ESP32 Onboard Regulator)
+
+**No external 3.3V regulator needed:**
+- ESP32 DevKit has onboard 3.3V regulator (AMS1117-3.3)
+- Input: 5V (from VIN pin or USB)
+- Output: 3.3V for ESP32 chip and GPIO
+- Current capacity: ~800 mA (sufficient for ESP32 + IMU)
+
+**IMU power options:**
+
+**Option 1: From ESP32 3.3V pin (recommended)**
+```
+ESP32 3.3V pin ──→ IMU VDD (ICM-20948)
+Current: ~10 mA (very low, no problem)
+```
+
+**Option 2: Separate 3.3V regulator (if needed)**
+```
+5V Rail ──→ AMS1117-3.3V regulator ──→ 3.3V devices
+Only needed if many 3.3V devices (not typical for this project)
+```
+
+## Current Budget
+
+### Total System Current Draw
+
+| Component | Voltage | Current (Typical) | Current (Peak) | Power (Typical) |
+|-----------|---------|-------------------|----------------|-----------------|
+| **Motors (4×)** | 12V | 4.0A (1A each) | 12A (stall) | 48W |
+| **Raspberry Pi 5** | 5V | 2.5A | 3.0A | 12.5W |
+| **RPLIDAR A1M8** | 5V | 0.5A | 0.8A | 2.5W |
+| **Encoders (4×)** | 5V | 0.04A (10mA each) | 0.04A | 0.2W |
+| **ESP32** | 5V | 0.15A | 0.25A | 0.75W |
+| **IMU** | 3.3V | 0.01A | 0.01A | 0.03W |
+| **Total (12V)** | - | **4.0A** | **12A** | **48W** |
+| **Total (5V)** | - | **3.19A** | **4.09A** | **16W** |
+| **Total (system)** | - | **~6A @ 12V equiv** | **~15A @ 12V** | **~64W** |
+
+**Battery draw calculation:**
+```
+5V load = 3.19A × 5V = 16W
+12V equivalent = 16W / 12V = 1.33A (accounting for buck converter efficiency)
+
+Total from battery = 4.0A (motors) + 1.33A (5V rail) = 5.33A at 12V
+
+Runtime = 5000 mAh / 5330 mA = 0.94 hours = 56 minutes (theoretical)
+Realistic = 45-50 minutes (accounting for battery voltage drop, inefficiencies)
+```
+
+## Safety Systems
+
+### Fuse Protection
+
+**Purpose:** Protect battery and wiring from short circuits
+
+**Specification:**
+- **Type:** Automotive blade fuse (ATO/ATC)
+- **Rating:** 10A fast-blow
+- **Location:** Between battery and main switch
+
+**Sizing calculation:**
+```
+Peak current: 15A (motors stalled)
+Continuous: 6-7A
+
+Fuse rating: 1.5× continuous = 10A
+(Will blow on sustained overload, but tolerate brief peaks)
+```
+
+**Fuse holder:** Inline fuse holder with 16 AWG wire connections
+
+### Emergency Stop (E-Stop)
+
+**Purpose:** Instantly cut power to motors in emergency
+
+**Specification:**
+- **Type:** Normally-closed (NC) pushbutton
+- **Color:** Red (standard for emergency stop)
+- **Current rating:** 10A minimum
+- **Contacts:** SPST or SPDT (using NC terminal)
+
+**Wiring:**
+```
+12V (from fuse) ──┬──→ E-Stop COM (Normally Closed)
+                  │
+             E-Stop NC ──→ 12V Rail (motors)
+
+When pressed: Circuit opens, motors lose power immediately
+When released: Circuit closes, motors powered (if switch on)
+```
+
+<Tip>
+  **Latch vs. Non-latch:** Use non-latching (push to stop, release to resume) for ease of testing. Latching E-stops require twist to release.
+</Tip>
+
+### Low Voltage Cutoff
+
+**Software-based protection:**
+
+```cpp
+// ESP32 voltage monitoring (via voltage divider)
+#define BATTERY_PIN 34  // ADC pin
+#define VOLTAGE_DIVIDER_RATIO 3.0  // 3:1 divider (12V → 4V)
+
+float readBatteryVoltage() {
+  int raw = analogRead(BATTERY_PIN);
+  float voltage = (raw / 4095.0) * 3.3 * VOLTAGE_DIVIDER_RATIO;
+  return voltage;
+}
+
+void checkBatteryVoltage() {
+  float voltage = readBatteryVoltage();
+
+  if (voltage < 10.5) {  // 3.5V per cell
+    Serial.println("WARNING: Low battery! Return to base.");
+    // Reduce max speed, sound alarm, etc.
+  }
+
+  if (voltage < 9.5) {  // 3.17V per cell (critical)
+    Serial.println("CRITICAL: Battery critically low! Shutting down.");
+    // Stop motors, save state, shutdown
+    setAllMotors(0);
+    delay(1000);
+    // Signal shutdown to Raspberry Pi
+  }
+}
+```
+
+**Voltage divider circuit:**
+```
+Battery (+) ──┬── 20kΩ ──┬── 10kΩ ──┬── GND
+              │          │          │
+         (12V max)  ESP32 ADC   (0V)
+                     (0-3.3V)
+
+Ratio: (10kΩ) / (20kΩ + 10kΩ) = 1/3
+12.6V → 4.2V (exceeds ADC max!)
+
+Correct ratio: Use 22kΩ + 10kΩ = 3.2:1
+12.6V → 3.9V (within ADC range 0-4.095V for ESP32)
+```
+
+### Power-On Sequence
+
+**Proper startup procedure:**
+
+1. **Battery off, E-stop pressed**
+2. Connect battery to robot
+3. **Release E-stop** (motors still off, software not running)
+4. **Flip main switch ON**
+   - Buck converter starts → 5V rail powers up
+   - Raspberry Pi boots (~30-45 seconds)
+   - ESP32 boots (~2 seconds)
+   - LiDAR spins up (~3 seconds)
+5. **System ready** (indicated by LEDs or beep)
+6. Motors now respond to commands
+
+**Shutdown sequence:**
+
+1. Stop all navigation (send zero velocity)
+2. **Shutdown Raspberry Pi** (via SSH: `sudo shutdown now`)
+3. Wait for Pi to fully shutdown (~10 seconds)
+4. **Flip main switch OFF**
+5. Press E-stop (optional, for safety)
+6. Disconnect battery (if storing for >1 day)
+
+## Wiring Diagram
+
+### Complete Power Wiring
+
+```
+                        ┌───────────────┐
+                        │ 3S LiPo       │
+                        │ 11.1V 5000mAh │
+                        └───┬───────┬───┘
+                            │ +     │ -
+                    ┌───────┴───┐   │
+                    │ Fuse 10A  │   │
+                    └───────┬───┘   │
+                            │       │
+                    ┌───────┴───────┴───┐
+                    │   Main Switch     │ (SPST 10A)
+                    └───────┬───────┬───┘
+                            │ +     │ -
+                    ┌───────┴───┐   │
+                    │  E-Stop   │   │ (NC)
+                    │  (Red)    │   │
+                    └───────┬───┘   │
+                            │ +     │ -
+            ┌───────────────┼───────┼───────────────┐
+            │               │       │               │
+            │           12V Rail    GND             │
+            │               │       │               │
+    ┌───────┴───────┐  ┌────┴───────┴────┐  ┌──────┴──────┐
+    │  H-Bridge 1   │  │  Buck Converter │  │ H-Bridge 2  │
+    │  (IBT-2)      │  │  12V → 5V 5A    │  │ (IBT-2)     │
+    ├───────────────┤  ├─────────────────┤  ├─────────────┤
+    │ VCC: 12V Rail │  │ IN+: 12V Rail   │  │ VCC: 12V    │
+    │ GND: GND      │  │ IN-: GND        │  │ GND: GND    │
+    │ OUT1: Motor 1+│  │ OUT+: 5V Rail   │  │ OUT1: M3+   │
+    │ OUT2: Motor 1-│  │ OUT-: GND       │  │ OUT2: M3-   │
+    │ OUT3: Motor 2+│  └────────┬────────┘  │ OUT3: M4+   │
+    │ OUT4: Motor 2-│           │           │ OUT4: M4-   │
+    │ PWM1: ESP GPIO│     ┌─────┴─────┐     │ PWM: ESP    │
+    │ PWM2: ESP GPIO│     │  5V Rail  │     │ DIR: ESP    │
+    └───────────────┘     ├───────────┤     └─────────────┘
+                          │ Raspberry │
+                          │ Pi 5      │ (USB-C 5V 3A)
+                          ├───────────┤
+                          │ RPLIDAR   │ (USB or 5V direct)
+                          ├───────────┤
+                          │ ESP32     │ (VIN = 5V)
+                          │           │  ├─ 3.3V reg ─→ IMU
+                          ├───────────┤
+                          │ Encoders  │ (4× VCC = 5V)
+                          └───────────┘
+
+Wire gauge recommendations:
+- Battery to fuse: 16 AWG (red/black)
+- 12V rail: 16 AWG
+- 5V rail: 18 AWG
+- Motor wires: 18 AWG
+- Signal wires: 22-24 AWG
+```
+
+## Connector Types
+
+### Battery Connector
+
+**XT60 (recommended):**
+- **Current rating:** 60A continuous
+- **Polarized:** Yes (can't reverse)
+- **Cost:** $2-3 per pair
+- **Uses:** Battery to main power line
+
+**Alternatives:**
+- T-plug (Deans): 40A, smaller
+- EC3/EC5: 60-120A, larger
+
+### Power Distribution
+
+**JST connectors (2-pin):**
+- Motor power (12V): JST-XH 2.54mm
+- 5V power: JST-PH 2.0mm
+- Rated 3A (adequate for individual devices)
+
+**Screw terminals:**
+- Buck converter input/output
+- H-bridge power inputs
+- Easy to wire, no soldering
+
+## Power Consumption Optimization
+
+### Reduce Current Draw
+
+**1. Motor efficiency:**
+- Use optimal PWM frequency (20 kHz)
+- Avoid stalling (current limiting)
+- Smooth acceleration (lower peak current)
+
+**2. Raspberry Pi optimization:**
+- Disable HDMI (save ~200 mA):
+  ```bash
+  /usr/bin/tvservice -o
+  ```
+- Disable Bluetooth (save ~30 mA):
+  ```bash
+  sudo systemctl disable bluetooth
+  ```
+- Lower CPU frequency (reduce from 2.4 GHz):
+  ```bash
+  # Add to /boot/config.txt
+  arm_freq=1500  # 1.5 GHz (save ~0.5W)
+  ```
+
+**3. Sensor management:**
+- Disable camera when not needed (save ~0.5W)
+- Reduce LiDAR scan rate if possible (not recommended, but saves ~0.3W)
+
+### Power Monitoring
+
+**Real-time monitoring:**
+
+```python
+# ROS2 node to publish battery status
+from sensor_msgs.msg import BatteryState
+
+battery_msg = BatteryState()
+battery_msg.voltage = 11.5  # Read from ESP32 via serial
+battery_msg.current = 5.2  # If current sensor available
+battery_msg.percentage = (voltage - 9.0) / (12.6 - 9.0)  # Rough estimate
+battery_msg.power_supply_status = BatteryState.POWER_SUPPLY_STATUS_DISCHARGING
+
+battery_pub.publish(battery_msg)
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Raspberry Pi won't boot" icon="raspberry-pi">
+    **Symptoms:** No HDMI output, no green LED activity
+
+    **Causes:**
+    - Insufficient current (undervoltage)
+    - 5V rail voltage too low
+    - Bad microSD card
+
+    **Debug:**
+    - Measure 5V rail under load: Should be 4.9-5.1V
+    - Check buck converter output current capability (need 3A for Pi 5)
+    - Try powering Pi directly from official PSU (isolate issue)
+  </Accordion>
+
+  <Accordion title="Motors weak or unresponsive" icon="gear">
+    **Causes:**
+    - Battery voltage low (<10V)
+    - Poor connections (high resistance)
+    - H-bridge overheating (thermal shutdown)
+
+    **Solutions:**
+    - Charge battery (should be >11V)
+    - Check all power connections tight
+    - Add heatsink to H-bridge chips
+    - Reduce motor load (lighter robot)
+  </Accordion>
+
+  <Accordion title="System reboots randomly" icon="power-off">
+    **Causes:**
+    - Voltage drops below 4.5V (Pi undervoltage)
+    - Current spikes exceed buck converter capacity
+    - Loose connections
+
+    **Solutions:**
+    - Use larger capacity buck converter (8A instead of 5A)
+    - Add bulk capacitor (1000-4700 μF) on 5V rail
+    - Check all connections secure
+    - Monitor voltage during motor acceleration
+  </Accordion>
+
+  <Accordion title="LiDAR not spinning" icon="rotate">
+    **Causes:**
+    - Insufficient 5V current (buck converter overloaded)
+    - USB cable voltage drop
+    - LiDAR motor failure
+
+    **Debug:**
+    - Measure 5V at LiDAR connector (should be >4.9V)
+    - Try powering LiDAR from separate 5V PSU (isolate issue)
+    - Check total 5V load (Pi + LiDAR = 3A minimum)
+  </Accordion>
+
+  <Accordion title="E-stop doesn't work" icon="circle-stop">
+    **Debug:**
+    - Press E-stop, motors should stop immediately
+    - Measure voltage at motor H-bridge VCC pin (should be 0V when pressed)
+    - Check E-stop wired in series with 12V rail (not parallel)
+
+    **Common mistake:** E-stop wired as NO (normally open) instead of NC (normally closed)
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Component Overview"
+    icon="microchip"
+    href="/reference/hardware/components"
+  >
+    Complete hardware BOM
+  </Card>
+
+  <Card
+    title="ESP32 Specifications"
+    icon="microchip"
+    href="/reference/hardware/esp32"
+  >
+    ESP32 pinout and wiring
+  </Card>
+
+  <Card
+    title="System Integration"
+    icon="diagram-project"
+    href="/wp5-integration/system-integration"
+  >
+    Integrate all subsystems
+  </Card>
+
+  <Card
+    title="Troubleshooting"
+    icon="life-ring"
+    href="/troubleshooting/hardware"
+  >
+    Hardware troubleshooting guide
+  </Card>
+</CardGroup>
+
+## References
+
+[1] LiPo Battery Guide: https://rogershobbycenter.com/lipoguide
+[2] Buck Converter Design: https://www.ti.com/lit/an/slva477b/slva477b.pdf
+[3] Power Distribution Best Practices: https://www.pololu.com/docs/0J9/all
+[4] Raspberry Pi Power Requirements: https://www.raspberrypi.com/documentation/computers/raspberry-pi.html#power-supply

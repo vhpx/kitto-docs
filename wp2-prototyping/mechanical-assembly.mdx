@@ -1,0 +1,393 @@
+---
+title: "Mechanical Assembly"
+description: "Assembly guide, 3D printing tips, and integration for the Mecanum robot"
+---
+
+## Overview
+
+This page guides you through assembling your Mecanum robot, from 3D printing parts to final integration of all subsystems.
+
+## Pre-Assembly Checklist
+
+Before you start assembly, ensure you have:
+
+- [ ] All 3D printed parts (cleaned and tested)
+- [ ] All purchased components (motors, wheels, electronics)
+- [ ] Complete fastener set (M3 screws, nuts, standoffs)
+- [ ] Tools (hex keys, screwdrivers, pliers, wire strippers)
+- [ ] Wiring diagram handy
+- [ ] Multimeter for electrical testing
+
+## 3D Printing Tips
+
+<Warning>
+  **Remember:** Maximum **2 prints per group**! Print smart.
+</Warning>
+
+### Pre-Print Verification
+
+1. **Check Models:**
+   - All STL files error-free
+   - Holes correct size (3.2mm for M3 tapping)
+   - No impossible overhangs
+
+2. **Slicer Settings:**
+   ```
+   Material: PLA (easy) or PETG (stronger)
+   Layer: 0.2mm
+   Infill: 25% gyroid
+   Walls: 3 perimeters
+   Supports: Minimize (design for printability)
+   Brim: 5mm for bed adhesion
+   ```
+
+3. **Print Orientation:**
+   - Strongest along layer lines
+   - Minimize supports
+   - Flat surfaces on bed
+
+### Post-Printing
+
+- Remove supports carefully
+- Clean holes with 3mm drill bit
+- Tap M3 threads or use heat-set inserts
+- Test fit before final assembly
+
+## Assembly Sequence
+
+<Steps>
+  <Step title="Step 1: Prepare Base Plate">
+    - Clean 3D print or cut material
+    - Install standoffs for electronics
+    - Mark motor positions
+  </Step>
+
+  <Step title="Step 2: Mount Motor Brackets">
+    - Attach 4× motor mounting brackets
+    - Use M3×10mm screws + nuts
+    - Ensure brackets perpendicular to base
+    - Check alignment with level
+  </Step>
+
+  <Step title="Step 3: Install Motors">
+    - Mount motors to brackets (4× M3 screws each)
+    - Route encoder wires through chassis
+    - Verify shafts parallel and level
+    - **Critical:** Check shaft alignment!
+  </Step>
+
+  <Step title="Step 4: Attach Wheels">
+    - Install set-screw hubs or couplers
+    - Slide wheels onto shafts
+    - Tighten set screws
+    - Verify wheels rotate freely
+    - Check: Left/right rollers correct orientation
+  </Step>
+
+  <Step title="Step 5: Mount Electronics - ESP32">
+    - Install on standoffs (M2.5 or M3)
+    - USB port accessible for programming
+    - Secure with screws
+  </Step>
+
+  <Step title="Step 6: Mount Motor Drivers">
+    - Install 4× IBT-2 drivers
+    - Allow airflow (don't seal)
+    - Position for short motor wires
+    - Secure with screws or adhesive
+  </Step>
+
+  <Step title="Step 7: Mount Raspberry Pi">
+    - Standard mounting (4× M2.5 screws)
+    - All ports accessible
+    - microSD card reachable
+    - Add heatsink if available
+  </Step>
+
+  <Step title="Step 8: Mount IMU">
+    - Center of robot (best for measurement)
+    - Rigid mount (no flex)
+    - Flat and level
+    - Note orientation (X-forward, Z-up)
+  </Step>
+
+  <Step title="Step 9: LiDAR Mount">
+    - Top-mounted, elevated
+    - 360° clear view
+    - Stable (no wobble)
+    - Height: 100-150mm above ground
+  </Step>
+
+  <Step title="Step 10: Power Distribution">
+    - Install terminal blocks or bus
+    - Mount buck converter
+    - Add fuse holders
+    - Battery mounting area prepared
+  </Step>
+
+  <Step title="Step 11: Wiring - Power">
+    **Follow wiring diagram exactly!**
+    - Battery → main switch → fuse
+    - 12V to motor drivers
+    - Buck converter 12V→5V
+    - 5V to ESP32, RPi, sensors
+  </Step>
+
+  <Step title="Step 12: Wiring - Motors">
+    - Motor power to drivers (thick wire)
+    - PWM signals ESP32→drivers
+    - Keep wires neat with zip ties
+  </Step>
+
+  <Step title="Step 13: Wiring - Encoders">
+    - Connect encoder A/B to ESP32
+    - +5V and GND for encoder power
+    - Secure wires (prevent snagging)
+  </Step>
+
+  <Step title="Step 14: Wiring - Sensors">
+    - IMU I2C to ESP32 (SDA, SCL)
+    - LiDAR USB to Raspberry Pi
+    - Camera ribbon cable (if used)
+  </Step>
+
+  <Step title="Step 15: Cable Management">
+    - Zip ties for wire bundles
+    - Keep cables away from wheels
+    - Label wires (masking tape + marker)
+    - Strain relief at connectors
+  </Step>
+
+  <Step title="Step 16: Battery Installation">
+    - Secure with velcro straps
+    - Easy access for removal
+    - Low position (stability)
+    - LiPo safety bag recommended
+  </Step>
+
+  <Step title="Step 17: Pre-Power Checks">
+    **Critical before powering on!**
+    - Visual inspection: No loose wires
+    - Multimeter: Check voltages, no shorts
+    - Verify all connections to diagram
+  </Step>
+
+  <Step title="Step 18: Initial Power-On">
+    - Connect battery (main switch OFF)
+    - Turn on switch
+    - Check voltages: 12V and 5V rails
+    - Listen for unusual sounds
+    - Feel for hot components
+  </Step>
+
+  <Step title="Step 19: Software Upload">
+    - ESP32: Upload test code via USB
+    - Raspberry Pi: Boot and configure
+    - Test GPIO outputs (blink LED)
+  </Step>
+
+  <Step title="Step 20: Motor Test">
+    - Test one motor at a time
+    - Low speed first (20% PWM)
+    - Check rotation direction
+    - Verify encoder readings
+    - **Stop immediately** if problems
+  </Step>
+</Steps>
+
+## Critical Alignment: Mecanum Wheels
+
+<Warning>
+  **Most Common Mistake:** Incorrect wheel orientation!
+</Warning>
+
+### Correct Wheel Configuration
+
+```
+Top View (looking down):
+
+    Front
+  ┌───────┐
+  │ \   / │   Rollers form "X" pattern
+  │  \ /  │   viewed from top
+  │  / \  │
+  │ /   \ │
+  └───────┘
+    Rear
+
+Front-Left:  Rollers ↘ (down-right)
+Front-Right: Rollers ↙ (down-left)
+Rear-Left:   Rollers ↗ (up-right)
+Rear-Right:  Rollers ↖ (up-left)
+```
+
+**Test:** All wheels same speed → robot goes forward (not sideways!)
+
+## Tools Required
+
+### Hand Tools
+
+- Hex key set (M2, M2.5, M3)
+- Screwdriver set (Phillips, flathead)
+- Pliers (needle-nose, regular)
+- Wire strippers
+- Wire cutters
+- Drill with bits (if tapping holes)
+- Tap set (M2, M2.5, M3) - optional
+- Soldering iron + solder
+- Hot glue gun (optional, wire management)
+
+### Measurement Tools
+
+- Digital calipers
+- Ruler/tape measure
+- Multimeter (essential!)
+- Level (smartphone app works)
+
+### Safety Equipment
+
+- Safety glasses (drilling, cutting)
+- Anti-static wrist strap (electronics)
+- Heat-resistant mat (soldering)
+
+## Common Assembly Issues
+
+<AccordionGroup>
+  <Accordion title="Wheel wobble or misalignment" icon="rotate">
+    **Causes:**
+    - Motor shaft not perpendicular
+    - Loose set screws
+    - Bent shaft or wheel
+
+    **Fix:**
+    - Re-mount motor bracket (check with level)
+    - Tighten set screws firmly
+    - Replace damaged parts
+  </Accordion>
+
+  <Accordion title="Wheels don't rotate freely" icon="ban">
+    **Causes:**
+    - Rubbing on chassis
+    - Over-tightened wheel hub
+    - Debris in rollers
+
+    **Fix:**
+    - Increase clearance (sand chassis edge)
+    - Loosen hub slightly
+    - Clean rollers
+  </Accordion>
+
+  <Accordion title="Short circuit on power-up" icon="bolt">
+    **Causes:**
+    - Wrong polarity
+    - Bare wire touching metal
+    - Damaged component
+
+    **Fix:**
+    - STOP! Disconnect power immediately
+    - Use multimeter to find short
+    - Insulate all connections
+    - Double-check wiring diagram
+  </Accordion>
+
+  <Accordion title="No power to component" icon="plug">
+    **Causes:**
+    - Loose connection
+    - Blown fuse
+    - Incorrect wiring
+
+    **Fix:**
+    - Check continuity with multimeter
+    - Test fuses
+    - Trace connections to source
+  </Accordion>
+</AccordionGroup>
+
+## Testing Checklist
+
+After assembly, systematically test:
+
+- [ ] Power rails: 12V and 5V present
+- [ ] ESP32 powers on (LED indicator)
+- [ ] Raspberry Pi boots
+- [ ] Each motor spins (test individually)
+- [ ] Encoder signals read correctly
+- [ ] IMU communicates (I2C scan)
+- [ ] LiDAR spins and publishes data
+- [ ] No excessive heat from components
+- [ ] All wheels rotate freely by hand
+- [ ] No loose wires or parts
+
+## Weight Distribution
+
+For best performance:
+
+- **Battery Low:** Improves stability, lowers center of gravity
+- **Heavy Components Centered:** Balance prevents tipping
+- **Symmetric:** Even weight distribution left/right, front/back
+- **Target Weight:** 2-4 kg total (lighter = less motor load)
+
+## Troubleshooting Guide
+
+| Symptom | Likely Cause | Solution |
+|---------|--------------|----------|
+| Robot drifts in one direction | Wheel misalignment, uneven motor speeds | Check wheel orientation, calibrate PID |
+| Motors stutter | Low voltage, loose encoder wires | Check battery charge, secure connections |
+| One motor not working | Wiring error, bad driver | Test motor directly, check driver connections |
+| ESP32 won't program | USB driver, wrong COM port | Install drivers, check Device Manager |
+| IMU not responding | I2C wiring, address conflict | Check SDA/SCL, scan I2C bus |
+| LiDAR no data | USB power, driver issue | Check USB cable, install rplidar_ros |
+
+## Maintenance Tips
+
+**Weekly:**
+- Check all screws (vibration loosens them)
+- Inspect wires for wear
+- Clean wheel rollers
+- Verify battery voltage
+
+**Monthly:**
+- Re-tighten set screws
+- Check motor brush wear
+- Update firmware if needed
+
+## Documentation
+
+Take photos during assembly:
+- Before/after each major step
+- Close-ups of connections
+- Label everything clearly
+- Create assembly video (useful for presentation!)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="WP3: ESP32 Programming"
+    icon="code"
+    href="/wp3-embedded/introduction"
+  >
+    Program the embedded system
+  </Card>
+  <Card
+    title="WP3: Motor Control"
+    icon="gears"
+    href="/wp3-embedded/dc-motor-control"
+  >
+    Implement PID control
+  </Card>
+  <Card
+    title="WP4: ROS2 Setup"
+    icon="robot"
+    href="/wp4-ros2/setup/computer-preparation"
+  >
+    Set up ROS2 for autonomous navigation
+  </Card>
+  <Card
+    title="Troubleshooting"
+    icon="life-ring"
+    href="/troubleshooting/common-errors"
+  >
+    Solutions to common problems
+  </Card>
+</CardGroup>

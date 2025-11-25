@@ -1,0 +1,358 @@
+---
+title: "Component Overview"
+description: "Complete list of hardware components with specifications and sourcing"
+---
+
+## Overview
+
+This page provides a **complete component list** for building the autonomous Mecanum wheel robot, including specifications, approximate costs, and sourcing information.
+
+<Note>
+  **Total Cost:** Approximately $600-800 USD depending on component choices and availability.
+</Note>
+
+## Complete Bill of Materials (BOM)
+
+### Core Electronics
+
+| Component | Specification | Quantity | Unit Price | Total | Notes |
+|-----------|--------------|----------|------------|-------|-------|
+| **Raspberry Pi 5** | 4GB or 8GB RAM | 1 | $60-80 | $60-80 | 8GB recommended for Nav2 |
+| **ESP32-WROOM-32** | DevKit V1 or similar | 1 | $5-10 | $5-10 | Any ESP32 board works |
+| **RPLIDAR A1M8** | 360° 2D LiDAR scanner | 1 | $99 | $99 | Essential for navigation |
+| **ICM-20948 IMU** | 9-axis (accel, gyro, mag) | 1 | $15-20 | $15-20 | Breakout board with I2C |
+| **microSD Card** | 64GB UHS-I Class 10 | 1 | $10-15 | $10-15 | For Raspberry Pi OS |
+
+**Subtotal: $189-224**
+
+### Motors & Drivers
+
+| Component | Specification | Quantity | Unit Price | Total | Notes |
+|-----------|--------------|----------|------------|-------|-------|
+| **DC Motors** | 12V 333RPM with encoder | 4 | $15-20 | $60-80 | JGA25-370 or similar |
+| **Motor Drivers** | IBT-2 (BTS7960) 43A H-bridge | 2 | $5-10 | $10-20 | Controls 2 motors each |
+| **Mecanum Wheels** | 60mm diameter | 4 | $8-12 | $32-48 | Aluminum hub preferred |
+| **Motor Mounts** | Aluminum L-bracket | 4 | $2-3 | $8-12 | 3D printed alternative OK |
+
+**Subtotal: $110-160**
+
+### Power System
+
+| Component | Specification | Quantity | Unit Price | Total | Notes |
+|-----------|--------------|----------|------------|-------|-------|
+| **LiPo Battery** | 3S (11.1V) 5000mAh 30C | 1 | $35-50 | $35-50 | Or 10000mAh for longer runtime |
+| **Buck Converter** | 12V → 5V 5A | 1 | $5-8 | $5-8 | For Raspberry Pi power |
+| **Voltage Regulator** | LM2596 or similar | 1 | $3-5 | $3-5 | Additional 5V rail if needed |
+| **Power Switch** | Rocker switch 10A rated | 1 | $2-3 | $2-3 | Main power on/off |
+| **XT60 Connector** | Battery connector | 2 | $1-2 | $2-4 | Male + female |
+| **Emergency Stop** | Push-button NC switch | 1 | $5-10 | $5-10 | Safety critical |
+| **LiPo Charger** | Balance charger | 1 | $20-40 | $20-40 | For 3S LiPo |
+
+**Subtotal: $72-120**
+
+### Mechanical Structure
+
+| Component | Specification | Quantity | Unit Price | Total | Notes |
+|-----------|--------------|----------|------------|-------|-------|
+| **Chassis Base** | Acrylic/aluminum 40×30cm | 1 | $15-25 | $15-25 | Or 3D printed parts |
+| **Mounting Plate** | Acrylic 30×20cm | 1 | $8-12 | $8-12 | For electronics |
+| **Standoffs** | M3 30mm brass | 8-12 | $0.50 | $4-6 | Multi-tier mounting |
+| **Screws/Nuts** | M3 assortment | 50+ | - | $5-10 | Various lengths |
+| **Cable Ties** | Various sizes | 20+ | - | $3-5 | Cable management |
+
+**Subtotal: $35-58**
+
+### Wiring & Connectors
+
+| Component | Specification | Quantity | Total | Notes |
+|-----------|--------------|----------|-------|-------|
+| **Jumper Wires** | Male-Female, Male-Male | 40+ | $5-8 | Various lengths |
+| **JST Connectors** | 2-pin, 3-pin, 4-pin | 10+ | $5-10 | Motor and sensor connections |
+| **Heat Shrink** | Assorted sizes | - | $5-8 | Wire insulation |
+| **Wire** | 22 AWG, 18 AWG | 5m each | $10-15 | Power and signal wires |
+| **USB Cables** | USB-C, Micro-USB, Type-A | 3+ | $10-15 | Pi power, ESP32, LiDAR |
+| **Breadboard** | Full size or half size | 1 | $5-8 | Prototyping connections |
+
+**Subtotal: $40-64**
+
+### Optional Components
+
+| Component | Purpose | Price | Priority |
+|-----------|---------|-------|----------|
+| **Raspberry Pi Camera v2/v3** | Visual feedback, SLAM | $25-35 | Low |
+| **Voltage/Current Sensor** | Battery monitoring | $5-10 | Medium |
+| **LED Indicators** | Status lights | $5 | Low |
+| **Buzzer** | Audio feedback | $3 | Low |
+| **Cooling Fan** | Raspberry Pi cooling | $5-8 | Medium |
+| **Heatsinks** | ESP32, Pi components | $5-10 | Medium |
+| **GPS Module** | Outdoor navigation | $15-25 | Low |
+
+**Optional Subtotal: $68-111**
+
+## Total Cost Breakdown
+
+| Category | Minimum | Recommended | Maximum |
+|----------|---------|-------------|---------|
+| Core Electronics | $189 | $210 | $224 |
+| Motors & Drivers | $110 | $130 | $160 |
+| Power System | $72 | $95 | $120 |
+| Mechanical | $35 | $45 | $58 |
+| Wiring | $40 | $50 | $64 |
+| **Core Total** | **$446** | **$530** | **$626** |
+| Optional Components | $0 | $40 | $111 |
+| **Grand Total** | **$446** | **$570** | **$737** |
+
+<Tip>
+  **Budget Tip:** Start with minimum configuration. Add optional components later as needed. Used or surplus components can reduce costs significantly.
+</Tip>
+
+## Component Details
+
+### Raspberry Pi 5 vs. 4
+
+**Recommended: Raspberry Pi 5**
+
+| Feature | Pi 4 (4GB) | Pi 5 (4GB) | Pi 5 (8GB) |
+|---------|------------|------------|------------|
+| **CPU** | 1.5GHz quad-core | 2.4GHz quad-core | 2.4GHz quad-core |
+| **RAM** | 4GB LPDDR4 | 4GB LPDDR4X | 8GB LPDDR4X |
+| **USB** | 2× USB 3.0, 2× USB 2.0 | 2× USB 3.0, 2× USB 2.0 | 2× USB 3.0, 2× USB 2.0 |
+| **Performance** | Baseline | 2-3× faster | 2-3× faster |
+| **Nav2 Performance** | OK (may lag) | Good | Excellent |
+| **Price** | $55 | $60 | $80 |
+
+**Verdict:** Pi 5 4GB sufficient for basic nav, 8GB recommended for advanced features (camera, SLAM).
+
+**Alternative:** Raspberry Pi 4 (4GB) works but may be slower with Nav2.
+
+### ESP32 Variants
+
+**Any ESP32-WROOM-32 board works:**
+
+| Board | GPIO Pins | Flash | RAM | Price | Notes |
+|-------|-----------|-------|-----|-------|-------|
+| **ESP32 DevKit V1** | 30 | 4MB | 520KB | $5-8 | Most common |
+| **ESP32-WROOM-32D** | 30 | 4MB | 520KB | $6-10 | Newer version |
+| **ESP32-S3** | 36 | 8MB | 512KB | $10-15 | Faster, more memory |
+
+**Verdict:** Standard ESP32 DevKit V1 is sufficient. More expensive variants offer no significant benefit for this project.
+
+### Motor Options
+
+**Recommended: JGA25-370 12V 333RPM with encoder**
+
+| Specification | Value | Notes |
+|--------------|-------|-------|
+| Voltage | 12V DC | Nominal |
+| RPM | 333 (no load) | With 1:19 gearbox |
+| Torque | 0.8 - 1.0 Nm (stall) | Sufficient for robot |
+| Encoder | Hall effect, quadrature | 11 PPR (motor) = 209 PPR (output) |
+| Current | 0.5-1.0A (loaded) | Peak 2-3A |
+| Weight | ~100g | Per motor |
+
+**Alternatives:**
+- **Lower RPM (200-250 RPM):** More torque, slower robot
+- **Higher RPM (500-600 RPM):** Less torque, faster robot
+
+**Key consideration:** Match motor voltage to battery (12V motors with 3S LiPo).
+
+### Mecanum Wheel Specifications
+
+**Recommended: 60mm diameter aluminum hub wheels**
+
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| Diameter | 60-80mm | 60mm most common |
+| Material | Aluminum hub, rubber rollers | Durable |
+| Roller Angle | 45° | Standard Mecanum |
+| Shaft | 4mm or 6mm bore | Match motor shaft |
+| Weight | 50-80g | Per wheel |
+
+**Left vs. Right wheels:**
+- Need 2× left-handed wheels
+- Need 2× right-handed wheels
+- Orientation: Rollers form 'X' pattern when viewed from above
+
+**Check:** Wheel shaft bore matches motor shaft diameter (most JGA25-370 use 4mm or 6mm).
+
+### LiDAR: RPLIDAR A1M8
+
+**Specifications:**
+
+| Parameter | Value |
+|-----------|-------|
+| Range | 0.15m - 12m |
+| Angular Resolution | 1° (360 points/scan) |
+| Scan Rate | 5.5 Hz |
+| Sample Rate | 8000 samples/sec |
+| Interface | USB (UART internally) |
+| Power | 5V, ~500mA |
+| Weight | 160g |
+
+**Why RPLIDAR A1M8:**
+- Affordable ($99 vs. $400+ for alternatives)
+- Well-supported in ROS2 (rplidar_ros package)
+- Reliable and proven
+- Perfect for indoor navigation
+
+**Alternatives:**
+- **RPLIDAR A2M8:** Faster scan rate (10 Hz), double price
+- **YDLiDAR X4:** Cheaper ($70), lower quality
+- **Slamtec RPLIDAR A3:** Longer range (25m), $300+
+
+### IMU: ICM-20948
+
+**Specifications:**
+
+| Sensor | Range | Resolution |
+|--------|-------|------------|
+| **Gyroscope** | ±2000°/s | 16-bit |
+| **Accelerometer** | ±16g | 16-bit |
+| **Magnetometer** | ±4900µT | 16-bit |
+| **Interface** | I2C, SPI | I2C recommended |
+| **Power** | 3.3V, ~5mA | |
+
+**Why ICM-20948:**
+- 9-axis (gyro + accel + mag) for full orientation
+- Industry-standard (TDK InvenSense)
+- Arduino/CircuitPython libraries available
+- Small breakout boards available
+
+**Alternatives:**
+- **MPU-9250:** Older version, similar capability
+- **BNO085:** Better sensor fusion, more expensive
+- **LSM9DS1:** Similar specs, different manufacturer
+
+## Sourcing Recommendations
+
+### Online Retailers
+
+**Electronics:**
+- **AliExpress:** Cheapest, long shipping (2-4 weeks)
+- **Amazon:** Fast shipping, slightly higher cost
+- **DigiKey/Mouser:** Reliable, fast, higher prices
+- **Adafruit/SparkFun:** Quality breakout boards, tutorials
+
+**Mechanical:**
+- **McMaster-Carr:** Excellent selection, fast shipping (US)
+- **Local hardware store:** Screws, standoffs, acrylic sheets
+- **3D printing services:** Custom brackets and mounts
+
+### Budget Optimization
+
+**Ways to reduce cost:**
+
+1. **Use existing components:**
+   - Old laptop as development PC
+   - Spare USB cables
+   - Recycled enclosure/chassis
+
+2. **Salvage parts:**
+   - Motors from old toys
+   - Wheels from old RC cars
+   - Power supplies from electronics
+
+3. **3D printing:**
+   - Print wheels (if no Mecanum wheels available)
+   - Print motor mounts
+   - Print enclosures
+
+4. **Buy in bulk/group orders:**
+   - Share shipping costs with classmates
+   - Bulk discounts on components
+
+5. **Buy used:**
+   - eBay, Facebook Marketplace
+   - University surplus sales
+   - Maker spaces
+
+## Safety Components (Critical)
+
+<Warning>
+  **Never skip safety components!** Emergency stop and proper fusing prevent fires and injuries.
+</Warning>
+
+**Required safety items:**
+
+1. **Emergency Stop Button:**
+   - Normally-closed (NC) contact
+   - Interrupts motor power
+   - Easily accessible
+   - Price: $5-10
+
+2. **Fuse:**
+   - 10A fast-blow for 3S LiPo
+   - Protects against short circuits
+   - Place near battery positive
+   - Price: $2-5 (pack of 10)
+
+3. **LiPo Safety Bag:**
+   - Fire-resistant storage
+   - For charging and storage
+   - Essential for safety
+   - Price: $10-15
+
+4. **LiPo Alarm/Voltage Monitor:**
+   - Warns of low voltage
+   - Prevents over-discharge (< 3.0V/cell)
+   - Extends battery life
+   - Price: $3-5
+
+## Tools Required
+
+**Basic tools needed:**
+
+| Tool | Purpose | Price |
+|------|---------|-------|
+| **Soldering Iron** | Solder connections | $15-30 |
+| **Multimeter** | Voltage/current measurement | $10-20 |
+| **Screwdriver Set** | Phillips, flathead | $10-15 |
+| **Wire Stripper** | Strip wire insulation | $10-15 |
+| **Hex Key Set** | M3 screws | $5-10 |
+| **Hot Glue Gun** | Secure components | $5-10 |
+| **Drill** | Mounting holes | $20-50 (or borrow) |
+
+**Total tool cost:** $75-150 (one-time investment)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="ESP32 Details"
+    icon="microchip"
+    href="/reference/hardware/esp32"
+  >
+    Complete ESP32 specifications and pinout
+  </Card>
+
+  <Card
+    title="Raspberry Pi Details"
+    icon="raspberry-pi"
+    href="/reference/hardware/raspberry-pi"
+  >
+    Raspberry Pi specifications and setup
+  </Card>
+
+  <Card
+    title="Motor Specifications"
+    icon="gear"
+    href="/reference/hardware/motors"
+  >
+    DC motor datasheets and wiring
+  </Card>
+
+  <Card
+    title="LiDAR Specifications"
+    icon="radar"
+    href="/reference/hardware/lidar"
+  >
+    RPLIDAR A1M8 complete specs
+  </Card>
+</CardGroup>
+
+## References
+
+[1] Raspberry Pi Official: https://www.raspberrypi.com/products/
+[2] ESP32 Datasheet: https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf
+[3] RPLIDAR A1 Specs: https://www.slamtec.com/en/Lidar/A1Spec
+[4] ICM-20948 Datasheet: https://invensense.tdk.com/products/motion-tracking/9-axis/icm-20948/

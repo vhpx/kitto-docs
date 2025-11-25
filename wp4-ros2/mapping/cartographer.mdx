@@ -1,0 +1,542 @@
+---
+title: "Google Cartographer"
+description: "Alternative SLAM solution using Google Cartographer for complex environments"
+---
+
+## Overview
+
+**Google Cartographer** is an advanced SLAM system developed by Google. It provides real-time 2D and 3D mapping with sophisticated loop closure and optimization.
+
+<Note>
+  **Cartographer vs SLAM Toolbox:** Cartographer excels in complex, multi-floor environments. SLAM Toolbox is simpler and works well for single-floor indoor spaces.
+</Note>
+
+## When to Use Cartographer
+
+<CardGroup cols={2}>
+  <Card title="Use Cartographer" icon="check">
+    - Multi-floor buildings
+    - Large outdoor areas
+    - 3D mapping (with 3D LiDAR)
+    - Complex loop closures
+    - High-accuracy requirements
+  </Card>
+
+  <Card title="Use SLAM Toolbox" icon="bolt">
+    - Single-floor indoor
+    - Simple environments
+    - Limited compute (Raspberry Pi)
+    - Quick setup needed
+    - Real-time constraints
+  </Card>
+</CardGroup>
+
+## Installation
+
+```bash
+# Install Cartographer
+sudo apt install ros-jazzy-cartographer ros-jazzy-cartographer-ros
+```
+
+**Check installation:**
+```bash
+ros2 pkg list | grep cartographer
+# Expected:
+# cartographer
+# cartographer_ros
+# cartographer_ros_msgs
+```
+
+## Configuration
+
+### Configuration File
+
+Cartographer uses Lua configuration files.
+
+**File:** `config/cartographer.lua`
+
+```lua
+include "map_builder.lua"
+include "trajectory_builder.lua"
+
+options = {
+  map_builder = MAP_BUILDER,
+  trajectory_builder = TRAJECTORY_BUILDER,
+
+  -- Frame IDs
+  map_frame = "map",
+  tracking_frame = "base_link",
+  published_frame = "base_link",
+  odom_frame = "odom",
+  provide_odom_frame = true,
+  publish_frame_projected_to_2d = true,
+  use_pose_extrapolator = true,
+
+  -- Odometry
+  use_odometry = true,
+
+  -- Sensors
+  use_nav_sat = false,  -- No GPS
+  use_landmarks = false,
+
+  num_laser_scans = 1,  -- Single LiDAR
+  num_multi_echo_laser_scans = 0,
+  num_subdivisions_per_laser_scan = 1,
+  num_point_clouds = 0,  -- 2D only
+
+  -- Lookup transforms
+  lookup_transform_timeout_sec = 0.2,
+  submap_publish_period_sec = 0.3,
+  pose_publish_period_sec = 5e-3,  # 200Hz
+  trajectory_publish_period_sec = 30e-3,
+  rangefinder_sampling_ratio = 1.0,
+  odometry_sampling_ratio = 1.0,
+  fixed_frame_pose_sampling_ratio = 1.0,
+  imu_sampling_ratio = 1.0,
+  landmarks_sampling_ratio = 1.0,
+}
+
+-- 2D SLAM Configuration
+MAP_BUILDER.use_trajectory_builder_2d = true
+TRAJECTORY_BUILDER_2D.use_imu_data = true
+TRAJECTORY_BUILDER_2D.min_range = 0.15  -- RPLIDAR A1M8 min
+TRAJECTORY_BUILDER_2D.max_range = 12.0  -- RPLIDAR A1M8 max
+TRAJECTORY_BUILDER_2D.missing_data_ray_length = 5.0
+TRAJECTORY_BUILDER_2D.use_online_correlative_scan_matching = true
+TRAJECTORY_BUILDER_2D.ceres_scan_matcher.translation_weight = 10
+TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight = 40
+
+-- Submaps
+TRAJECTORY_BUILDER_2D.submaps.num_range_data = 90
+TRAJECTORY_BUILDER_2D.submaps.grid_options_2d.resolution = 0.05  -- 5cm
+
+-- Motion filter (when to add scans)
+TRAJECTORY_BUILDER_2D.motion_filter.max_time_seconds = 5.0
+TRAJECTORY_BUILDER_2D.motion_filter.max_distance_meters = 0.2
+TRAJECTORY_BUILDER_2D.motion_filter.max_angle_radians = math.rad(10)
+
+-- Loop closure
+POSE_GRAPH.optimize_every_n_nodes = 90
+POSE_GRAPH.constraint_builder.min_score = 0.55
+POSE_GRAPH.constraint_builder.global_localization_min_score = 0.60
+
+return options
+```
+
+### Launch File
+
+**File:** `launch/cartographer.launch.py`
+
+```python
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch_ros.actions import Node
+from launch_ros.substitutions import FindPackageShare
+
+def generate_launch_description():
+    # Paths
+    pkg_share = FindPackageShare('mecanum_description').find('mecanum_description')
+    cartographer_config_dir = PathJoinSubstitution([pkg_share, 'config'])
+    configuration_basename = 'cartographer.lua'
+
+    # Arguments
+    resolution = LaunchConfiguration('resolution')
+    publish_period_sec = LaunchConfiguration('publish_period_sec')
+
+    declare_resolution_argument = DeclareLaunchArgument(
+        'resolution',
+        default_value='0.05',
+        description='Resolution of a grid cell in the published occupancy grid')
+
+    declare_publish_period_sec_argument = DeclareLaunchArgument(
+        'publish_period_sec',
+        default_value='1.0',
+        description='OccupancyGrid publishing period')
+
+    # Cartographer node
+    start_cartographer_node = Node(
+        package='cartographer_ros',
+        executable='cartographer_node',
+        name='cartographer_node',
+        output='screen',
+        parameters=[{'use_sim_time': False}],
+        arguments=[
+            '-configuration_directory', cartographer_config_dir,
+            '-configuration_basename', configuration_basename
+        ],
+        remappings=[
+            ('scan', '/scan'),
+            ('odom', '/odometry/filtered'),
+            ('imu', '/imu/data')
+        ]
+    )
+
+    # Occupancy grid node
+    start_cartographer_occupancy_grid_node = Node(
+        package='cartographer_ros',
+        executable='cartographer_occupancy_grid_node',
+        name='cartographer_occupancy_grid_node',
+        output='screen',
+        parameters=[
+            {'use_sim_time': False},
+            {'resolution': resolution},
+            {'publish_period_sec': publish_period_sec}
+        ]
+    )
+
+    return LaunchDescription([
+        declare_resolution_argument,
+        declare_publish_period_sec_argument,
+        start_cartographer_node,
+        start_cartographer_occupancy_grid_node,
+    ])
+```
+
+## Usage
+
+### Launch Cartographer
+
+```bash
+# Launch robot control + localization + LiDAR
+ros2 launch mecanum_description robot_full.launch.py
+
+# Launch Cartographer
+ros2 launch mecanum_description cartographer.launch.py
+```
+
+### RViz Visualization
+
+```bash
+rviz2
+```
+
+**Configuration:**
+1. **Fixed Frame:** `map`
+2. **Add → Map:** Topic `/map`
+3. **Add → LaserScan:** Topic `/scan`
+4. **Add → RobotModel**
+5. **Add → TF**
+
+**Optionally add submaps:**
+- **Add → Map:** Topic `/submap_list` (shows Cartographer's internal submaps)
+
+### Drive and Map
+
+Use teleop to drive robot:
+```bash
+ros2 run teleop_twist_keyboard teleop_twist_keyboard
+```
+
+**Mapping tips:**
+- Moderate speed: 0.3-0.5 m/s
+- Smooth motions (avoid sudden stops)
+- Revisit areas for loop closure
+- Cover entire environment systematically
+
+## Saving Maps
+
+### Finish Trajectory
+
+**When mapping complete:**
+```bash
+ros2 service call /cartographer/finish_trajectory \
+  cartographer_ros_msgs/srv/FinishTrajectory \
+  "{trajectory_id: 0}"
+```
+
+### Save State
+
+**Save Cartographer state (for later continuation):**
+```bash
+ros2 service call /cartographer/write_state \
+  cartographer_ros_msgs/srv/WriteState \
+  "{filename: '/home/user/maps/cartographer_state.pbstream'}"
+```
+
+**File:** `.pbstream` (protobuf stream) contains full SLAM state
+
+### Export to PGM
+
+**Convert to occupancy grid map:**
+```bash
+ros2 run cartographer_ros cartographer_pbstream_to_ros_map \
+  -pbstream_filename=/home/user/maps/cartographer_state.pbstream \
+  -map_filestem=/home/user/maps/my_map
+```
+
+Creates:
+- `my_map.pgm`
+- `my_map.yaml`
+
+## Pure Localization Mode
+
+**Localize in existing map:**
+
+### Localization Config
+
+**File:** `config/cartographer_localization.lua`
+
+```lua
+include "map_builder.lua"
+include "trajectory_builder.lua"
+
+options = {
+  map_builder = MAP_BUILDER,
+  trajectory_builder = TRAJECTORY_BUILDER,
+
+  map_frame = "map",
+  tracking_frame = "base_link",
+  published_frame = "base_link",
+  odom_frame = "odom",
+
+  provide_odom_frame = true,
+  publish_frame_projected_to_2d = true,
+  use_pose_extrapolator = true,
+
+  use_odometry = true,
+  use_nav_sat = false,
+  use_landmarks = false,
+
+  num_laser_scans = 1,
+  num_multi_echo_laser_scans = 0,
+  num_subdivisions_per_laser_scan = 1,
+  num_point_clouds = 0,
+
+  lookup_transform_timeout_sec = 0.2,
+  submap_publish_period_sec = 0.3,
+  pose_publish_period_sec = 5e-3,
+  trajectory_publish_period_sec = 30e-3,
+  rangefinder_sampling_ratio = 1.0,
+  odometry_sampling_ratio = 1.0,
+  fixed_frame_pose_sampling_ratio = 1.0,
+  imu_sampling_ratio = 1.0,
+  landmarks_sampling_ratio = 1.0,
+}
+
+-- Pure localization (no mapping)
+MAP_BUILDER.use_trajectory_builder_2d = true
+TRAJECTORY_BUILDER_2D.use_imu_data = true
+TRAJECTORY_BUILDER_2D.min_range = 0.15
+TRAJECTORY_BUILDER_2D.max_range = 12.0
+
+-- Disable submap creation
+TRAJECTORY_BUILDER_2D.submaps.num_range_data = 999999
+
+-- Only use existing map
+POSE_GRAPH.optimize_every_n_nodes = 0
+
+return options
+```
+
+### Load Map
+
+**Launch with pre-built map:**
+```bash
+ros2 run cartographer_ros cartographer_node \
+  -configuration_directory /path/to/config \
+  -configuration_basename cartographer_localization.lua \
+  -load_state_filename /home/user/maps/cartographer_state.pbstream
+```
+
+**Or in launch file:**
+```python
+arguments=[
+    '-configuration_directory', cartographer_config_dir,
+    '-configuration_basename', 'cartographer_localization.lua',
+    '-load_state_filename', '/home/user/maps/cartographer_state.pbstream'
+]
+```
+
+## Advanced Features
+
+### Multi-Trajectory SLAM
+
+**For multi-robot or multi-session mapping:**
+
+**Start new trajectory:**
+```bash
+ros2 service call /cartographer/start_trajectory \
+  cartographer_ros_msgs/srv/StartTrajectory \
+  "{configuration_directory: '/path/to/config', configuration_basename: 'cartographer.lua'}"
+```
+
+**Merge trajectories:**
+- Automatically handled if robots share landmarks
+- Manual merge via services
+
+### 3D SLAM
+
+**For 3D LiDAR (e.g., Velodyne):**
+
+**Config changes:**
+```lua
+MAP_BUILDER.use_trajectory_builder_2d = false  -- Disable 2D
+MAP_BUILDER.use_trajectory_builder_3d = true   -- Enable 3D
+
+TRAJECTORY_BUILDER_3D.num_accumulated_range_data = 1
+TRAJECTORY_BUILDER_3D.min_range = 0.5
+TRAJECTORY_BUILDER_3D.max_range = 60.0
+TRAJECTORY_BUILDER_3D.submaps.high_resolution = 0.1
+TRAJECTORY_BUILDER_3D.submaps.low_resolution = 0.5
+```
+
+## Tuning Parameters
+
+### Scan Matching
+
+```lua
+-- Local scan matching (fast)
+TRAJECTORY_BUILDER_2D.use_online_correlative_scan_matching = true
+
+-- Ceres optimization weights
+TRAJECTORY_BUILDER_2D.ceres_scan_matcher.translation_weight = 10
+TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight = 40
+```
+
+**Higher translation_weight:** Trust odometry position more
+**Higher rotation_weight:** Trust odometry rotation more
+
+### Loop Closure
+
+```lua
+-- How often to attempt loop closure
+POSE_GRAPH.optimize_every_n_nodes = 90
+
+-- Minimum score for loop closure
+POSE_GRAPH.constraint_builder.min_score = 0.55  # 0.0-1.0
+
+-- Stricter score for global localization
+POSE_GRAPH.constraint_builder.global_localization_min_score = 0.60
+```
+
+**Lower min_score:** More loop closures (risk of false positives)
+**Higher min_score:** Fewer loop closures (more conservative)
+
+### Motion Filter
+
+```lua
+-- Add scan only if robot moved this much
+TRAJECTORY_BUILDER_2D.motion_filter.max_distance_meters = 0.2
+TRAJECTORY_BUILDER_2D.motion_filter.max_angle_radians = math.rad(10)
+TRAJECTORY_BUILDER_2D.motion_filter.max_time_seconds = 5.0
+```
+
+## Comparison: Cartographer vs SLAM Toolbox
+
+| Feature | Cartographer | SLAM Toolbox |
+|---------|--------------|--------------|
+| **Ease of Use** | Complex (Lua config) | Simple (YAML config) |
+| **2D SLAM** | Excellent | Excellent |
+| **3D SLAM** | Supported | No |
+| **Loop Closure** | Advanced | Good |
+| **Real-Time** | Yes (but heavier) | Yes |
+| **CPU Usage** | High | Moderate |
+| **Memory Usage** | High | Moderate |
+| **Multi-Floor** | Excellent | Limited |
+| **Localization Mode** | Yes | Yes |
+| **Map Export** | PGM + PBStream | PGM + PoseGraph |
+| **ROS2 Support** | Good | Excellent |
+
+**Recommendation:**
+- **Start with SLAM Toolbox** (simpler, works well for most cases)
+- **Use Cartographer** if:
+  - Multi-floor building
+  - Need 3D mapping
+  - Have powerful computer
+  - Complex environment with many loop closures
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Cartographer not starting" icon="circle-exclamation">
+    **Debug:**
+    1. Check Lua config syntax:
+       ```bash
+       # Test Lua file
+       lua config/cartographer.lua
+       ```
+
+    2. Check Cartographer node logs:
+       ```bash
+       ros2 node logs /cartographer_node
+       ```
+
+    3. Verify topics remapped correctly:
+       ```bash
+       ros2 topic list
+       # Should see /scan, /odom, /imu
+       ```
+  </Accordion>
+
+  <Accordion title="High CPU usage" icon="microchip">
+    **Solutions:**
+    - Reduce scan frequency:
+      ```lua
+      options.rangefinder_sampling_ratio = 0.5  -- Use 50% of scans
+      ```
+
+    - Increase motion filter thresholds (fewer scans added)
+    - Disable online correlative scan matching (slower but less CPU)
+    - Use async mode if available
+  </Accordion>
+
+  <Accordion title="Map drift / poor quality" icon="wave-sine">
+    **Solutions:**
+    - Tune scan matching weights
+    - Adjust loop closure parameters
+    - Reduce mapping speed
+    - Improve odometry calibration
+    - Enable IMU fusion
+  </Accordion>
+
+  <Accordion title="No loop closures detected" icon="circle-xmark">
+    **Solutions:**
+    - Lower `min_score` threshold
+    - Increase `loop_search_maximum_distance`
+    - Drive slower (better scan matching)
+    - Ensure sufficient feature overlap when revisiting
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Navigation"
+    icon="route"
+    href="/wp4-ros2/navigation/nav2-intro"
+  >
+    Use Cartographer maps for autonomous navigation
+  </Card>
+
+  <Card
+    title="Map Server"
+    icon="server"
+    href="/wp4-ros2/mapping/map-server"
+  >
+    Load and serve maps for navigation
+  </Card>
+
+  <Card
+    title="LiDAR Setup"
+    icon="radar"
+    href="/wp4-ros2/sensors/lidar-setup"
+  >
+    Optimize LiDAR configuration for Cartographer
+  </Card>
+
+  <Card
+    title="Advanced SLAM"
+    icon="graduation-cap"
+    href="https://google-cartographer-ros.readthedocs.io/"
+  >
+    Official Cartographer documentation
+  </Card>
+</CardGroup>
+
+## References
+
+[1] Cartographer ROS: https://google-cartographer-ros.readthedocs.io/
+[2] Cartographer Paper: https://research.google/pubs/pub45466/
+[3] Cartographer Configuration: https://google-cartographer.readthedocs.io/en/latest/configuration.html

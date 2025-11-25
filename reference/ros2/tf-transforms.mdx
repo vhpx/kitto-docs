@@ -1,0 +1,464 @@
+---
+title: 'TF Transforms'
+description: 'Coordinate frame transformations for sensors, localization, and navigation'
+icon: 'arrows-spin'
+---
+
+## Overview
+
+**TF (Transform)** is ROS2's system for managing coordinate frames and transformations between them. Every sensor, link, and map has its own coordinate frame, and TF tracks the spatial relationships between all frames over time.
+
+<CardGroup cols={2}>
+  <Card title="Coordinate Frames" icon="compass">
+    Track position/orientation of sensors relative to robot
+  </Card>
+  <Card title="Transform Tree" icon="sitemap">
+    Hierarchical tree of all coordinate transformations
+  </Card>
+</CardGroup>
+
+---
+
+## Why TF?
+
+**Problem without TF:**
+```
+LiDAR detects obstacle at (1.5m, 0m) in lidar_link frame
+Robot base is at ??? in map frame
+Where is the obstacle in map frame? Manual calculation required!
+```
+
+**Solution with TF:**
+```python
+# TF automatically handles coordinate transformations
+transform = tf_buffer.lookup_transform('map', 'lidar_link', rclpy.time.Time())
+obstacle_in_map = tf2_geometry_msgs.do_transform_point(obstacle_in_lidar, transform)
+```
+
+---
+
+## Coordinate Frames in Mecanum Robot
+
+```
+map (global frame, static)
+  └─ odom (odometry frame, drifts over time)
+      └─ base_link (robot center)
+          ├─ base_footprint (projection on ground)
+          ├─ chassis (robot body)
+          │   ├─ front_left_wheel
+          │   ├─ front_right_wheel
+          │   ├─ rear_left_wheel
+          │   ├─ rear_right_wheel
+          │   ├─ lidar_link (LiDAR sensor)
+          │   └─ imu_link (IMU sensor)
+          └─ camera_link (optional camera)
+```
+
+**Key frames:**
+- **map:** Global reference frame (fixed, doesn't drift)
+- **odom:** Odometry frame (smooth but drifts over time)
+- **base_link:** Robot's center (moves with robot)
+- **lidar_link, imu_link:** Sensor frames (fixed relative to base_link)
+
+---
+
+## TF Broadcasting
+
+### Static Transforms (Fixed Relationships)
+
+For sensors mounted on robot (don't move relative to base_link):
+
+```python title="static_tf_publisher.py"
+from geometry_msgs.msg import TransformStamped
+from rclpy.node import Node
+from tf2_ros import StaticTransformBroadcaster
+
+class StaticTFPublisher(Node):
+    def __init__(self):
+        super().__init__('static_tf_publisher')
+
+        self.broadcaster = StaticTransformBroadcaster(self)
+
+        # LiDAR mounted 10cm above base_link
+        lidar_tf = TransformStamped()
+        lidar_tf.header.stamp = self.get_clock().now().to_msg()
+        lidar_tf.header.frame_id = 'base_link'
+        lidar_tf.child_frame_id = 'lidar_link'
+        lidar_tf.transform.translation.x = 0.0
+        lidar_tf.transform.translation.y = 0.0
+        lidar_tf.transform.translation.z = 0.10  # 10cm up
+        lidar_tf.transform.rotation.w = 1.0  # No rotation
+
+        self.broadcaster.sendTransform(lidar_tf)
+```
+
+**Or use command line:**
+```bash
+ros2 run tf2_ros static_transform_publisher \
+    0 0 0.10 0 0 0 base_link lidar_link
+
+# Args: x y z yaw pitch roll parent_frame child_frame
+```
+
+### Dynamic Transforms (Moving Relationships)
+
+For moving frames (e.g., robot position in world):
+
+```python title="dynamic_tf_publisher.py"
+from geometry_msgs.msg import TransformStamped
+from nav_msgs.msg import Odometry
+from rclpy.node import Node
+from tf2_ros import TransformBroadcaster
+import tf_transformations
+
+class OdometryTFPublisher(Node):
+    def __init__(self):
+        super().__init__('odometry_tf_publisher')
+
+        self.broadcaster = TransformBroadcaster(self)
+
+        # Subscribe to odometry
+        self.odom_sub = self.create_subscription(
+            Odometry,
+            '/odom',
+            self.odom_callback,
+            10
+        )
+
+    def odom_callback(self, msg):
+        # Publish odom -> base_link transform
+        t = TransformStamped()
+        t.header.stamp = self.get_clock().now().to_msg()
+        t.header.frame_id = 'odom'
+        t.child_frame_id = 'base_link'
+
+        # Position from odometry
+        t.transform.translation.x = msg.pose.pose.position.x
+        t.transform.translation.y = msg.pose.pose.position.y
+        t.transform.translation.z = 0.0
+
+        # Orientation from odometry
+        t.transform.rotation = msg.pose.pose.orientation
+
+        self.broadcaster.sendTransform(t)
+```
+
+---
+
+## TF Listening (Using Transforms)
+
+### Example: Transform LiDAR Scan to Map Frame
+
+```python title="tf_listener_example.py"
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import LaserScan
+from geometry_msgs.msg import PointStamped
+from tf2_ros import Buffer, TransformListener
+import tf2_geometry_msgs
+
+class LaserToMapTransformer(Node):
+    def __init__(self):
+        super().__init__('laser_to_map_transformer')
+
+        # TF buffer and listener
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+
+        # Subscribe to laser scan
+        self.scan_sub = self.create_subscription(
+            LaserScan,
+            '/scan',
+            self.scan_callback,
+            10
+        )
+
+    def scan_callback(self, scan_msg):
+        # Transform closest obstacle from lidar_link to map frame
+        try:
+            # Get transform from lidar_link to map
+            transform = self.tf_buffer.lookup_transform(
+                'map',           # Target frame
+                'lidar_link',    # Source frame
+                rclpy.time.Time()  # Latest available transform
+            )
+
+            # Example: First laser reading
+            angle = scan_msg.angle_min
+            distance = scan_msg.ranges[0]
+
+            # Convert to point in lidar_link frame
+            point_lidar = PointStamped()
+            point_lidar.header = scan_msg.header
+            point_lidar.point.x = distance * cos(angle)
+            point_lidar.point.y = distance * sin(angle)
+            point_lidar.point.z = 0.0
+
+            # Transform to map frame
+            point_map = tf2_geometry_msgs.do_transform_point(
+                point_lidar, transform
+            )
+
+            self.get_logger().info(
+                f'Obstacle in map frame: ({point_map.point.x:.2f}, '
+                f'{point_map.point.y:.2f})'
+            )
+
+        except Exception as e:
+            self.get_logger().warn(f'TF lookup failed: {e}')
+```
+
+---
+
+## TF Tree Visualization
+
+### View TF Tree
+
+```bash
+# Generate TF tree PDF
+ros2 run tf2_tools view_frames
+
+# Opens frames.pdf showing all coordinate frames
+```
+
+### Monitor TF in Real-Time
+
+```bash
+# Echo transform between two frames
+ros2 run tf2_ros tf2_echo map base_link
+
+# Output (updates continuously):
+# Translation: [1.234, 0.567, 0.000]
+# Rotation: [0.000, 0.000, 0.123, 0.992]  # Quaternion
+```
+
+### Debugging TF Issues
+
+```bash
+# List all frames
+ros2 run tf2_ros tf2_monitor
+
+# Check if frame exists
+ros2 run tf2_ros tf2_echo parent_frame child_frame
+```
+
+---
+
+## Common TF Patterns
+
+### 1. Robot Localization (map → odom → base_link)
+
+```
+map                         (Global map frame, static)
+  └─ odom                   (Smooth but drifting odometry)
+      └─ base_link          (Robot position)
+
+Publishers:
+- robot_localization (map → odom): EKF or AMCL provides this
+- esp32_bridge (odom → base_link): Wheel odometry provides this
+```
+
+**Why two frames?**
+- **odom → base_link:** Smooth, continuous (from encoders)
+- **map → odom:** Jumps when robot localizes (from AMCL/SLAM)
+- **Separation** prevents sudden jumps in local planning
+
+### 2. Sensor Frames (base_link → sensor_link)
+
+```python title="launch/sensors_tf.launch.py"
+from launch import LaunchDescription
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    return LaunchDescription([
+        # LiDAR: 10cm above base_link, centered
+        Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            arguments=['0', '0', '0.10', '0', '0', '0', 'base_link', 'lidar_link']
+        ),
+
+        # IMU: 5cm above base_link, centered
+        Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            arguments=['0', '0', '0.05', '0', '0', '0', 'base_link', 'imu_link']
+        ),
+
+        # Camera: 15cm above, 5cm forward
+        Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            arguments=['0.05', '0', '0.15', '0', '0', '0', 'base_link', 'camera_link']
+        ),
+    ])
+```
+
+---
+
+## Quaternions vs Euler Angles
+
+TF uses **quaternions** for rotations (avoids gimbal lock):
+
+```python
+from tf_transformations import quaternion_from_euler, euler_from_quaternion
+import math
+
+# Euler angles (roll, pitch, yaw) to quaternion
+roll = 0.0
+pitch = 0.0
+yaw = math.pi / 4  # 45 degrees rotation around Z-axis
+
+q = quaternion_from_euler(roll, pitch, yaw)
+# q = [qx, qy, qz, qw]
+
+# Quaternion to Euler angles
+euler = euler_from_quaternion([qx, qy, qz, qw])
+# euler = (roll, pitch, yaw)
+```
+
+**In launch files:**
+```bash
+# Rotate 90° around Z-axis
+ros2 run tf2_ros static_transform_publisher \
+    0 0 0 0 0 1.5708 base_link lidar_link
+
+# Args: x y z roll pitch yaw (in radians)
+# 90° = π/2 ≈ 1.5708 rad
+```
+
+---
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Frame Naming" icon="tag">
+    - Follow REP-105 conventions
+    - Use descriptive names: `lidar_link`, not `sensor1`
+    - Suffix with `_link` for physical links
+    - Suffix with `_frame` for virtual frames
+  </Card>
+
+  <Card title="Transform Publishing" icon="broadcast-tower">
+    - Static transforms: Use `static_transform_publisher`
+    - Dynamic transforms: Publish at sensor rate (10-50 Hz)
+    - Always use latest timestamp
+    - Don't publish transforms faster than needed
+  </Card>
+
+  <Card title="TF Lookup" icon="magnifying-glass">
+    - Use `lookup_transform()` with try-except
+    - Check `canTransform()` before lookup
+    - Handle timeouts gracefully
+    - Use `rclpy.time.Time()` for latest transform
+  </Card>
+
+  <Card title="Coordinate Systems" icon="compass">
+    - Follow REP-103: X forward, Y left, Z up
+    - Align sensor frames with physical mounting
+    - Validate with `view_frames` tool
+    - Document frame relationships
+  </Card>
+</CardGroup>
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="TF lookup failed: frame does not exist">
+    **Symptoms:** `Could not find transform from 'map' to 'base_link'`
+
+    **Solutions:**
+    1. Check if frame is being published:
+       ```bash
+       ros2 run tf2_ros tf2_monitor
+       ```
+
+    2. View TF tree to find missing link:
+       ```bash
+       ros2 run tf2_tools view_frames
+       ```
+
+    3. Verify publisher node is running:
+       ```bash
+       ros2 node list
+       ```
+
+    4. Check frame names match exactly (case-sensitive)
+  </Accordion>
+
+  <Accordion title="Transform timeout / extrapolation error">
+    **Symptoms:** `Lookup would require extrapolation into the future`
+
+    **Solutions:**
+    1. Use `rclpy.time.Time()` instead of specific timestamp:
+       ```python
+       transform = tf_buffer.lookup_transform(
+           'map', 'base_link', rclpy.time.Time()
+       )
+       ```
+
+    2. Increase transform rate (publish more frequently)
+
+    3. Add timeout and retry:
+       ```python
+       transform = tf_buffer.lookup_transform(
+           'map', 'base_link',
+           rclpy.time.Time(),
+           timeout=rclpy.duration.Duration(seconds=1.0)
+       )
+       ```
+  </Accordion>
+
+  <Accordion title="TF tree disconnected / multiple roots">
+    **Symptoms:** Frames appear disconnected in `view_frames.pdf`
+
+    **Solutions:**
+    1. Ensure single root frame (`map` or `odom`)
+    2. Check all parent-child relationships
+    3. Verify `robot_state_publisher` is running (for URDF frames)
+    4. Look for duplicate frame names
+  </Accordion>
+
+  <Accordion title="Robot jumps/teleports in RViz">
+    **Cause:** Sudden changes in `map → odom` transform
+
+    **Solutions:**
+    1. This is normal when using AMCL localization
+    2. Separate `map → odom` (AMCL) from `odom → base_link` (smooth)
+    3. Local planning uses `odom`, global planning uses `map`
+    4. Don't directly publish `map → base_link`
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="URDF/Xacro" icon="robot" href="/reference/ros2/urdf-xacro">
+    Define robot structure with coordinate frames
+  </Card>
+
+  <Card title="Localization" icon="location-dot" href="/wp4-ros2/localization/ekf">
+    EKF sensor fusion and map → odom transform
+  </Card>
+
+  <Card title="Navigation" icon="map" href="/wp4-ros2/navigation/nav2-introduction">
+    Use TF for path planning and obstacle avoidance
+  </Card>
+
+  <Card title="Data Visualization" icon="chart-line" href="/reference/ros2/data-visualization">
+    View TF tree and transforms in RViz
+  </Card>
+</CardGroup>
+
+---
+
+## References
+
+- [TF2 Tutorials](https://docs.ros.org/en/jazzy/Tutorials/Intermediate/Tf2/Tf2-Main.html)
+- [REP-105: Coordinate Frames](https://www.ros.org/reps/rep-0105.html)
+- [REP-103: Standard Units](https://www.ros.org/reps/rep-0103.html)
+- [tf2 Documentation](http://wiki.ros.org/tf2)

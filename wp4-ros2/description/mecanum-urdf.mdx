@@ -1,0 +1,692 @@
+---
+title: "Mecanum Robot URDF"
+description: "Complete URDF/Xacro model for 4-wheel Mecanum robot with sensors"
+---
+
+## Overview
+
+This guide walks you through creating a complete URDF model for your Mecanum wheel robot using Xacro (XML Macros). The model includes base, wheels, sensors (LiDAR, IMU), and proper coordinate frames.
+
+<Note>
+  **Deliverable D4.1:** URDF robot description is part of WP4 deliverables.
+</Note>
+
+## Robot Dimensions
+
+Based on typical student design:
+
+| Component | Dimension | Value |
+|-----------|-----------|-------|
+| **Base Length** | X | 0.40 m |
+| **Base Width** | Y | 0.30 m |
+| **Base Height** | Z | 0.10 m |
+| **Wheel Radius** | r | 0.05 m |
+| **Wheel Width** | w | 0.04 m |
+| **Wheelbase (L+W)** | 2l | 0.35 m |
+| **LiDAR Height** | | 0.20 m above base |
+| **IMU Position** | | Center of base |
+
+<Warning>
+  **Adjust dimensions** to match YOUR actual robot! Measure with calipers or ruler.
+</Warning>
+
+## Package Structure
+
+Create ROS2 package for robot description:
+
+```bash
+cd ~/ros2_ws/src
+
+# Create package
+ros2 pkg create mecanum_description --build-type ament_cmake \
+  --dependencies urdf xacro
+
+# Create directories
+cd mecanum_description
+mkdir -p urdf meshes launch rviz config
+```
+
+**Final structure:**
+```
+mecanum_description/
+├── urdf/
+│   ├── mecanum_robot.urdf.xacro     (Main file)
+│   ├── materials.xacro              (Colors)
+│   ├── wheel.xacro                  (Wheel macro)
+│   ├── sensors.xacro                (LiDAR, IMU)
+│   └── mecanum_robot.gazebo.xacro   (Gazebo plugins, optional)
+├── meshes/
+│   ├── base.stl
+│   └── wheel.stl
+├── launch/
+│   └── display.launch.py
+├── rviz/
+│   └── urdf.rviz
+├── config/
+│   └── ros2_control.yaml
+├── CMakeLists.txt
+└── package.xml
+```
+
+## Step 1: Materials (Colors)
+
+**File:** `urdf/materials.xacro`
+
+```xml
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- Material definitions for visualization -->
+
+  <material name="black">
+    <color rgba="0.0 0.0 0.0 1.0"/>
+  </material>
+
+  <material name="white">
+    <color rgba="1.0 1.0 1.0 1.0"/>
+  </material>
+
+  <material name="red">
+    <color rgba="0.8 0.0 0.0 1.0"/>
+  </material>
+
+  <material name="green">
+    <color rgba="0.0 0.8 0.0 1.0"/>
+  </material>
+
+  <material name="blue">
+    <color rgba="0.0 0.0 0.8 1.0"/>
+  </material>
+
+  <material name="silver">
+    <color rgba="0.75 0.75 0.75 1.0"/>
+  </material>
+
+  <material name="orange">
+    <color rgba="1.0 0.55 0.0 1.0"/>
+  </material>
+
+</robot>
+```
+
+## Step 2: Wheel Macro
+
+**File:** `urdf/wheel.xacro`
+
+```xml
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- Wheel dimensions -->
+  <xacro:property name="wheel_radius" value="0.05"/>    <!-- 50mm -->
+  <xacro:property name="wheel_width" value="0.04"/>     <!-- 40mm -->
+  <xacro:property name="wheel_mass" value="0.2"/>       <!-- 200g -->
+
+  <!-- Wheel macro: creates wheel link and joint -->
+  <xacro:macro name="mecanum_wheel" params="prefix reflect_x reflect_y">
+
+    <!-- Wheel link -->
+    <link name="${prefix}_wheel">
+      <!-- Visual -->
+      <visual>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>  <!-- Rotate to align cylinder -->
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+        </geometry>
+        <material name="silver"/>
+      </visual>
+
+      <!-- Collision (same as visual for wheels) -->
+      <collision>
+        <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+        </geometry>
+      </collision>
+
+      <!-- Inertia -->
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="${wheel_mass}"/>
+        <inertia
+          ixx="${(1/12) * wheel_mass * (3*wheel_radius*wheel_radius + wheel_width*wheel_width)}"
+          ixy="0.0" ixz="0.0"
+          iyy="${(1/12) * wheel_mass * (3*wheel_radius*wheel_radius + wheel_width*wheel_width)}"
+          iyz="0.0"
+          izz="${(1/2) * wheel_mass * wheel_radius * wheel_radius}"/>
+      </inertial>
+    </link>
+
+    <!-- Joint: base_link to wheel -->
+    <joint name="${prefix}_wheel_joint" type="continuous">
+      <parent link="base_link"/>
+      <child link="${prefix}_wheel"/>
+
+      <!-- Position: ±X (front/rear), ±Y (left/right), -Z (below base) -->
+      <origin xyz="${reflect_x * 0.15} ${reflect_y * 0.175} -${wheel_radius}" rpy="0 0 0"/>
+
+      <!-- Rotation axis: Y-axis for forward/backward rolling -->
+      <axis xyz="0 1 0"/>
+
+      <!-- Friction -->
+      <dynamics damping="0.1" friction="0.1"/>
+    </joint>
+
+  </xacro:macro>
+
+</robot>
+```
+
+<Tip>
+  **Reflect Parameters:**
+  - `reflect_x`: +1 (front), -1 (rear)
+  - `reflect_y`: +1 (left), -1 (right)
+
+  This creates 4 wheels with one macro!
+</Tip>
+
+## Step 3: Sensors
+
+**File:** `urdf/sensors.xacro`
+
+```xml
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- LiDAR sensor -->
+  <xacro:macro name="lidar_sensor">
+
+    <link name="lidar_link">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <cylinder radius="0.04" length="0.06"/>  <!-- RPLIDAR A1M8 size -->
+        </geometry>
+        <material name="black"/>
+      </visual>
+
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <cylinder radius="0.04" length="0.06"/>
+        </geometry>
+      </collision>
+
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.17"/>  <!-- 170g -->
+        <inertia ixx="0.0001" ixy="0.0" ixz="0.0"
+                 iyy="0.0001" iyz="0.0" izz="0.0001"/>
+      </inertial>
+    </link>
+
+    <joint name="lidar_joint" type="fixed">
+      <parent link="base_link"/>
+      <child link="lidar_link"/>
+      <origin xyz="0.0 0.0 0.20" rpy="0 0 0"/>  <!-- 20cm above base -->
+    </joint>
+
+  </xacro:macro>
+
+
+  <!-- IMU sensor -->
+  <xacro:macro name="imu_sensor">
+
+    <link name="imu_link">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <box size="0.03 0.03 0.01"/>  <!-- ICM-20948 board size -->
+        </geometry>
+        <material name="blue"/>
+      </visual>
+
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.01"/>  <!-- 10g -->
+        <inertia ixx="1e-6" ixy="0.0" ixz="0.0"
+                 iyy="1e-6" iyz="0.0" izz="1e-6"/>
+      </inertial>
+    </link>
+
+    <joint name="imu_joint" type="fixed">
+      <parent link="base_link"/>
+      <child link="imu_link"/>
+      <origin xyz="0.0 0.0 0.05" rpy="0 0 0"/>  <!-- Center, inside base -->
+    </joint>
+
+  </xacro:macro>
+
+</robot>
+```
+
+## Step 4: Main Robot File
+
+**File:** `urdf/mecanum_robot.urdf.xacro`
+
+```xml
+<?xml version="1.0"?>
+<robot name="mecanum_robot" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- Include other xacro files -->
+  <xacro:include filename="$(find mecanum_description)/urdf/materials.xacro"/>
+  <xacro:include filename="$(find mecanum_description)/urdf/wheel.xacro"/>
+  <xacro:include filename="$(find mecanum_description)/urdf/sensors.xacro"/>
+
+  <!-- Robot dimensions -->
+  <xacro:property name="base_length" value="0.40"/>
+  <xacro:property name="base_width" value="0.30"/>
+  <xacro:property name="base_height" value="0.10"/>
+  <xacro:property name="base_mass" value="2.5"/>  <!-- kg -->
+
+
+  <!-- Base footprint (virtual link on ground) -->
+  <link name="base_footprint"/>
+
+  <joint name="base_footprint_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 ${wheel_radius}" rpy="0 0 0"/>
+    <!-- Elevate base_link by wheel radius -->
+  </joint>
+
+
+  <!-- Base link (robot chassis) -->
+  <link name="base_link">
+    <!-- Visual -->
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${base_length} ${base_width} ${base_height}"/>
+      </geometry>
+      <material name="orange"/>
+    </visual>
+
+    <!-- Collision (simplified) -->
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${base_length} ${base_width} ${base_height}"/>
+      </geometry>
+    </collision>
+
+    <!-- Inertia (box) -->
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="${base_mass}"/>
+      <inertia
+        ixx="${(1/12) * base_mass * (base_width*base_width + base_height*base_height)}"
+        ixy="0.0" ixz="0.0"
+        iyy="${(1/12) * base_mass * (base_length*base_length + base_height*base_height)}"
+        iyz="0.0"
+        izz="${(1/12) * base_mass * (base_length*base_length + base_width*base_width)}"/>
+    </inertial>
+  </link>
+
+
+  <!-- Instantiate 4 Mecanum wheels -->
+  <!-- Front-left -->
+  <xacro:mecanum_wheel prefix="wheel_FL" reflect_x="1" reflect_y="1"/>
+
+  <!-- Front-right -->
+  <xacro:mecanum_wheel prefix="wheel_FR" reflect_x="1" reflect_y="-1"/>
+
+  <!-- Rear-left -->
+  <xacro:mecanum_wheel prefix="wheel_RL" reflect_x="-1" reflect_y="1"/>
+
+  <!-- Rear-right -->
+  <xacro:mecanum_wheel prefix="wheel_RR" reflect_x="-1" reflect_y="-1"/>
+
+
+  <!-- Add sensors -->
+  <xacro:lidar_sensor/>
+  <xacro:imu_sensor/>
+
+</robot>
+```
+
+## Step 5: Validate URDF
+
+Before proceeding, validate syntax:
+
+```bash
+cd ~/ros2_ws/src/mecanum_description
+
+# Convert xacro to URDF
+xacro urdf/mecanum_robot.urdf.xacro > /tmp/robot.urdf
+
+# Check syntax
+check_urdf /tmp/robot.urdf
+```
+
+**Expected output:**
+```
+robot name is: mecanum_robot
+---------- Successfully Parsed XML ---------------
+Root Link: base_footprint has 1 child(ren)
+    child(1):  base_link
+        child(1):  wheel_FL
+        child(2):  wheel_FR
+        child(3):  wheel_RL
+        child(4):  wheel_RR
+        child(5):  lidar_link
+        child(6):  imu_link
+```
+
+## Step 6: CMakeLists.txt
+
+**File:** `CMakeLists.txt`
+
+```cmake
+cmake_minimum_required(VERSION 3.8)
+project(mecanum_description)
+
+# Find dependencies
+find_package(ament_cmake REQUIRED)
+find_package(urdf REQUIRED)
+find_package(xacro REQUIRED)
+
+# Install directories
+install(
+  DIRECTORY urdf meshes launch rviz config
+  DESTINATION share/${PROJECT_NAME}/
+)
+
+ament_package()
+```
+
+## Step 7: package.xml
+
+**File:** `package.xml`
+
+```xml
+<?xml version="1.0"?>
+<package format="3">
+  <name>mecanum_description</name>
+  <version>1.0.0</version>
+  <description>URDF description for Mecanum wheel robot</description>
+  <maintainer email="student@example.com">Your Name</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>joint_state_publisher</exec_depend>
+  <exec_depend>joint_state_publisher_gui</exec_depend>
+  <exec_depend>urdf</exec_depend>
+  <exec_depend>xacro</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+```
+
+## Step 8: Launch File
+
+**File:** `launch/display.launch.py`
+
+```python
+import os
+from launch import LaunchDescription
+from launch_ros.actions import Node
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution
+from launch_ros.substitutions import FindPackageShare
+
+def generate_launch_description():
+    # Paths
+    pkg_share = FindPackageShare('mecanum_description').find('mecanum_description')
+    urdf_file = PathJoinSubstitution([pkg_share, 'urdf', 'mecanum_robot.urdf.xacro'])
+    rviz_config = PathJoinSubstitution([pkg_share, 'rviz', 'urdf.rviz'])
+
+    # Process xacro to URDF
+    robot_description_content = Command(['xacro ', urdf_file])
+
+    return LaunchDescription([
+        # Declare arguments
+        DeclareLaunchArgument(
+            'use_gui',
+            default_value='true',
+            description='Use joint_state_publisher_gui'
+        ),
+
+        # Robot State Publisher
+        Node(
+            package='robot_state_publisher',
+            executable='robot_state_publisher',
+            name='robot_state_publisher',
+            output='screen',
+            parameters=[{
+                'robot_description': robot_description_content,
+                'use_sim_time': False
+            }]
+        ),
+
+        # Joint State Publisher GUI (for testing joints)
+        Node(
+            package='joint_state_publisher_gui',
+            executable='joint_state_publisher_gui',
+            name='joint_state_publisher_gui',
+            condition=launch.conditions.IfCondition(LaunchConfiguration('use_gui'))
+        ),
+
+        # RViz
+        Node(
+            package='rviz2',
+            executable='rviz2',
+            name='rviz2',
+            output='screen',
+            arguments=['-d', rviz_config]
+        ),
+    ])
+```
+
+## Step 9: RViz Configuration
+
+**File:** `rviz/urdf.rviz`
+
+Create basic RViz config (or let RViz generate it):
+
+```bash
+# Launch once, configure RViz manually, then save config
+ros2 launch mecanum_description display.launch.py
+```
+
+**In RViz:**
+1. Set Fixed Frame: `base_footprint`
+2. Add displays:
+   - RobotModel
+   - TF
+   - Grid
+3. Save config: File → Save Config As → `rviz/urdf.rviz`
+
+## Step 10: Build and Test
+
+```bash
+# Build package
+cd ~/ros2_ws
+colcon build --packages-select mecanum_description
+source install/setup.bash
+
+# Launch visualization
+ros2 launch mecanum_description display.launch.py
+```
+
+**Expected Result:**
+- RViz opens
+- Orange base box visible
+- 4 silver wheels at corners
+- Black LiDAR cylinder on top
+- Blue IMU inside base
+- TF frames shown (RGB axes)
+
+<img
+  src="/images/mecanum-urdf-rviz.png"
+  alt="Mecanum robot URDF in RViz"
+  caption="Complete Mecanum robot model visualized in RViz"
+/>
+
+## Advanced: Using CAD Meshes
+
+Replace simple shapes with 3D models from Fusion 360:
+
+### Export from Fusion 360
+
+1. Right-click component → Save as STL
+2. **Units:** mm
+3. **Refinement:** Medium
+4. Save to `mecanum_description/meshes/`
+
+### Update URDF
+
+```xml
+<visual>
+  <origin xyz="0 0 0" rpy="0 0 0"/>
+  <geometry>
+    <!-- Replace box with mesh -->
+    <mesh filename="package://mecanum_description/meshes/base.stl" scale="0.001 0.001 0.001"/>
+    <!-- Scale 0.001 converts mm to m -->
+  </geometry>
+  <material name="orange"/>
+</visual>
+
+<!-- Keep collision simple! -->
+<collision>
+  <origin xyz="0 0 0" rpy="0 0 0"/>
+  <geometry>
+    <box size="${base_length} ${base_width} ${base_height}"/>
+  </geometry>
+</collision>
+```
+
+<Warning>
+  **Performance:** Use meshes for visual only. Keep collision geometry simple (box, cylinder) for fast physics computation!
+</Warning>
+
+## Coordinate Frame Summary
+
+After building URDF, your TF tree:
+
+```
+base_footprint (on ground, Z=0)
+    └── base_link (elevated by wheel_radius)
+        ├── wheel_FL
+        ├── wheel_FR
+        ├── wheel_RL
+        ├── wheel_RR
+        ├── lidar_link (20cm above base)
+        └── imu_link (center of base)
+```
+
+**Check TF tree:**
+```bash
+# Install if needed
+sudo apt install ros-jazzy-tf2-tools
+
+# Generate TF tree diagram
+ros2 run tf2_tools view_frames
+
+# Output: frames.pdf
+evince frames.pdf
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Wheels floating or underground" icon="arrow-down">
+    **Cause:** Incorrect origin Z value
+
+    **Fix:** In wheel macro, check:
+    ```xml
+    <origin xyz="${reflect_x * 0.15} ${reflect_y * 0.175} -${wheel_radius}" rpy="0 0 0"/>
+    ```
+
+    Z should be negative wheel_radius to place wheels below base.
+  </Accordion>
+
+  <Accordion title="Wheels rotated wrong" icon="rotate">
+    **Cause:** Incorrect rpy in visual/collision
+
+    **Fix:**
+    ```xml
+    <!-- Cylinder axis along Y requires rotation -->
+    <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+    ```
+  </Accordion>
+
+  <Accordion title="Package not found errors" icon="folder-open">
+    **Cause:** Package not built or sourced
+
+    **Fix:**
+    ```bash
+    cd ~/ros2_ws
+    colcon build --packages-select mecanum_description
+    source install/setup.bash
+    ```
+  </Accordion>
+
+  <Accordion title="Gazebo physics explosion" icon="explosion">
+    **Cause:** Missing or incorrect inertia
+
+    **Fix:**
+    - Ensure ALL links have `<inertial>` tag
+    - Use positive mass values
+    - Check inertia calculations
+    - Use reasonable values (1e-6 for tiny parts, not 0)
+  </Accordion>
+</AccordionGroup>
+
+## Testing Checklist
+
+- [ ] URDF parses without errors (`check_urdf`)
+- [ ] All links visible in RViz
+- [ ] Wheels positioned correctly (4 corners)
+- [ ] LiDAR on top of base
+- [ ] TF frames shown (base_footprint → base_link → wheels/sensors)
+- [ ] Joint sliders work (if using continuous joints)
+- [ ] No parts floating or underground
+- [ ] Coordinate axes follow ROS convention (X forward, Z up)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="URDF Visualization"
+    icon="eye"
+    href="/wp4-ros2/description/visualization"
+  >
+    Advanced RViz configuration and testing
+  </Card>
+
+  <Card
+    title="ros2_control Setup"
+    icon="gamepad"
+    href="/wp4-ros2/control/ros2-control-intro"
+  >
+    Add hardware interfaces for motor control
+  </Card>
+
+  <Card
+    title="Gazebo Simulation"
+    icon="cubes"
+    href="/wp4-ros2/simulation/gazebo-setup"
+  >
+    Test robot in physics simulator (optional)
+  </Card>
+
+  <Card
+    title="Xacro Reference"
+    icon="code"
+    href="/reference/ros2/xacro"
+  >
+    Learn advanced Xacro techniques
+  </Card>
+</CardGroup>
+
+## References
+
+[1] URDF Tutorials: https://docs.ros.org/en/jazzy/Tutorials/Intermediate/URDF/URDF-Main.html
+[2] Xacro Documentation: http://wiki.ros.org/xacro
+[3] ROS REP-103 (Coordinate Frames): https://www.ros.org/reps/rep-0103.html

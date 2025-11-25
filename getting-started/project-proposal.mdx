@@ -1,0 +1,625 @@
+---
+title: "Project Proposal"
+description: "Guidelines for writing your EEET2610 project proposal document"
+---
+
+## Overview
+
+The **Project Proposal** is your first major deliverable and sets the foundation for your entire project. It demonstrates that you understand the project scope, have researched the background, and have a clear plan to complete all work packages on time.
+
+<Note>
+  **Submission:** Check Canvas for exact deadline and submission format. Typically due Week 3-4.
+</Note>
+
+## Document Structure
+
+Your project proposal must include the following sections in order:
+
+### Required Sections
+
+<Steps>
+  <Step title="1. Abstract">
+    **Length:** 150-250 words
+    **Content:**
+    - Brief project overview (1-2 sentences)
+    - Main objectives (2-3 sentences)
+    - Approach/methodology (2-3 sentences)
+    - Expected outcomes (1-2 sentences)
+
+    **Example:**
+    ```
+    This project aims to design and build an autonomous Mecanum wheel
+    robot capable of omnidirectional movement and navigation. The robot
+    will utilize ESP32 microcontroller for motor control, IMU for
+    orientation sensing, and LiDAR for environment mapping. The system
+    will be implemented using ROS2 framework for autonomous navigation
+    using SLAM algorithms. Upon completion, the robot will demonstrate
+    autonomous navigation in indoor environments and address Sustainable
+    Development Goal X through [specific application]. This project
+    integrates mechanical design, embedded systems, and autonomous
+    robotics, contributing to team members' engineering portfolios.
+    ```
+  </Step>
+
+  <Step title="2. Introduction">
+    **Length:** 1-2 pages
+    **Content:**
+    - Project context and motivation
+    - Background on Mecanum wheels and mobile robotics
+    - Relevance to Sustainable Development Goals
+    - Project scope and boundaries
+    - Document structure overview
+
+    **Key Points:**
+    - Why are Mecanum robots important?
+    - What are the real-world applications?
+    - How does this project benefit your learning?
+  </Step>
+
+  <Step title="3. Literature Review">
+    **Length:** 2-4 pages
+    **Content:**
+    - Mecanum wheel kinematics research
+    - Mobile robot control systems (PID, state-space)
+    - SLAM algorithms and autonomous navigation
+    - Similar robot implementations
+    - ROS2 framework and packages
+    - Component selection justification
+
+    <Warning>
+      **References:** Minimum 80% from peer-reviewed journal articles. Web articles should not exceed 20% of your references.
+    </Warning>
+
+    **Example Topics:**
+    - [1] Omnidirectional wheeled mobile robots (Kanjanawanishkul, 2015)
+    - [2] Mecanum drive modeling and control (Watson et al., 2021)
+    - [3] SLAM for mobile robots (relevant paper)
+    - [4] ROS2 navigation stack (relevant paper or documentation)
+  </Step>
+
+  <Step title="4. Tasks Description">
+    **Length:** 3-5 pages
+    **Content:** Detailed description of each work package
+
+    For each WP, include:
+    - Objectives
+    - Methodology/approach
+    - Tools and software required
+    - Expected deliverables
+    - Success criteria
+
+    **Structure:**
+    - **WP1:** MATLAB Simulation (kinematics, trajectory planning)
+    - **WP2:** Prototyping (CAD, PCB design)
+    - **WP3:** Embedded Systems (ESP32, motor control, IMU)
+    - **WP4:** ROS2 Implementation (LiDAR, SLAM, navigation, camera)
+    - **WP5:** Integration and Presentation
+
+    <Tip>
+      Base this section on the [Course Overview](/getting-started/course-overview) work package descriptions.
+    </Tip>
+  </Step>
+
+  <Step title="5. Time Management (Gantt Chart)">
+    **Format:** Visual Gantt chart + explanation
+    **Content:**
+    - Timeline for all 12 weeks
+    - Each work package broken into tasks
+    - Milestones and deadlines
+    - Dependencies between tasks
+    - Buffer time for delays
+
+    **Tools:**
+    - Microsoft Project
+    - GanttProject (free)
+    - TeamGantt (online)
+    - Excel/Google Sheets
+    - Notion (with timeline view)
+
+    **Example Structure:**
+    ```
+    Week 1-2: Project proposal, team formation, component research
+    Week 2-4: WP1 MATLAB kinematics and simulation
+    Week 2-6: WP2 CAD design, PCB design, component ordering
+    Week 5-8: WP3 ESP32 setup, motor control, PID tuning
+    Week 5-10: WP4 ROS2 installation, URDF, controllers
+    Week 8-11: WP4 LiDAR, SLAM, navigation
+    Week 11-12: WP5 Integration, testing, presentation prep
+    ```
+
+    <Note>
+      **Overlap:** Show parallel work streams. Multiple team members work on different WPs simultaneously.
+    </Note>
+  </Step>
+
+  <Step title="6. Resources Management (Bill of Materials)">
+    **Format:** Detailed BOM table
+    **Content:**
+    - All hardware components with specifications
+    - Quantities needed (include spares!)
+    - Unit costs and total cost
+    - Supplier/vendor information
+    - Links to datasheets
+    - Lead time for delivery
+
+    **Example BOM Table:**
+
+    | Item | Specifications | Qty | Unit Cost | Total | Supplier | Lead Time | Notes |
+    |------|---------------|-----|-----------|-------|----------|-----------|-------|
+    | ESP32 DevKit | 38-pin, WiFi/BT | 2 | $8 | $16 | Amazon | 3-5 days | 1 spare |
+    | DC Motor | 12V, 333RPM, encoder | 5 | $15 | $75 | RobotShop | 1-2 weeks | 1 spare |
+    | IBT-2 Motor Driver | BTS7960, 43A | 5 | $7 | $35 | AliExpress | 2-3 weeks | 1 spare |
+    | IMU | ICM-20948, 9-axis | 2 | $12 | $24 | Adafruit | 1 week | 1 spare |
+    | LiDAR | RPLIDAR A1M8 | 1 | $99 | $99 | Slamtec | 1 week | - |
+    | Raspberry Pi | RPi 4 8GB or RPi 5 | 1 | $75 | $75 | Official | 1 week | - |
+    | Battery | LiPo 3S 5000mAh | 2 | $45 | $90 | HobbyKing | 1-2 weeks | 1 spare |
+    | Mecanum Wheels | 100mm diameter | 4 | $25 | $100 | Amazon | 1 week | - |
+    | ... | ... | ... | ... | ... | ... | ... | ... |
+    | **TOTAL** | | | | **~$600** | | | |
+
+    <Warning>
+      **Lead Times:** Component shipping can take 2-4 weeks! Order immediately after proposal approval.
+    </Warning>
+  </Step>
+
+  <Step title="7. Stakeholder Analysis">
+    **Length:** 1-2 pages
+    **Content:**
+    - Identify potential stakeholders
+    - Their interests in the project
+    - How project addresses their needs
+    - Communication plan with stakeholders
+
+    **Example Stakeholders:**
+    - **Course Instructors:** Assess learning outcomes, provide guidance
+    - **Industry Partners:** Potential employers, collaboration opportunities
+    - **End Users:** Warehouse operators, healthcare facilities
+    - **SDG Beneficiaries:** Communities addressed by your solution
+    - **University:** Showcase student capabilities
+
+    **Stakeholder Table:**
+
+    | Stakeholder | Interest | Impact on Project | Engagement Plan |
+    |-------------|----------|-------------------|-----------------|
+    | Course Instructor | Student learning, project completion | High - grading, guidance | Weekly tutorials, office hours |
+    | Industry Guest | Recruitment, innovation | Medium - feedback, networking | Demonstration day presentation |
+    | Warehouse Manager | AGV solutions | Low - potential application | Final presentation scenario |
+  </Step>
+
+  <Step title="8. Risk Analysis">
+    **Format:** Risk matrix table
+    **Content:**
+    - Identify potential risks
+    - Probability (Low/Medium/High)
+    - Impact (Low/Medium/High)
+    - Mitigation strategies
+
+    **Example Risks Table:**
+
+    | Risk | Probability | Impact | Mitigation Strategy |
+    |------|------------|--------|---------------------|
+    | Component delivery delays | High | High | Order immediately, include buffer in timeline |
+    | ESP32 damage during testing | Medium | Medium | Purchase 2 units, follow safety procedures |
+    | Team member drops course | Low | High | Cross-training, documentation, early detection |
+    | ROS2 installation issues | Medium | Medium | Start early, use VM, consult tutorials |
+    | Motor driver failure | Medium | High | Buy spare, understand H-bridge operation |
+    | 3D print failure | Medium | Medium | Test design early, max 2 prints allowed |
+    | GitHub merge conflicts | High | Low | Use branches, regular communication |
+    | LiDAR poor performance | Low | High | Test in various environments, tune parameters |
+    | Battery fire hazard | Low | Very High | Use LiPo safety bag, proper charging, monitoring |
+
+    **Risk Priority = Probability × Impact**
+
+    Focus mitigation on High-High and High-Medium risks.
+  </Step>
+
+  <Step title="9. Team Introduction">
+    **Length:** 1 page
+    **Content:**
+    - Team name (optional but fun!)
+    - Each member's profile:
+      - Name and student ID
+      - Program/major
+      - Relevant skills and experience
+      - Role in the project
+      - Contact information (email)
+
+    **Example:**
+    ```markdown
+    ### Team Alpha-Bot Members
+
+    **Alice Chen** - s1234567
+    - Program: Mechanical Engineering
+    - Skills: SolidWorks, 3D printing, manufacturing
+    - Role: Mechanical Lead (WP2 CAD design and assembly)
+    - Email: alice.chen@student.edu
+
+    **Bob Kumar** - s2345678
+    - Program: Electrical Engineering
+    - Skills: Circuit design, PCB layout, power systems
+    - Role: Electronics Lead (WP2 PCB, power management)
+    - Email: bob.kumar@student.edu
+
+    [Continue for all members...]
+    ```
+  </Step>
+
+  <Step title="10. Team Contract">
+    **Format:** Signed contract (see [Team Management](/getting-started/team-management))
+    **Content:**
+    - Meeting schedule
+    - Communication protocols
+    - Participation requirements
+    - Task distribution
+    - Decision making process
+    - Conflict resolution
+    - Consequences for non-compliance
+    - All signatures and dates
+
+    <Note>
+      See the [Team Management](/getting-started/team-management) page for a complete team contract template.
+    </Note>
+  </Step>
+
+  <Step title="11. Conclusion">
+    **Length:** 1 paragraph
+    **Content:**
+    - Summarize project goals
+    - Reinforce team readiness
+    - Express confidence in successful completion
+
+    **Example:**
+    ```
+    This project proposal outlines a comprehensive plan to design and build
+    an autonomous Mecanum wheel robot over a 12-week period. Our team has
+    conducted thorough research, identified necessary components, and created
+    a detailed timeline with risk mitigation strategies. With our diverse
+    skill sets and commitment to effective teamwork, we are confident in
+    delivering a functional robot that demonstrates autonomous navigation and
+    addresses real-world challenges aligned with Sustainable Development Goals.
+    ```
+  </Step>
+
+  <Step title="12. References">
+    **Format:** IEEE or APA citation style (confirm with instructor)
+    **Content:**
+    - All sources cited in the document
+    - Properly formatted citations
+    - Minimum 80% peer-reviewed journals
+    - Max 20% web sources
+
+    **Example IEEE Format:**
+    ```
+    [1] K. Kanjanawanishkul, "Omnidirectional wheeled mobile robots: Wheel
+        types and practical applications," International Journal of Advanced
+        Mechatronic Systems, vol. 6, no. 6, pp. 289–302, Feb. 2015, doi:
+        10.1504/IJAMECHS.2015.074788.
+
+    [2] M. T. Watson, D. T. Gladwin, and T. J. Prescott, "Collinear Mecanum
+        Drive: Modeling, Analysis, Partial Feedback Linearization, and
+        Nonlinear Control," IEEE Transactions on Robotics, vol. 37, no. 2,
+        pp. 642–658, Apr. 2021, doi: 10.1109/TRO.2020.2977878.
+    ```
+
+    <Tip>
+      Use reference managers like **Zotero**, **Mendeley**, or **EndNote** to organize citations.
+    </Tip>
+  </Step>
+
+  <Step title="13. Appendices (if any)">
+    **Optional but helpful:**
+    - Detailed datasheets
+    - Additional calculations
+    - Preliminary designs/sketches
+    - Survey results
+    - Extended BOM with links
+  </Step>
+</Steps>
+
+## Formatting Requirements
+
+<Warning>
+  **Important:** Your document must follow the provided template. If it doesn't look like the course template, you're using the wrong format!
+</Warning>
+
+### Document Style
+
+- **Font:** Times New Roman or similar serif font
+- **Size:** 12pt for body text, 14pt for headings
+- **Spacing:** 1.5 line spacing
+- **Margins:** 1 inch (2.54 cm) all sides
+- **Page Numbers:** Bottom center or top right
+- **Headers:** Include course code and team name
+
+### Figures and Tables
+
+<AccordionGroup>
+  <Accordion title="Figures" icon="image">
+    - **Quality:** High resolution, readable
+    - **Position:** Centered on page
+    - **Caption:** Below figure, numbered sequentially (Figure 1, Figure 2, ...)
+    - **Reference:** All figures must be referenced in text ("as shown in Figure 3...")
+    - **Label:** Descriptive caption explaining what the figure shows
+
+    **Example:**
+    ```markdown
+    As shown in Figure 1, the Mecanum wheel consists of rollers at 45°
+    angles to the wheel axis.
+
+    [Image here - centered]
+
+    Figure 1: Mecanum wheel structure showing angled rollers that enable
+    omnidirectional movement (Image source: [citation])
+    ```
+  </Accordion>
+
+  <Accordion title="Tables" icon="table">
+    - **Position:** Centered on page
+    - **Caption:** Above table, numbered sequentially (Table 1, Table 2, ...)
+    - **Format:** Clean lines, consistent spacing
+    - **Reference:** Cited in text ("see Table 2 for component costs")
+
+    **Example:**
+    ```markdown
+    Table 1: Comparison of motor driver options for DC motor control
+
+    [Table here - centered]
+
+    As shown in Table 1, the IBT-2 driver was selected due to high current
+    capacity and cost-effectiveness.
+    ```
+  </Accordion>
+
+  <Accordion title="Equations" icon="function">
+    - **Numbering:** Sequential, right-aligned in parentheses
+    - **Format:** Use equation editor or LaTeX
+    - **Explanation:** Define all variables immediately after equation
+
+    **Example:**
+    ```
+    The forward kinematics of the Mecanum robot is given by:
+
+        V_x = (ω₁ + ω₂ + ω₃ + ω₄) × r / 4        (1)
+
+    where V_x is the robot velocity in x-direction (m/s), ωᵢ is the angular
+    velocity of wheel i (rad/s), and r is the wheel radius (m).
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Writing Tips
+
+### Do's ✅
+
+<CardGroup cols={2}>
+  <Card title="Be Specific" icon="crosshairs">
+    Instead of "we'll use sensors," write "we'll use RPLIDAR A1M8 for 360° scanning with 8m range"
+  </Card>
+
+  <Card title="Use Technical Language" icon="flask">
+    This is an engineering document. Use proper terminology: "quadrature encoder," "PWM," "SLAM," etc.
+  </Card>
+
+  <Card title="Show Feasibility" icon="check">
+    Demonstrate that your plan is realistic with timeline, budget, and available resources
+  </Card>
+
+  <Card title="Cite Sources" icon="quote-left">
+    Every claim should be supported by references, especially in literature review
+  </Card>
+</CardGroup>
+
+### Don'ts ❌
+
+<CardGroup cols={2}>
+  <Card title="Avoid Vague Statements" icon="circle-xmark">
+    Don't say "we'll try to implement navigation." Say "we'll implement Nav2 stack with DWB local planner"
+  </Card>
+
+  <Card title="Don't Plagiarize" icon="ban">
+    All text must be original or properly quoted and cited. Use plagiarism checkers!
+  </Card>
+
+  <Card title="Don't Ignore Template" icon="file-excel">
+    If your document doesn't match the template format, it will be marked down
+  </Card>
+
+  <Card title="Don't Underestimate Timeline" icon="clock">
+    Be realistic about what's achievable in 12 weeks. Include buffer time!
+  </Card>
+</CardGroup>
+
+## Common Mistakes
+
+<AccordionGroup>
+  <Accordion title="1. Insufficient Literature Review" icon="book">
+    **Problem:** Only 2-3 references, all from websites
+
+    **Solution:**
+    - Use Google Scholar, IEEE Xplore, university library databases
+    - Aim for 10-15 quality references
+    - 80% should be peer-reviewed journal or conference papers
+  </Accordion>
+
+  <Accordion title="2. Unrealistic Timeline" icon="calendar">
+    **Problem:** Planning to complete WP4 (ROS2) in 1 week
+
+    **Solution:**
+    - ROS2 setup alone takes 1-2 weeks
+    - SLAM and navigation need 4-6 weeks
+    - Build in 20% buffer time for delays
+  </Accordion>
+
+  <Accordion title="3. Missing Components in BOM" icon="list">
+    **Problem:** Forgetting wires, connectors, fasteners, power supply
+
+    **Solution:**
+    - Include EVERYTHING: screws, jumper wires, heat shrink, etc.
+    - Add 10-15% contingency budget
+    - List spare components
+  </Accordion>
+
+  <Accordion title="4. No Risk Mitigation" icon="triangle-exclamation">
+    **Problem:** Identifying risks but no mitigation strategies
+
+    **Solution:**
+    - For each risk, provide specific, actionable mitigation
+    - Show you've thought through contingencies
+  </Accordion>
+
+  <Accordion title="5. Weak Team Contract" icon="file-contract">
+    **Problem:** Vague rules like "we'll meet regularly"
+
+    **Solution:**
+    - Be specific: "Every Friday 1:30-3:00 PM in Room 205"
+    - Include clear consequences
+    - All members must sign
+  </Accordion>
+</AccordionGroup>
+
+## Assessment Rubric
+
+Your proposal will likely be graded on:
+
+| Criterion | Weight | Description |
+|-----------|--------|-------------|
+| **Technical Content** | 30% | Quality of literature review, task descriptions, feasibility |
+| **Planning** | 25% | Gantt chart realism, BOM completeness, risk analysis |
+| **Team Organization** | 20% | Team contract quality, role assignments, communication plan |
+| **Writing Quality** | 15% | Clarity, grammar, technical writing, proper citations |
+| **Formatting** | 10% | Template compliance, figures, tables, professional appearance |
+
+<Note>
+  Check Canvas for the official rubric - it may differ slightly from this general guideline.
+</Note>
+
+## Submission Checklist
+
+Before submitting, verify:
+
+<Steps>
+  <Step title="Content Complete">
+    - [ ] All 12+ sections present
+    - [ ] Team contract signed by all members
+    - [ ] Gantt chart included
+    - [ ] BOM table complete with costs
+    - [ ] Risk analysis table filled
+    - [ ] Minimum references met (10-15, 80% journals)
+  </Step>
+
+  <Step title="Formatting Correct">
+    - [ ] Follows provided template
+    - [ ] All figures numbered and captioned
+    - [ ] All tables numbered and captioned
+    - [ ] Page numbers present
+    - [ ] Consistent font and spacing
+  </Step>
+
+  <Step title="Quality Checks">
+    - [ ] Spell-check run
+    - [ ] Grammar check completed
+    - [ ] Plagiarism check passed
+    - [ ] All figures referenced in text
+    - [ ] All references cited in text
+  </Step>
+
+  <Step title="File Preparation">
+    - [ ] Saved as PDF
+    - [ ] Filename: TeamName_ProjectProposal_EEET2610.pdf
+    - [ ] File size reasonable (&lt;10 MB)
+    - [ ] All fonts embedded
+  </Step>
+
+  <Step title="Team Review">
+    - [ ] All team members reviewed
+    - [ ] Contributions acknowledged
+    - [ ] Final approval from all members
+  </Step>
+</Steps>
+
+## Tools and Resources
+
+### Document Preparation
+
+- **Microsoft Word** - Use provided template
+- **Google Docs** - Collaborative editing (export to Word format)
+- **LaTeX (Overleaf)** - Professional typesetting for advanced users
+- **Grammarly** - Grammar and spell checking
+- **Turnitin** - Plagiarism detection (check if available)
+
+### Gantt Charts
+
+- **Microsoft Project** - Industry standard (check university license)
+- **GanttProject** - Free, open source
+- **TeamGantt** - Online collaborative tool
+- **Notion** - Timeline database view
+
+### Citations
+
+- **Zotero** - Free reference manager (recommended)
+- **Mendeley** - Free with PDF management
+- **EndNote** - Professional tool (check university license)
+- **Google Scholar** - Finding papers and citations
+
+### Research Databases
+
+- **IEEE Xplore** - Engineering papers (free through university)
+- **Google Scholar** - Broad search
+- **ResearchGate** - Academic social network
+- **ArXiv** - Preprints (robotics, computer science)
+- **University Library** - Check your library's digital resources
+
+## Example Timeline for Proposal
+
+| Week | Tasks |
+|------|-------|
+| **Week 1** | Form team, brainstorm ideas, assign proposal sections |
+| **Week 1-2** | Literature review, research components, find references |
+| **Week 2** | Create Gantt chart, draft BOM, write team contract |
+| **Week 2-3** | Write individual sections, compile document |
+| **Week 3** | Team review, revisions, formatting |
+| **Week 3-4** | Final checks, submit before deadline |
+
+<Tip>
+  **Start Early!** Don't wait until the week before deadline. Good research and writing take time.
+</Tip>
+
+## After Submission
+
+Once your proposal is submitted:
+
+1. **Begin component ordering** - Don't wait for grading. Start ordering immediately!
+2. **Set up development environments** - Install MATLAB, CAD software, ESP32 tools
+3. **Start WP1** - Begin MATLAB kinematics work
+4. **Review feedback** - When graded, carefully review instructor comments
+5. **Adjust plan** - If instructor suggests changes, update your timeline
+
+<Note>
+  Your proposal is a living document. You may need to adjust plans as the project progresses - that's normal!
+</Note>
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card
+    title="Course Overview"
+    icon="book-open"
+    href="/getting-started/course-overview"
+  >
+    Review work package details
+  </Card>
+  <Card
+    title="Team Management"
+    icon="users"
+    href="/getting-started/team-management"
+  >
+    Create your team contract
+  </Card>
+  <Card
+    title="Start WP1"
+    icon="chart-line"
+    href="/wp1-simulation/introduction"
+  >
+    Begin MATLAB simulation
+  </Card>
+</CardGroup>

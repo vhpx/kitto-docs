@@ -1,0 +1,580 @@
+---
+title: 'VSCode & PlatformIO'
+description: 'Complete guide to Visual Studio Code and PlatformIO IDE for ESP32 development'
+icon: 'code'
+---
+
+## Overview
+
+Visual Studio Code (VSCode) with PlatformIO IDE is the recommended development environment for embedded programming on the ESP32 microcontroller. This combination provides a professional-grade embedded development workflow with powerful features like IntelliSense, debugging, serial monitoring, and library management.
+
+<CardGroup cols={2}>
+  <Card title="VSCode Features" icon="window-maximize">
+    Modern code editor with syntax highlighting, Git integration, and extensions
+  </Card>
+  <Card title="PlatformIO Features" icon="microchip">
+    Embedded development platform with build automation, library manager, and serial monitor
+  </Card>
+</CardGroup>
+
+---
+
+## Visual Studio Code
+
+### Installation
+
+<Steps>
+  <Step title="Download VSCode">
+    Download from [code.visualstudio.com](https://code.visualstudio.com/)
+
+    **Supported platforms:**
+    - Windows 10/11 (x64, ARM64)
+    - macOS 10.15+ (Intel, Apple Silicon)
+    - Ubuntu 20.04+ / Debian 10+
+  </Step>
+
+  <Step title="Install VSCode">
+    **Windows:** Run the installer `.exe` file
+
+    **macOS:** Drag `Visual Studio Code.app` to Applications folder
+
+    **Linux:**
+    ```bash
+    sudo dpkg -i code_*.deb
+    # Or using snap
+    sudo snap install --classic code
+    ```
+  </Step>
+
+  <Step title="Launch VSCode">
+    Open VSCode and verify installation by checking **Help → About**
+  </Step>
+</Steps>
+
+### Essential Extensions
+
+Beyond PlatformIO, these extensions enhance your development experience:
+
+| Extension | Purpose | Command |
+|-----------|---------|---------|
+| **PlatformIO IDE** | Embedded development (required) | `ext install platformio.platformio-ide` |
+| **C/C++** | IntelliSense and debugging | `ext install ms-vscode.cpptools` |
+| **GitLens** | Advanced Git integration | `ext install eamodio.gitlens` |
+| **Serial Monitor** | Alternative serial port tool | `ext install ms-vscode.vscode-serial-monitor` |
+| **Doxygen** | Code documentation | `ext install cschlosser.doxdocgen` |
+
+<Tip>
+Install extensions from the Extensions sidebar (Ctrl+Shift+X / Cmd+Shift+X) or via Command Palette (Ctrl+Shift+P / Cmd+Shift+P)
+</Tip>
+
+### VSCode Configuration
+
+Recommended settings for embedded development:
+
+```json title="settings.json"
+{
+  // Editor settings
+  "editor.tabSize": 2,
+  "editor.insertSpaces": true,
+  "editor.formatOnSave": true,
+  "editor.rulers": [80, 120],
+
+  // C/C++ settings
+  "C_Cpp.intelliSenseEngine": "default",
+  "C_Cpp.clang_format_style": "Google",
+
+  // File associations
+  "files.associations": {
+    "*.ino": "cpp",
+    "*.h": "c",
+    "*.tpp": "cpp"
+  },
+
+  // Terminal settings
+  "terminal.integrated.defaultProfile.windows": "Command Prompt",
+  "terminal.integrated.fontSize": 12,
+
+  // Git settings
+  "git.autofetch": true,
+  "git.confirmSync": false
+}
+```
+
+<Note>
+Access settings via **File → Preferences → Settings** (Windows/Linux) or **Code → Preferences → Settings** (macOS)
+</Note>
+
+---
+
+## PlatformIO IDE
+
+### Installation
+
+<Steps>
+  <Step title="Open Extensions">
+    Click Extensions icon in sidebar or press `Ctrl+Shift+X` / `Cmd+Shift+X`
+  </Step>
+
+  <Step title="Search PlatformIO">
+    Search for "PlatformIO IDE" and click **Install**
+
+    <Warning>
+    Installation may take 5-10 minutes as it downloads toolchains and packages (~500MB)
+    </Warning>
+  </Step>
+
+  <Step title="Reload VSCode">
+    Click **Reload** when prompted, or restart VSCode manually
+  </Step>
+
+  <Step title="Verify Installation">
+    You should see the PlatformIO icon (alien head) in the sidebar
+  </Step>
+</Steps>
+
+### PlatformIO Home
+
+Access PlatformIO Home by clicking the **PIO Home** icon (house) in the bottom status bar.
+
+**Key sections:**
+- **Projects:** Create and manage PlatformIO projects
+- **Libraries:** Browse and install 10,000+ embedded libraries
+- **Boards:** View supported development boards (ESP32, Arduino, STM32, etc.)
+- **Platforms:** Manage development platforms and frameworks
+- **Devices:** Monitor connected serial devices
+
+### Creating a New Project
+
+<Steps>
+  <Step title="Open PlatformIO Home">
+    Click **PIO Home** icon in bottom status bar
+  </Step>
+
+  <Step title="Create New Project">
+    Click **+ New Project** button
+  </Step>
+
+  <Step title="Configure Project">
+    ```
+    Name: mecanum_robot_firmware
+    Board: Espressif ESP32 Dev Module
+    Framework: Arduino
+    Location: [Leave default or choose custom]
+    ```
+
+    Click **Finish** and wait for project initialization
+  </Step>
+
+  <Step title="Explore Project Structure">
+    ```
+    mecanum_robot_firmware/
+    ├── .pio/               # Build files (auto-generated)
+    ├── include/            # Header files
+    ├── lib/                # Project libraries
+    ├── src/
+    │   └── main.cpp        # Main source file
+    ├── test/               # Unit tests
+    └── platformio.ini      # Project configuration
+    ```
+  </Step>
+</Steps>
+
+### platformio.ini Configuration
+
+The `platformio.ini` file defines your project's build environment:
+
+```ini title="platformio.ini"
+[env:esp32dev]
+platform = espressif32
+board = esp32dev
+framework = arduino
+
+; Serial monitor settings
+monitor_speed = 115200
+monitor_filters =
+    default
+    time
+
+; Build flags
+build_flags =
+    -D DEBUG=1
+    -D CORE_DEBUG_LEVEL=3
+
+; Upload settings
+upload_speed = 921600
+upload_port = /dev/ttyUSB0  ; macOS: /dev/cu.usbserial-*
+                             ; Windows: COM3, COM4, etc.
+
+; Library dependencies
+lib_deps =
+    Wire
+    SPI
+    adafruit/Adafruit ICM20X@^2.0.6
+    adafruit/Adafruit BusIO@^1.14.1
+```
+
+<Accordion title="Common platformio.ini Options">
+**Platform options:**
+- `platform`: Development platform (espressif32, atmelavr, etc.)
+- `platform_packages`: Override platform packages
+- `board`: Target board identifier
+- `framework`: Framework to use (arduino, espidf, etc.)
+
+**Build options:**
+- `build_flags`: Compiler flags and macros
+- `build_unflags`: Remove default flags
+- `lib_deps`: Project library dependencies
+- `lib_ignore`: Libraries to exclude from build
+
+**Upload options:**
+- `upload_port`: Serial port for uploading
+- `upload_speed`: Upload baud rate (default: 115200)
+- `upload_protocol`: Upload method (esptool, avrdude, etc.)
+
+**Monitor options:**
+- `monitor_speed`: Serial monitor baud rate
+- `monitor_port`: Serial port for monitoring
+- `monitor_filters`: Output filters (colorize, time, log2file, etc.)
+</Accordion>
+
+### Build Commands
+
+PlatformIO provides several build and upload commands accessible via:
+- **Bottom toolbar buttons**
+- **Terminal commands** (PlatformIO Core CLI)
+- **Command Palette** (Ctrl+Shift+P / Cmd+Shift+P)
+
+| Task | Toolbar Icon | Terminal Command | Description |
+|------|--------------|------------------|-------------|
+| **Build** | ✓ (checkmark) | `pio run` | Compile project |
+| **Upload** | → (arrow) | `pio run --target upload` | Upload to board |
+| **Clean** | 🗑️ (trash) | `pio run --target clean` | Delete build files |
+| **Monitor** | 🔌 (plug) | `pio device monitor` | Open serial monitor |
+| **Test** | 🧪 (flask) | `pio test` | Run unit tests |
+
+<Tip>
+Use **Upload and Monitor** (plug with arrow icon) to upload and immediately start serial monitoring
+</Tip>
+
+### Serial Monitor
+
+The integrated serial monitor provides real-time output from your ESP32:
+
+**Opening the monitor:**
+1. Click **Serial Monitor** icon (plug) in bottom toolbar
+2. Or run `pio device monitor` in terminal
+
+**Monitor filters:**
+```ini title="platformio.ini"
+monitor_filters =
+    default          ; Default output
+    colorize         ; ANSI color codes
+    time             ; Add timestamps
+    log2file         ; Save to file
+    printable        ; Show only printable chars
+    send_on_enter    ; Send commands on Enter
+```
+
+**Exiting the monitor:**
+- Press `Ctrl+C` in terminal
+- Or click **Stop** button in status bar
+
+### Library Management
+
+<Tabs>
+  <Tab title="Via PlatformIO Home">
+    1. Open **PIO Home → Libraries**
+    2. Search for library (e.g., "Adafruit ICM20X")
+    3. Click library name → **Add to Project**
+    4. Select your project environment
+    5. Library automatically added to `platformio.ini`
+  </Tab>
+
+  <Tab title="Via platformio.ini">
+    Manually add libraries to `lib_deps`:
+
+    ```ini
+    lib_deps =
+        ; By name
+        Wire
+
+        ; By name + version
+        adafruit/Adafruit ICM20X@^2.0.6
+
+        ; From GitHub
+        https://github.com/username/repo.git
+
+        ; From GitHub (specific branch)
+        https://github.com/username/repo.git#develop
+    ```
+
+    Then run **Build** to download dependencies
+  </Tab>
+
+  <Tab title="Via CLI">
+    ```bash
+    # Install library
+    pio lib install "Adafruit ICM20X"
+
+    # Install specific version
+    pio lib install "Adafruit ICM20X@2.0.6"
+
+    # Search for library
+    pio lib search "ICM20948"
+
+    # Show installed libraries
+    pio lib list
+
+    # Update all libraries
+    pio lib update
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Debugging
+
+### Serial Print Debugging
+
+The most common debugging method for ESP32:
+
+```cpp title="src/main.cpp"
+void setup() {
+  Serial.begin(115200);
+  Serial.println("\n=== ESP32 Mecanum Robot ===");
+  Serial.printf("Firmware version: %s\n", VERSION);
+}
+
+void loop() {
+  // Debug print encoder values
+  Serial.printf("Encoders: FL=%ld FR=%ld RL=%ld RR=%ld\n",
+                encoder_FL, encoder_FR, encoder_RL, encoder_RR);
+  delay(100);
+}
+```
+
+<Tip>
+Use `Serial.printf()` for formatted output instead of multiple `Serial.print()` calls
+</Tip>
+
+### Advanced Debugging (GDB)
+
+PlatformIO supports hardware debugging with JTAG adapters:
+
+```ini title="platformio.ini"
+[env:esp32dev]
+platform = espressif32
+board = esp32dev
+framework = arduino
+
+; Enable debugging
+debug_tool = esp-prog         ; Or: jlink, ftdi, cmsis-dap
+debug_init_break = tbreak setup
+debug_build_flags = -O0 -g -ggdb
+```
+
+**Supported debug adapters:**
+- **ESP-Prog:** Official Espressif JTAG adapter (~$10)
+- **J-Link:** Professional debugger (~$400)
+- **FTDI FT2232:** Generic JTAG adapter (~$15)
+
+<Warning>
+Hardware debugging requires additional wiring to ESP32 JTAG pins (GPIO12, 13, 14, 15) and is optional for this project
+</Warning>
+
+---
+
+## Keyboard Shortcuts
+
+Essential VSCode shortcuts for efficient development:
+
+| Action | Windows/Linux | macOS |
+|--------|---------------|-------|
+| **Command Palette** | Ctrl+Shift+P | Cmd+Shift+P |
+| **Quick Open File** | Ctrl+P | Cmd+P |
+| **Toggle Terminal** | Ctrl+` | Ctrl+` |
+| **Go to Definition** | F12 | F12 |
+| **Find References** | Shift+F12 | Shift+F12 |
+| **Format Document** | Shift+Alt+F | Shift+Option+F |
+| **Multi-cursor** | Alt+Click | Option+Click |
+| **Comment Line** | Ctrl+/ | Cmd+/ |
+| **Duplicate Line** | Shift+Alt+↓ | Shift+Option+↓ |
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="PlatformIO installation fails or gets stuck">
+    **Symptoms:** Installation hangs at "Installing PlatformIO Core..."
+
+    **Solutions:**
+    1. Check internet connection (downloads ~500MB)
+    2. Disable antivirus temporarily
+    3. Install Python 3.6+ manually first
+    4. Clear PlatformIO cache:
+       ```bash
+       # Windows
+       rmdir /s %USERPROFILE%\.platformio
+
+       # macOS/Linux
+       rm -rf ~/.platformio
+       ```
+    5. Reinstall PlatformIO extension
+  </Accordion>
+
+  <Accordion title="ESP32 not detected / upload failed">
+    **Symptoms:** `Error: Could not open /dev/ttyUSB0`
+
+    **Solutions:**
+    1. Install CP2102 or CH340 USB driver
+       - **Windows:** Download from Silicon Labs or WCH
+       - **macOS:** `brew install --cask silicon-labs-vcp-driver`
+       - **Linux:** Usually built-in, add user to dialout group:
+         ```bash
+         sudo usermod -a -G dialout $USER
+         # Logout and login again
+         ```
+
+    2. Check correct port in `platformio.ini`:
+       ```ini
+       upload_port = COM3        ; Windows
+       upload_port = /dev/ttyUSB0   ; Linux
+       upload_port = /dev/cu.usbserial-0001  ; macOS
+       ```
+
+    3. Hold **BOOT** button while clicking Upload
+
+    4. Check USB cable (must be data cable, not charge-only)
+  </Accordion>
+
+  <Accordion title="IntelliSense not working / red underlines">
+    **Symptoms:** Code shows errors but compiles successfully
+
+    **Solutions:**
+    1. Rebuild IntelliSense:
+       - Ctrl+Shift+P → "C/C++: Reset IntelliSense Database"
+
+    2. Update C/C++ configuration:
+       - Ctrl+Shift+P → "C/C++: Edit Configurations (JSON)"
+       - Ensure `compilerPath` points to PlatformIO toolchain
+
+    3. Clean and rebuild:
+       ```bash
+       pio run --target clean
+       pio run
+       ```
+
+    4. Check `.vscode/c_cpp_properties.json` exists
+  </Accordion>
+
+  <Accordion title="Library not found / compilation error">
+    **Symptoms:** `fatal error: library.h: No such file or directory`
+
+    **Solutions:**
+    1. Verify library in `platformio.ini`:
+       ```ini
+       lib_deps =
+           adafruit/Adafruit ICM20X@^2.0.6
+       ```
+
+    2. Clean and rebuild to download dependencies:
+       ```bash
+       pio run --target clean
+       pio run
+       ```
+
+    3. Check library compatibility with ESP32
+
+    4. Manually install library:
+       ```bash
+       pio lib install "Adafruit ICM20X"
+       ```
+  </Accordion>
+
+  <Accordion title="Serial monitor shows garbage characters">
+    **Symptoms:** Output shows random symbols: `����ߟ��`
+
+    **Solutions:**
+    1. **Baud rate mismatch** - Most common issue:
+       ```cpp
+       // In code:
+       Serial.begin(115200);
+       ```
+       ```ini
+       # In platformio.ini:
+       monitor_speed = 115200
+       ```
+       Both must match!
+
+    2. Check wiring if using external USB-to-Serial adapter
+
+    3. Try standard baud rates: 9600, 57600, 115200
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Project Organization" icon="folder-tree">
+    - Keep `main.cpp` minimal, use separate files for motors, sensors, etc.
+    - Put reusable code in `lib/` folder
+    - Use meaningful names for files and functions
+    - Comment complex algorithms
+  </Card>
+
+  <Card title="Version Control" icon="git-alt">
+    - Commit working code frequently
+    - Add `.pio/` and `.vscode/` to `.gitignore`
+    - Write descriptive commit messages
+    - Use branches for experimental features
+  </Card>
+
+  <Card title="Code Quality" icon="code-compare">
+    - Enable format on save
+    - Use consistent indentation (2 or 4 spaces)
+    - Keep functions under 50 lines
+    - Avoid global variables when possible
+  </Card>
+
+  <Card title="Testing" icon="vial">
+    - Test on hardware frequently, not just simulation
+    - Add debug prints for critical values
+    - Use unit tests in `test/` folder
+    - Document known issues in README
+  </Card>
+</CardGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="ESP32 Basics" icon="microchip" href="/wp3-embedded/esp32-basics">
+    Learn ESP32 GPIO, PWM, and interrupt configuration
+  </Card>
+
+  <Card title="Motor Control" icon="gear" href="/wp3-embedded/dc-motor-control">
+    Implement PID motor control with encoders
+  </Card>
+
+  <Card title="Git & GitHub" icon="github" href="/reference/software/git-github">
+    Set up version control for team collaboration
+  </Card>
+
+  <Card title="Hardware Reference" icon="microchip" href="/reference/hardware/esp32">
+    ESP32 specifications and pinout diagrams
+  </Card>
+</CardGroup>
+
+---
+
+## References
+
+- [Visual Studio Code Documentation](https://code.visualstudio.com/docs)
+- [PlatformIO Documentation](https://docs.platformio.org/)
+- [ESP32 Arduino Core](https://docs.espressif.com/projects/arduino-esp32/)
+- [PlatformIO Registry](https://registry.platformio.org/) - Library search

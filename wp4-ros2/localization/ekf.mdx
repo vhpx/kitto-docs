@@ -1,0 +1,577 @@
+---
+title: "Extended Kalman Filter (EKF)"
+description: "Understand EKF theory and advanced configuration for robot localization"
+---
+
+## Overview
+
+The **Extended Kalman Filter (EKF)** is the algorithm behind sensor fusion in `robot_localization`. It optimally combines noisy sensor measurements to estimate robot state (pose and velocity).
+
+<Note>
+  **Why EKF?** It handles nonlinear motion models (like Mecanum kinematics) and provides uncertainty estimates (covariance).
+</Note>
+
+## Kalman Filter Basics
+
+### What is a Kalman Filter?
+
+**Kalman Filter** = Recursive algorithm that:
+1. **Predicts** next state based on motion model
+2. **Updates** prediction using sensor measurements
+3. **Weights** prediction vs measurement based on uncertainty
+
+**Result:** Optimal state estimate that's better than any single sensor!
+
+### EKF vs Linear KF
+
+**Linear Kalman Filter:**
+- Motion model is linear: `x_new = A * x_old + B * u`
+- Works for simple systems (e.g., moving in straight line)
+
+**Extended Kalman Filter (EKF):**
+- Motion model is **nonlinear**: `x_new = f(x_old, u)`
+- Uses linearization (Jacobian matrices)
+- Works for complex robots (Mecanum, Ackermann, etc.)
+
+## State Vector
+
+EKF estimates **15-dimensional state vector**:
+
+```
+State = [
+  x,     y,     z,       # Position (m)
+  roll,  pitch, yaw,     # Orientation (rad)
+  vx,    vy,    vz,      # Linear velocity (m/s)
+  vroll, vpitch, vyaw,   # Angular velocity (rad/s)
+  ax,    ay,    az       # Linear acceleration (m/s²)
+]
+```
+
+**For 2D robot (two_d_mode: true):**
+- Only `x`, `y`, `yaw`, `vx`, `vy`, `vyaw` used
+- Others set to zero
+
+## EKF Algorithm (Simplified)
+
+### Prediction Step
+
+**Every time step (50Hz):**
+
+1. **Predict state:**
+   ```
+   x_pred = x_old + vx * dt
+   y_pred = y_old + vy * dt
+   yaw_pred = yaw_old + vyaw * dt
+   ```
+
+2. **Predict uncertainty:**
+   - Uncertainty grows with time (process noise)
+   - Covariance matrix P increases
+
+### Update Step
+
+**When sensor data arrives:**
+
+1. **Compute innovation (error):**
+   ```
+   innovation = measurement - predicted_measurement
+   ```
+
+2. **Compute Kalman gain:**
+   ```
+   K = P * H^T * (H * P * H^T + R)^-1
+   ```
+   - `P`: Prediction covariance
+   - `H`: Measurement model (which states sensor measures)
+   - `R`: Sensor noise covariance
+
+3. **Update state:**
+   ```
+   x_new = x_pred + K * innovation
+   ```
+
+4. **Update uncertainty:**
+   ```
+   P_new = (I - K * H) * P_pred
+   ```
+
+**Intuition:**
+- High sensor noise (large R) → Small K → Trust prediction more
+- Low sensor noise (small R) → Large K → Trust measurement more
+
+## Configuration Deep Dive
+
+### Sensor Configuration
+
+**Format:** 15-element boolean array
+
+```yaml
+odom0_config: [
+  true,  # X position      (index 0)
+  true,  # Y position      (index 1)
+  false, # Z position      (index 2)
+  false, # Roll            (index 3)
+  false, # Pitch           (index 4)
+  false, # Yaw             (index 5)
+  true,  # X velocity      (index 6)
+  true,  # Y velocity      (index 7)
+  false, # Z velocity      (index 8)
+  false, # Roll velocity   (index 9)
+  false, # Pitch velocity  (index 10)
+  false, # Yaw velocity    (index 11)
+  false, # X acceleration  (index 12)
+  false, # Y acceleration  (index 13)
+  false  # Z acceleration  (index 14)
+]
+```
+
+**Guidelines:**
+
+**Odometry:**
+- ✓ Position (X, Y): Odometry good at position
+- ✓ Velocity (X, Y): Odometry provides velocity
+- ✗ Yaw: Wheel slip makes yaw unreliable (use IMU instead)
+
+**IMU:**
+- ✓ Yaw: Gyroscope accurate for orientation
+- ✓ Yaw velocity: Angular velocity from gyroscope
+- ? Acceleration: Can use if calibrated, but often noisy
+
+### Covariance Matrices
+
+#### Sensor Covariance (R)
+
+**From sensor messages:**
+- Odometry: `pose.covariance` and `twist.covariance`
+- IMU: `angular_velocity_covariance`, `linear_acceleration_covariance`
+
+**Example (odometry):**
+```yaml
+mecanum_drive_controller:
+  ros__parameters:
+    pose_covariance_diagonal: [
+      0.001,  # X position variance (1mm std dev)
+      0.001,  # Y position
+      0.0,    # Z (unused)
+      0.0,    # Roll (unused)
+      0.0,    # Pitch (unused)
+      0.03    # Yaw (0.03 rad² ≈ 10° std dev)
+    ]
+```
+
+**Interpretation:**
+- Small covariance → High confidence → EKF trusts sensor more
+- Large covariance → Low confidence → EKF trusts sensor less
+
+#### Process Noise Covariance (Q)
+
+**In `ekf.yaml`:**
+```yaml
+process_noise_covariance: [
+  0.05, 0,    0,    ...  # X position process noise
+  0,    0.05, 0,    ...  # Y position
+  ...
+  0,    0,    0.06, ...  # Yaw
+  ...
+]
+```
+
+**Diagonal matrix (15x15), only diagonal elements matter:**
+
+| Index | Variable | Typical Value | Meaning |
+|-------|----------|---------------|---------|
+| 0,0 | X position | 0.05 | Position drift rate |
+| 1,1 | Y position | 0.05 | Position drift rate |
+| 5,5 | Yaw | 0.06 | Orientation drift rate |
+| 6,6 | X velocity | 0.025 | Velocity change rate |
+| 7,7 | Y velocity | 0.025 | Velocity change rate |
+| 11,11 | Yaw velocity | 0.06 | Angular accel. noise |
+
+**Tuning:**
+- Increase → EKF assumes state changes quickly (trust sensors more)
+- Decrease → EKF assumes state changes slowly (smooth more)
+
+### Advanced Parameters
+
+```yaml
+ekf_filter_node:
+  ros__parameters:
+    # --- Timing ---
+    frequency: 50.0                # Hz (control loop rate)
+    sensor_timeout: 0.1            # Seconds (max time without sensor data)
+
+    # --- 2D Mode ---
+    two_d_mode: true               # Ignore Z, roll, pitch
+
+    # --- Frames ---
+    map_frame: map                 # Global frame (from SLAM)
+    odom_frame: odom               # Local frame (continuous)
+    base_link_frame: base_link     # Robot frame
+    world_frame: odom              # Which frame EKF publishes in
+
+    # --- TF Publishing ---
+    publish_tf: true               # Publish odom→base_link transform
+    publish_acceleration: false    # Publish acceleration estimates
+
+    # --- Differential Mode ---
+    # Fuse absolute pose or velocity?
+    odom0_differential: false      # Absolute pose (default)
+    imu0_differential: false       # Absolute orientation
+
+    # --- Relative Mode ---
+    # For sensors with discontinuities (e.g., GPS jumps)
+    odom0_relative: false
+    imu0_relative: false
+
+    # --- Queue Size ---
+    odom0_queue_size: 10           # Buffer size for delayed messages
+    imu0_queue_size: 10
+
+    # --- Rejection Thresholds ---
+    # Reject outlier measurements (Mahalanobis distance)
+    odom0_rejection_threshold: 5.0  # Standard deviations
+    imu0_rejection_threshold: 5.0
+
+    # --- Gravitational Acceleration ---
+    imu0_remove_gravitational_acceleration: true  # Remove 9.8 m/s² from Z
+
+    # --- Debug ---
+    print_diagnostics: false       # Print debug info (slow)
+    debug: false                   # Verbose debug output
+```
+
+## Tuning Workflow
+
+### Step 1: Baseline
+
+Start with default configuration:
+- `frequency: 50.0`
+- `two_d_mode: true`
+- Process noise: 0.05 (position), 0.025 (velocity)
+- Sensor covariances from sensor messages
+
+### Step 2: Test and Observe
+
+**Drive robot, monitor filtered odometry:**
+```bash
+ros2 topic echo /odometry/filtered
+```
+
+**Common issues:**
+
+| Symptom | Cause | Solution |
+|---------|-------|----------|
+| Filtered odometry lags behind | Process noise too small | Increase process noise |
+| Filtered odometry too jerky | Process noise too large | Decrease process noise |
+| Orientation drifts | IMU not fused | Check `imu0_config[5]` = true (yaw) |
+| Position jumps | Sensor covariance wrong | Increase sensor covariance |
+
+### Step 3: Validation
+
+**Quantitative tests:**
+
+**Test 1: Straight line**
+- Drive 2m straight
+- Compare filtered vs ground truth
+- Error should be < 5cm
+
+**Test 2: Rotation**
+- Rotate 360°
+- Check final yaw close to 2π rad
+- Error should be < 5°
+
+**Test 3: Square path**
+- Drive 1m square
+- Return to start
+- Closure error should be < 10cm
+
+## Multiple EKF Instances
+
+For some applications, run **two EKF nodes**:
+
+**EKF 1 (Local odometry):**
+- Fuses: Odometry + IMU
+- Publishes: `odom → base_link`
+- Use for: Smooth local motion
+
+**EKF 2 (Global localization):**
+- Fuses: Odometry + IMU + GPS (or SLAM corrections)
+- Publishes: `map → odom`
+- Use for: Absolute position in world
+
+**Configuration:**
+```yaml
+# ekf_local.yaml
+ekf_local_filter_node:
+  ros__parameters:
+    world_frame: odom
+    odom0: /mecanum_drive_controller/odom
+    imu0: /imu/data
+    # ...
+
+# ekf_global.yaml
+ekf_global_filter_node:
+  ros__parameters:
+    world_frame: map
+    odom0: /odometry/filtered       # From local EKF
+    pose0: /slam_pose               # From SLAM
+    # ...
+```
+
+**Launch both:**
+```python
+Node(
+    package='robot_localization',
+    executable='ekf_node',
+    name='ekf_local_filter_node',
+    parameters=[ekf_local_config]
+),
+
+Node(
+    package='robot_localization',
+    executable='ekf_node',
+    name='ekf_global_filter_node',
+    parameters=[ekf_global_config]
+),
+```
+
+## Diagnostic Tools
+
+### RViz Visualization
+
+**Add Odometry displays:**
+1. Raw odometry: `/mecanum_drive_controller/odom` (Red)
+2. Filtered odometry: `/odometry/filtered` (Green)
+
+**Observe:**
+- Green should be smoother than red
+- During rotation, green should be more stable
+
+### rqt_multiplot
+
+Plot multiple topics simultaneously:
+
+```bash
+# Install
+sudo apt install ros-jazzy-rqt-multiplot
+
+# Run
+rqt_multiplot
+```
+
+**Plot:**
+- X position: Raw vs Filtered
+- Yaw: Raw vs Filtered vs IMU
+
+### Covariance Ellipses
+
+**In RViz (Odometry display):**
+- Enable "Covariance" → "Position"
+- Shows uncertainty ellipse
+
+**Interpretation:**
+- Small ellipse → High confidence
+- Large ellipse → Low confidence
+- Ellipse should be small and stable
+
+<img
+  src="/images/covariance-ellipse.png"
+  alt="Covariance ellipse in RViz"
+  caption="Blue ellipse shows position uncertainty (smaller = better)"
+/>
+
+## EKF State Transition
+
+**Visualization of EKF state machine:**
+
+```
+┌─────────────┐
+│ Prediction  │  (Every time step)
+│   x_k|k-1   │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│ Measurement │  (When sensor data arrives)
+│  Update     │
+│   x_k|k     │
+└──────┬──────┘
+       │
+       └──────► Next cycle
+```
+
+## Mathematical Details (Advanced)
+
+### Prediction Equations
+
+**State prediction:**
+```
+x̂_k|k-1 = f(x̂_k-1|k-1, u_k)
+```
+
+**For 2D robot:**
+```cpp
+x_new = x_old + vx * cos(yaw) * dt - vy * sin(yaw) * dt;
+y_new = y_old + vx * sin(yaw) * dt + vy * cos(yaw) * dt;
+yaw_new = yaw_old + vyaw * dt;
+vx_new = vx_old;  // Assume constant velocity
+vy_new = vy_old;
+vyaw_new = vyaw_old;
+```
+
+**Covariance prediction:**
+```
+P_k|k-1 = F_k * P_k-1|k-1 * F_k^T + Q_k
+```
+
+Where:
+- `F_k`: Jacobian of motion model (linearization)
+- `Q_k`: Process noise covariance
+
+### Update Equations
+
+**Kalman gain:**
+```
+K_k = P_k|k-1 * H_k^T * (H_k * P_k|k-1 * H_k^T + R_k)^-1
+```
+
+**State update:**
+```
+x̂_k|k = x̂_k|k-1 + K_k * (z_k - h(x̂_k|k-1))
+```
+
+**Covariance update:**
+```
+P_k|k = (I - K_k * H_k) * P_k|k-1
+```
+
+Where:
+- `H_k`: Jacobian of measurement model
+- `R_k`: Sensor noise covariance
+- `z_k`: Measurement
+- `h(x)`: Measurement model
+
+<Note>
+  **You don't need to implement this!** `robot_localization` does it for you. Understanding helps with tuning.
+</Note>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="EKF diverges (explodes)" icon="explosion">
+    **Symptom:** Filtered odometry grows unbounded
+
+    **Causes:**
+    - Sensor covariances too small (EKF over-trusts sensors)
+    - Process noise too large
+    - Sensor data has outliers
+
+    **Solutions:**
+    1. Increase sensor covariances
+    2. Enable rejection threshold:
+       ```yaml
+       odom0_rejection_threshold: 5.0
+       ```
+    3. Check sensor data for spikes
+  </Accordion>
+
+  <Accordion title="Filtered odometry lags" icon="clock">
+    **Symptom:** Filtered pose trails behind robot
+
+    **Cause:** Process noise too small
+
+    **Solution:**
+    - Increase process noise covariance (especially position)
+    ```yaml
+    process_noise_covariance: [
+      0.1,  # Increase from 0.05
+      ...
+    ]
+    ```
+  </Accordion>
+
+  <Accordion title="Orientation doesn't improve" icon="compass">
+    **Symptom:** Filtered yaw same as raw odometry
+
+    **Cause:** IMU not contributing to yaw estimate
+
+    **Solutions:**
+    1. Check IMU data publishing: `ros2 topic echo /imu/data`
+    2. Verify `imu0_config[5]` = true (yaw)
+    3. Ensure `imu0_config[11]` = true (yaw velocity)
+    4. Check IMU covariance is reasonable (not too high)
+  </Accordion>
+
+  <Accordion title="Covariance grows unbounded" icon="chart-line">
+    **Symptom:** Uncertainty ellipse keeps growing
+
+    **Cause:** No sensor updates, only prediction
+
+    **Solutions:**
+    - Check sensors publishing data
+    - Verify sensor_timeout not too small
+    - Ensure sensor config enables some measurements
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Start Simple" icon="seedling">
+    Begin with odometry only, then add IMU. Easier to debug.
+  </Card>
+
+  <Card title="Calibrate Sensors" icon="wrench">
+    Accurate sensor covariances critical for good fusion. Measure empirically if needed.
+  </Card>
+
+  <Card title="Validate Frequently" icon="check">
+    Test after every configuration change. Small systematic changes better than random tweaking.
+  </Card>
+
+  <Card title="Record Data" icon="floppy-disk">
+    Use `ros2 bag record` to replay and tune offline.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Localization Testing"
+    icon="flask"
+    href="/wp4-ros2/localization/testing"
+  >
+    Comprehensive testing procedures and validation
+  </Card>
+
+  <Card
+    title="SLAM Mapping"
+    icon="map"
+    href="/wp4-ros2/mapping/slam-toolbox"
+  >
+    Use SLAM to correct global position drift
+  </Card>
+
+  <Card
+    title="Navigation"
+    icon="route"
+    href="/wp4-ros2/navigation/nav2-intro"
+  >
+    Use localization for autonomous navigation
+  </Card>
+
+  <Card
+    title="Advanced Tuning"
+    icon="sliders"
+    href="http://docs.ros.org/en/noetic/api/robot_localization/html/configuring_robot_localization.html"
+  >
+    Official robot_localization tuning guide
+  </Card>
+</CardGroup>
+
+## References
+
+[1] Extended Kalman Filter: https://en.wikipedia.org/wiki/Extended_Kalman_filter
+[2] robot_localization State Estimation: http://docs.ros.org/en/noetic/api/robot_localization/html/state_estimation.html
+[3] Kalman Filter Explained: https://www.bzarg.com/p/how-a-kalman-filter-works-in-pictures/

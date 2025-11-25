@@ -1,0 +1,437 @@
+---
+title: 'Gazebo Simulation & Plugins'
+description: 'Simulate mecanum robot in Gazebo with physics, sensors, and controllers'
+icon: 'cubes'
+---
+
+## Overview
+
+**Gazebo** is a 3D robot simulator that provides realistic physics, sensor simulation, and visualization. It integrates with ROS2 to test robot behavior before deploying to hardware, saving time and preventing damage to physical robots.
+
+<CardGroup cols={2}>
+  <Card title="Physics Simulation" icon="atom">
+    Realistic dynamics, collisions, and friction
+  </Card>
+  <Card title="Sensor Simulation" icon="sensor">
+    LiDAR, cameras, IMU, and other sensors
+  </Card>
+</CardGroup>
+
+<Note>
+Gazebo simulation is **optional** for this course. Focus on hardware implementation first. Use simulation if you have extra time or want to test navigation algorithms safely.
+</Note>
+
+---
+
+## Installation
+
+### Gazebo Harmonic (for ROS2 Jazzy)
+
+```bash
+# Install Gazebo Harmonic
+sudo apt update
+sudo apt install ros-jazzy-ros-gz
+
+# Install Gazebo itself
+sudo apt install gz-harmonic
+
+# Verify installation
+gz sim --version
+# Output: Gazebo Sim, version 8.x.x
+```
+
+---
+
+## URDF with Gazebo Plugins
+
+### Adding Gazebo-Specific Properties
+
+```xml title="mecanum_robot_gazebo.urdf.xacro"
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="mecanum_robot">
+  <!-- Include base robot URDF -->
+  <xacro:include filename="$(find mecanum_description)/urdf/mecanum_robot.urdf.xacro"/>
+
+  <!-- Gazebo-specific properties for chassis -->
+  <gazebo reference="chassis">
+    <material>Gazebo/Blue</material>
+    <mu1>0.2</mu1>  <!-- Friction coefficient -->
+    <mu2>0.2</mu2>
+  </gazebo>
+
+  <!-- Gazebo properties for wheels -->
+  <xacro:macro name="wheel_gazebo" params="prefix">
+    <gazebo reference="${prefix}_wheel">
+      <material>Gazebo/Black</material>
+      <mu1>1.0</mu1>  <!-- High friction for traction -->
+      <mu2>1.0</mu2>
+      <kp>1000000.0</kp>  <!-- Contact stiffness -->
+      <kd>100.0</kd>      <!-- Contact damping -->
+    </gazebo>
+  </xacro:macro>
+
+  <xacro:wheel_gazebo prefix="front_left"/>
+  <xacro:wheel_gazebo prefix="front_right"/>
+  <xacro:wheel_gazebo prefix="rear_left"/>
+  <xacro:wheel_gazebo prefix="rear_right"/>
+
+  <!-- LiDAR sensor plugin -->
+  <gazebo reference="lidar_link">
+    <sensor name="lidar" type="gpu_lidar">
+      <pose>0 0 0 0 0 0</pose>
+      <topic>/scan</topic>
+      <update_rate>5.5</update_rate>  <!-- RPLIDAR A1M8: 5.5 Hz -->
+      <lidar>
+        <scan>
+          <horizontal>
+            <samples>360</samples>
+            <resolution>1.0</resolution>
+            <min_angle>-3.14159</min_angle>
+            <max_angle>3.14159</max_angle>
+          </horizontal>
+        </scan>
+        <range>
+          <min>0.15</min>  <!-- RPLIDAR A1M8: 0.15m min -->
+          <max>12.0</max>  <!-- RPLIDAR A1M8: 12m max -->
+          <resolution>0.01</resolution>
+        </range>
+      </lidar>
+      <always_on>true</always_on>
+      <visualize>true</visualize>
+    </sensor>
+  </gazebo>
+
+  <!-- IMU sensor plugin -->
+  <gazebo reference="imu_link">
+    <sensor name="imu" type="imu">
+      <always_on>true</always_on>
+      <update_rate>50</update_rate>  <!-- 50 Hz -->
+      <topic>/imu/data</topic>
+      <imu>
+        <angular_velocity>
+          <x>
+            <noise type="gaussian">
+              <mean>0.0</mean>
+              <stddev>0.0002</stddev>
+            </noise>
+          </x>
+          <!-- y, z similar -->
+        </angular_velocity>
+        <linear_acceleration>
+          <x>
+            <noise type="gaussian">
+              <mean>0.0</mean>
+              <stddev>0.001</stddev>
+            </noise>
+          </x>
+          <!-- y, z similar -->
+        </linear_acceleration>
+      </imu>
+    </sensor>
+  </gazebo>
+
+  <!-- Differential drive controller (approximation for mecanum) -->
+  <gazebo>
+    <plugin filename="libignition-gazebo-diff-drive-system.so"
+            name="ignition::gazebo::systems::DiffDrive">
+      <left_joint>front_left_wheel_joint</left_joint>
+      <left_joint>rear_left_wheel_joint</left_joint>
+      <right_joint>front_right_wheel_joint</right_joint>
+      <right_joint>rear_right_wheel_joint</right_joint>
+      <wheel_separation>0.20</wheel_separation>
+      <wheel_diameter>0.10</wheel_diameter>
+      <odom_publish_frequency>20</odom_publish_frequency>
+      <topic>/cmd_vel</topic>
+      <odom_topic>/odom</odom_topic>
+      <tf_topic>/tf</tf_topic>
+    </plugin>
+  </gazebo>
+</robot>
+```
+
+<Warning>
+Gazebo doesn't have a native **mecanum drive controller**. Options:
+1. Use `DiffDrive` plugin (approximation, no lateral movement)
+2. Write custom mecanum plugin (advanced)
+3. Use Gazebo + ros2_control for accurate simulation
+</Warning>
+
+---
+
+## Launch Gazebo Simulation
+
+```python title="gazebo.launch.py"
+import os
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch.actions import IncludeLaunchDescription, ExecuteProcess
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch_ros.actions import Node
+import xacro
+
+def generate_launch_description():
+    pkg_share = get_package_share_directory('mecanum_description')
+    xacro_file = os.path.join(pkg_share, 'urdf', 'mecanum_robot_gazebo.urdf.xacro')
+    world_file = os.path.join(pkg_share, 'worlds', 'empty.world')
+
+    # Process xacro to URDF
+    robot_description = xacro.process_file(xacro_file).toxml()
+
+    return LaunchDescription([
+        # Launch Gazebo server
+        ExecuteProcess(
+            cmd=['gz', 'sim', '-r', world_file],
+            output='screen'
+        ),
+
+        # Spawn robot in Gazebo
+        Node(
+            package='ros_gz_sim',
+            executable='create',
+            arguments=[
+                '-name', 'mecanum_robot',
+                '-topic', '/robot_description',
+                '-x', '0',
+                '-y', '0',
+                '-z', '0.1',
+            ],
+            output='screen'
+        ),
+
+        # Robot state publisher
+        Node(
+            package='robot_state_publisher',
+            executable='robot_state_publisher',
+            parameters=[{'robot_description': robot_description}],
+        ),
+
+        # Bridge Gazebo topics to ROS2
+        Node(
+            package='ros_gz_bridge',
+            executable='parameter_bridge',
+            arguments=[
+                '/scan@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan',
+                '/imu/data@sensor_msgs/msg/Imu[gz.msgs.IMU',
+                '/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist',
+                '/odom@nav_msgs/msg/Odometry[gz.msgs.Odometry',
+            ],
+            output='screen'
+        ),
+    ])
+```
+
+---
+
+## Creating Custom Worlds
+
+```xml title="worlds/lab_environment.world"
+<?xml version="1.0"?>
+<sdf version="1.9">
+  <world name="lab">
+    <!-- Physics -->
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <!-- Lighting -->
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Ground plane -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.8 0.8 0.8 1</ambient>
+            <diffuse>0.8 0.8 0.8 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Wall obstacle -->
+    <model name="wall1">
+      <static>true</static>
+      <pose>2 0 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box><size>0.1 4 1</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>0.1 4 1</size></box>
+          </geometry>
+          <material>
+            <ambient>0.7 0.2 0.2 1</ambient>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Box obstacle -->
+    <model name="box1">
+      <pose>1 1 0.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box><size>0.5 0.5 0.5</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>0.5 0.5 0.5</size></box>
+          </geometry>
+          <material>
+            <ambient>0.2 0.2 0.7 1</ambient>
+          </material>
+        </visual>
+      </link>
+    </model>
+  </world>
+</sdf>
+```
+
+---
+
+## Testing in Simulation
+
+### 1. Launch Simulation
+
+```bash
+ros2 launch mecanum_description gazebo.launch.py
+```
+
+### 2. Teleop Control
+
+```bash
+# In separate terminal
+ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r /cmd_vel:=/cmd_vel
+```
+
+### 3. Verify Sensors
+
+```bash
+# Check LiDAR data
+ros2 topic echo /scan
+
+# Check IMU data
+ros2 topic echo /imu/data
+
+# Check odometry
+ros2 topic echo /odom
+```
+
+### 4. Visualize in RViz
+
+```bash
+ros2 run rviz2 rviz2
+
+# Add displays:
+# - RobotModel
+# - LaserScan (topic: /scan)
+# - TF
+# - Odometry (topic: /odom)
+```
+
+---
+
+## Benefits of Simulation
+
+<CardGroup cols={2}>
+  <Card title="Safe Testing" icon="shield">
+    - Test dangerous scenarios without risk
+    - No hardware damage from crashes
+    - Unlimited experiments
+    - Reset instantly
+  </Card>
+
+  <Card title="Algorithm Development" icon="code">
+    - Test navigation without waiting for hardware
+    - Iterate quickly on path planning
+    - Debug localization issues
+    - Tune parameters safely
+  </Card>
+
+  <Card title="Reproducibility" icon="repeat">
+    - Same environment every time
+    - Controlled test scenarios
+    - Benchmark performance
+    - Share with teammates
+  </Card>
+
+  <Card title="Cost Savings" icon="dollar-sign">
+    - No battery drain
+    - No component wear
+    - Test before building hardware
+    - Identify design flaws early
+  </Card>
+</CardGroup>
+
+---
+
+## Limitations of Simulation
+
+<Warning>
+**Simulation is not reality!** Always test on hardware:
+
+- **Physics accuracy:** Friction, slip, and dynamics differ from real world
+- **Sensor noise:** Simulated sensors are cleaner than reality
+- **Latency:** Real hardware has communication delays
+- **Power constraints:** Simulation doesn't model battery drain
+- **Environmental factors:** Lighting, temperature, floor texture not modeled
+
+**Golden rule:** Simulate to develop, validate on hardware!
+</Warning>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="URDF/Xacro" icon="robot" href="/reference/ros2/urdf-xacro">
+    Build robot model for simulation
+  </Card>
+
+  <Card title="Navigation Testing" icon="route" href="/wp4-ros2/navigation/nav2-introduction">
+    Test Nav2 in simulation before hardware
+  </Card>
+
+  <Card title="SLAM" icon="map" href="/wp4-ros2/mapping/slam-toolbox">
+    Create maps in simulated environment
+  </Card>
+
+  <Card title="Data Visualization" icon="chart-line" href="/reference/ros2/data-visualization">
+    View simulation data in RViz
+  </Card>
+</CardGroup>
+
+---
+
+## References
+
+- [Gazebo Documentation](https://gazebosim.org/docs)
+- [ros_gz](https://github.com/gazebosim/ros_gz) - ROS2-Gazebo bridge
+- [Gazebo Tutorials](https://gazebosim.org/docs/harmonic/tutorials)
+- [SDF Format](http://sdformat.org/) - World and model descriptions

@@ -1,0 +1,478 @@
+---
+title: "IMU Integration (ICM-20948)"
+description: "Integrate ICM-20948 9-axis IMU sensor with ESP32 for orientation sensing"
+---
+
+## Overview
+
+The ICM-20948 is a 9-axis Motion Processing Unit (MPU) combining:
+- 3-axis gyroscope (angular velocity)
+- 3-axis accelerometer (linear acceleration)
+- 3-axis magnetometer (magnetic field / compass)
+
+Adding an IMU to your robot provides orientation data, complementing wheel encoders which are prone to slippage.
+
+## Why IMU for Mecanum Robots?
+
+<CardGroup cols={2}>
+  <Card title="Slip Compensation" icon="shoe-prints">
+    Mecanum wheels slip frequently, especially during rotation. IMU provides ground-truth orientation independent of wheel odometry.
+  </Card>
+
+  <Card title="Sensor Fusion" icon="rotate">
+    Combine encoder odometry with IMU data using Extended Kalman Filter (EKF) for robust pose estimation.
+  </Card>
+
+  <Card title="Tilt Detection" icon="arrows-up-down">
+    Detect if robot is on a slope or uneven surface, enabling compensation or safety stops.
+  </Card>
+
+  <Card title="Dynamic Response" icon="gauge">
+    Measure actual angular velocity vs commanded, useful for tuning rotation controllers.
+  </Card>
+</CardGroup>
+
+## ICM-20948 Specifications
+
+### Sensor Ranges
+
+| Sensor | Configurable Ranges | Resolution |
+|--------|---------------------|------------|
+| **Gyroscope** | ±250, ±500, ±1000, ±2000 °/s | 16-bit |
+| **Accelerometer** | ±2, ±4, ±8, ±16 g | 16-bit |
+| **Magnetometer** | ±4900 µT | 16-bit |
+
+### Communication
+
+- **Interface:** I2C or SPI (we'll use I2C)
+- **I2C Address:** 0x68 (default) or 0x69 (if AD0 pin HIGH)
+- **Operating Voltage:** 1.71V - 3.6V (3.3V typical)
+- **Current:** ~3.5mA active
+
+<img
+  src="/images/icm20948-module.png"
+  alt="ICM-20948 IMU breakout board"
+  caption="ICM-20948 9-axis IMU module with I2C interface"
+/>
+
+## Wiring Diagram
+
+### I2C Connection to ESP32
+
+```
+ESP32                  ICM-20948
+GPIO 21 (SDA) ────────→ SDA
+GPIO 22 (SCL) ────────→ SCL
+3.3V          ────────→ VCC
+GND           ────────→ GND
+```
+
+<Warning>
+  **Voltage:** ICM-20948 is 3.3V! Do NOT connect to 5V or it will be damaged.
+</Warning>
+
+### Pull-up Resistors
+
+I2C requires pull-up resistors (typically 4.7kΩ) on SDA and SCL:
+- Most breakout boards have them built-in
+- ESP32 has internal pull-ups (can enable in software)
+- External pull-ups recommended for longer wires or multiple devices
+
+## Software Setup
+
+### Library Options
+
+<Tabs>
+  <Tab title="SparkFun Library (Recommended)">
+    **Installation (PlatformIO):**
+    ```ini
+    lib_deps =
+        sparkfun/SparkFun ICM-20948 Arduino Library@^1.2.12
+    ```
+
+    **Pros:**
+    - Easy to use
+    - Good documentation
+    - DMP (Digital Motion Processor) support
+
+    **Example:**
+    ```cpp
+    #include "ICM_20948.h"
+
+    ICM_20948_I2C myICM;
+
+    void setup() {
+      Wire.begin(21, 22);
+      myICM.begin(Wire, 0);
+      
+      if (myICM.status != ICM_20948_Stat_Ok) {
+        Serial.println("IMU initialization failed!");
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Adafruit Library">
+    **Installation:**
+    ```ini
+    lib_deps =
+        adafruit/Adafruit ICM20X@^2.0.5
+        adafruit/Adafruit BusIO@^1.14.1
+    ```
+
+    **Pros:**
+    - Unified Adafruit sensor library
+    - Consistent API across sensors
+  </Tab>
+
+  <Tab title="Manual (Advanced)">
+    Read/write I2C registers directly. Only for learning or custom implementations.
+  </Tab>
+</Tabs>
+
+## Complete Implementation
+
+### Basic IMU Reading
+
+```cpp
+#include <Arduino.h>
+#include <Wire.h>
+#include "ICM_20948.h"
+
+#define SDA_PIN 21
+#define SCL_PIN 22
+
+ICM_20948_I2C myICM;
+
+void setup() {
+  Serial.begin(115200);
+  Wire.begin(SDA_PIN, SCL_PIN);
+  
+  // Initialize IMU
+  bool initialized = false;
+  while (!initialized) {
+    myICM.begin(Wire, 1);  // AD0_VAL = 1 for address 0x69, 0 for 0x68
+    
+    if (myICM.status != ICM_20948_Stat_Ok) {
+      Serial.println("IMU not connected. Retrying...");
+      delay(500);
+    } else {
+      initialized = true;
+      Serial.println("IMU connected!");
+    }
+  }
+  
+  // Configure sensor ranges
+  ICM_20948_fss_t myFSS;
+  myFSS.a = dfs2G;      // Accelerometer: ±2g
+  myFSS.g = dfs250dps;  // Gyroscope: ±250 °/s
+  myICM.setFullScale(ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr, myFSS);
+  
+  // Enable sensors
+  myICM.enableDLPF(ICM_20948_Internal_Acc, true);
+  myICM.enableDLPF(ICM_20948_Internal_Gyr, true);
+}
+
+void loop() {
+  if (myICM.dataReady()) {
+    myICM.getAGMT();  // Get all sensor data
+    
+    // Accelerometer (m/s²)
+    float ax = myICM.accX();
+    float ay = myICM.accY();
+    float az = myICM.accZ();
+    
+    // Gyroscope (°/s)
+    float gx = myICM.gyrX();
+    float gy = myICM.gyrY();
+    float gz = myICM.gyrZ();
+    
+    // Magnetometer (µT)
+    float mx = myICM.magX();
+    float my = myICM.magY();
+    float mz = myICM.magZ();
+    
+    // Print data
+    Serial.print("Accel: ");
+    Serial.print(ax); Serial.print(", ");
+    Serial.print(ay); Serial.print(", ");
+    Serial.println(az);
+    
+    Serial.print("Gyro: ");
+    Serial.print(gx); Serial.print(", ");
+    Serial.print(gy); Serial.print(", ");
+    Serial.println(gz);
+  }
+  
+  delay(100);  // 10Hz update
+}
+```
+
+### Orientation Estimation
+
+Simple orientation from accelerometer (pitch and roll only):
+
+```cpp
+void calculateOrientation() {
+  myICM.getAGMT();
+  
+  float ax = myICM.accX();
+  float ay = myICM.accY();
+  float az = myICM.accZ();
+  
+  // Calculate pitch and roll (radians)
+  float pitch = atan2(-ax, sqrt(ay*ay + az*az));
+  float roll = atan2(ay, az);
+  
+  // Convert to degrees
+  pitch = pitch * 180.0 / PI;
+  roll = roll * 180.0 / PI;
+  
+  Serial.print("Pitch: "); Serial.print(pitch);
+  Serial.print(" Roll: "); Serial.println(roll);
+}
+```
+
+<Note>
+  **Limitation:** Accelerometer-only orientation doesn't provide yaw (heading) and drifts during motion. Use gyroscope integration or magnetometer for yaw.
+</Note>
+
+### Complementary Filter for Orientation
+
+Combine accelerometer (no drift, noisy) with gyroscope (drifts, smooth):
+
+```cpp
+float pitch = 0, roll = 0, yaw = 0;
+unsigned long lastTime = 0;
+float alpha = 0.98;  // Filter coefficient
+
+void updateOrientation() {
+  myICM.getAGMT();
+  
+  unsigned long now = micros();
+  float dt = (now - lastTime) / 1000000.0;  // seconds
+  lastTime = now;
+  
+  // Gyroscope rates (deg/s)
+  float gx = myICM.gyrX();
+  float gy = myICM.gyrY();
+  float gz = myICM.gyrZ();
+  
+  // Integrate gyroscope
+  float pitchGyro = pitch + gx * dt;
+  float rollGyro = roll + gy * dt;
+  float yawGyro = yaw + gz * dt;
+  
+  // Accelerometer angles
+  float ax = myICM.accX();
+  float ay = myICM.accY();
+  float az = myICM.accZ();
+  
+  float pitchAcc = atan2(-ax, sqrt(ay*ay + az*az)) * 180.0 / PI;
+  float rollAcc = atan2(ay, az) * 180.0 / PI;
+  
+  // Complementary filter
+  pitch = alpha * pitchGyro + (1 - alpha) * pitchAcc;
+  roll = alpha * rollGyro + (1 - alpha) * rollAcc;
+  yaw = yawGyro;  // Only gyro for yaw (or add magnetometer)
+  
+  Serial.print("Orientation - Pitch: ");
+  Serial.print(pitch);
+  Serial.print(" Roll: ");
+  Serial.print(roll);
+  Serial.print(" Yaw: ");
+  Serial.println(yaw);
+}
+```
+
+## Calibration
+
+### Gyroscope Bias Calibration
+
+Gyroscopes have offset even when stationary:
+
+```cpp
+float gyro_bias_x = 0, gyro_bias_y = 0, gyro_bias_z = 0;
+
+void calibrateGyro() {
+  Serial.println("Calibrating gyroscope. Keep IMU still...");
+  
+  int samples = 1000;
+  float sum_x = 0, sum_y = 0, sum_z = 0;
+  
+  for (int i = 0; i < samples; i++) {
+    while (!myICM.dataReady()) {}
+    myICM.getAGMT();
+    
+    sum_x += myICM.gyrX();
+    sum_y += myICM.gyrY();
+    sum_z += myICM.gyrZ();
+    
+    delay(5);
+  }
+  
+  gyro_bias_x = sum_x / samples;
+  gyro_bias_y = sum_y / samples;
+  gyro_bias_z = sum_z / samples;
+  
+  Serial.println("Calibration complete!");
+  Serial.print("Bias: ");
+  Serial.print(gyro_bias_x); Serial.print(", ");
+  Serial.print(gyro_bias_y); Serial.print(", ");
+  Serial.println(gyro_bias_z);
+}
+
+// Use in orientation calculation:
+float gx = myICM.gyrX() - gyro_bias_x;
+float gy = myICM.gyrY() - gyro_bias_y;
+float gz = myICM.gyrZ() - gyro_bias_z;
+```
+
+### Magnetometer Calibration
+
+Magnetometer needs hard-iron and soft-iron calibration. Complex topic - use existing tools or libraries.
+
+## Integration with Motor Control
+
+Combine IMU with motor control for heading correction:
+
+```cpp
+float targetHeading = 0;  // degrees
+float currentHeading = 0; // from IMU yaw
+
+void headingControl() {
+  // Calculate heading error
+  float headingError = targetHeading - currentHeading;
+  
+  // Normalize to -180 to +180
+  while (headingError > 180) headingError -= 360;
+  while (headingError < -180) headingError += 360;
+  
+  // Apply correction to rotation velocity
+  float rotationCorrection = headingError * 0.01;  // P controller
+  
+  // Add to motor commands
+  // (integrate with existing motor control)
+}
+```
+
+## I2C Scanner
+
+If IMU not detected, scan I2C bus:
+
+```cpp
+void scanI2C() {
+  Serial.println("Scanning I2C bus...");
+  
+  for (byte address = 1; address < 127; address++) {
+    Wire.beginTransmission(address);
+    byte error = Wire.endTransmission();
+    
+    if (error == 0) {
+      Serial.print("Device found at 0x");
+      if (address < 16) Serial.print("0");
+      Serial.println(address, HEX);
+    }
+  }
+  Serial.println("Scan complete.");
+}
+```
+
+Expected: `0x68` or `0x69` for ICM-20948
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="IMU not detected" icon="magnifying-glass">
+    **Solutions:**
+    - Run I2C scanner
+    - Check wiring (SDA, SCL, VCC, GND)
+    - Verify 3.3V power (NOT 5V!)
+    - Check pull-up resistors on I2C lines
+    - Try different I2C address (0x68 vs 0x69)
+  </Accordion>
+
+  <Accordion title="Readings all zeros" icon="zero">
+    **Solutions:**
+    - Check if sensors enabled
+    - Verify data ready flag before reading
+    - Try different sensor range settings
+    - Reset IMU and re-initialize
+  </Accordion>
+
+  <Accordion title="Noisy accelerometer data" icon="wave-pulse">
+    **Solutions:**
+    - Enable DLPF (Digital Low-Pass Filter)
+    - Average multiple samples
+    - Check for vibration (mount IMU rigidly)
+    - Lower cutoff frequency
+  </Accordion>
+
+  <Accordion title="Gyro drifts over time" icon="rotate">
+    **Expected:** Gyroscopes drift!
+
+    **Solutions:**
+    - Calibrate gyroscope bias at startup
+    - Use sensor fusion (complementary or Kalman filter)
+    - Periodically re-zero using magnetometer
+  </Accordion>
+</AccordionGroup>
+
+## ROS2 Integration Preview
+
+In WP4, you'll publish IMU data to ROS2:
+
+```cpp
+// Publish to ROS2 (simplified)
+sensor_msgs::Imu imu_msg;
+imu_msg.angular_velocity.x = gx;
+imu_msg.angular_velocity.y = gy;
+imu_msg.angular_velocity.z = gz;
+imu_msg.linear_acceleration.x = ax;
+imu_msg.linear_acceleration.y = ay;
+imu_msg.linear_acceleration.z = az;
+```
+
+This data feeds into `robot_localization` for sensor fusion with odometry!
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Unit Testing"
+    icon="flask"
+    href="/wp3-embedded/unit-testing"
+  >
+    Test all embedded components systematically
+  </Card>
+
+  <Card
+    title="WP4: Localization"
+    icon="location-dot"
+    href="/wp4-ros2/localization/imu-fusion"
+  >
+    Use IMU data with ROS2 robot_localization
+  </Card>
+
+  <Card
+    title="Hardware Reference"
+    icon="book"
+    href="/reference/hardware/imu"
+  >
+    Detailed IMU specifications
+  </Card>
+
+  <Card
+    title="Sensor Fusion"
+    icon="diagram-project"
+    href="/wp4-ros2/localization/ekf"
+  >
+    Learn about Extended Kalman Filter
+  </Card>
+</CardGroup>
+
+## References
+
+[1] ICM-20948 Datasheet: https://invensense.tdk.com/products/motion-tracking/9-axis/icm-20948/
+[2] SparkFun Library: https://github.com/sparkfun/SparkFun_ICM-20948_ArduinoLibrary
+[3] Sensor Fusion: https://www.nxp.com/docs/en/application-note/AN3461.pdf

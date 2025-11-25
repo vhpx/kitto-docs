@@ -1,0 +1,565 @@
+---
+title: "ESP32 Specifications"
+description: "Complete ESP32-WROOM-32 specifications, pinout, and configuration"
+---
+
+## Overview
+
+The **ESP32-WROOM-32** is a powerful, low-cost microcontroller with WiFi and Bluetooth capabilities. In this project, it handles motor control, encoder reading, IMU interfacing, and serial communication with the Raspberry Pi.
+
+<Note>
+  **Role:** Real-time motor control and sensor interfacing. Communicates with Raspberry Pi via USB serial at 115200 baud.
+</Note>
+
+## Specifications
+
+### Core Processor
+
+| Feature | Specification |
+|---------|--------------|
+| **CPU** | Dual-core Xtensa LX6, 32-bit |
+| **Clock Speed** | Up to 240 MHz (adjustable) |
+| **RAM** | 520 KB SRAM |
+| **Flash** | 4 MB (external SPI flash) |
+| **ROM** | 448 KB (bootloader) |
+
+### Interfaces
+
+| Interface | Quantity | Notes |
+|-----------|----------|-------|
+| **GPIO** | 34 pins | 18 usable (some shared) |
+| **ADC** | 18 channels, 12-bit | 0-3.3V input |
+| **DAC** | 2 channels, 8-bit | GPIO 25, 26 |
+| **PWM** | 16 channels | LEDC, up to 40 MHz |
+| **I2C** | 2 controllers | Configurable pins |
+| **SPI** | 4 controllers | 1 used for flash |
+| **UART** | 3 controllers | UART0 for USB serial |
+| **Touch** | 10 capacitive inputs | GPIO 0, 2, 4, 12-15, 27, 32, 33 |
+
+### Communication
+
+| Feature | Specification |
+|---------|--------------|
+| **WiFi** | 802.11 b/g/n, 2.4 GHz |
+| **Bluetooth** | v4.2 BR/EDR and BLE |
+| **Antenna** | PCB trace or external |
+| **Range** | ~50m (open space) |
+
+### Power
+
+| Parameter | Value |
+|-----------|-------|
+| **Operating Voltage** | 3.0V - 3.6V (3.3V nominal) |
+| **Input Voltage (via USB)** | 5V |
+| **Active Current** | 80-160 mA (CPU active) |
+| **Deep Sleep** | 10 µA |
+| **Power Consumption** | ~0.5W typical |
+
+### Physical
+
+| Parameter | Value |
+|-----------|-------|
+| **Dimensions** | 48mm × 26mm × 3mm (DevKit V1 board) |
+| **Weight** | ~10g |
+| **Operating Temperature** | -40°C to +85°C |
+
+## Pinout Diagram
+
+### ESP32 DevKit V1 (30 pins)
+
+```
+                        ┌─────────┐
+                        │  ESP32  │
+                        │ DevKit  │
+                        │   V1    │
+                        └─────────┘
+
+      Left Side                        Right Side
+┌───────────────────┐          ┌───────────────────┐
+│ 3.3V           ●  │          │  ● GND            │
+│ EN             ●  │          │  ● GPIO 23 (MOSI) │
+│ GPIO 36 (A0)   ●  │          │  ● GPIO 22 (SCL)  │
+│ GPIO 39 (A3)   ●  │          │  ● GPIO 1  (TX0)  │
+│ GPIO 34 (A6)   ●  │          │  ● GPIO 3  (RX0)  │
+│ GPIO 35 (A7)   ●  │          │  ● GPIO 21 (SDA)  │
+│ GPIO 32 (A4)   ●  │          │  ● GND            │
+│ GPIO 33 (A5)   ●  │          │  ● GPIO 19 (MISO) │
+│ GPIO 25 (DAC1) ●  │          │  ● GPIO 18 (SCK)  │
+│ GPIO 26 (DAC2) ●  │          │  ● GPIO 5  (SS)   │
+│ GPIO 27        ●  │          │  ● GPIO 17 (TX2)  │
+│ GPIO 14        ●  │          │  ● GPIO 16 (RX2)  │
+│ GPIO 12        ●  │          │  ● GPIO 4         │
+│ GND            ●  │          │  ● GPIO 2  (LED)  │
+│ GPIO 13        ●  │          │  ● GPIO 15        │
+│ GPIO 9  (*)    ●  │          │  ● GND            │
+│ GPIO 10 (*)    ●  │          │  ● VIN (5V)       │
+│ GPIO 11 (*)    ●  │          │  ● 3.3V OUT       │
+└───────────────────┘          └───────────────────┘
+
+(*) GPIO 6-11 connected to internal flash - DO NOT USE
+```
+
+### Pin Functions Summary
+
+**Input Only Pins (no pull-up/down):**
+- GPIO 34, 35, 36, 39
+
+**Strapping Pins (special care needed):**
+- GPIO 0: Must be HIGH at boot (pulled up)
+- GPIO 2: Must be LOW at boot (has LED)
+- GPIO 5: Must be HIGH at boot
+- GPIO 12: Must be LOW at boot (affects voltage)
+- GPIO 15: Must be HIGH at boot
+
+**Recommended for Project:**
+
+| Pin | Use | Notes |
+|-----|-----|-------|
+| **GPIO 4, 16, 17, 18** | Motor PWM outputs | LEDC channels |
+| **GPIO 23, 19, 18, 5** | Motor direction control | Digital outputs |
+| **GPIO 34, 35, 36, 39** | Encoder inputs | Input-only, interrupts |
+| **GPIO 21, 22** | I2C (IMU) | SDA, SCL |
+| **GPIO 1, 3** | UART (USB serial) | TX, RX (USB) |
+| **GPIO 13, 14, 27, 32** | Additional encoder inputs | |
+| **GPIO 2** | Status LED | Built-in LED |
+
+## Pin Configuration for Robot
+
+### Motor Control (4 motors)
+
+**Motor 1 (Front-Left):**
+```cpp
+#define MOTOR_FL_PWM  4    // PWM speed control
+#define MOTOR_FL_DIR1 23   // Direction pin 1
+#define MOTOR_FL_DIR2 19   // Direction pin 2
+```
+
+**Motor 2 (Front-Right):**
+```cpp
+#define MOTOR_FR_PWM  16   // PWM speed control
+#define MOTOR_FR_DIR1 18   // Direction pin 1
+#define MOTOR_FR_DIR2 5    // Direction pin 2
+```
+
+**Motor 3 (Rear-Left):**
+```cpp
+#define MOTOR_RL_PWM  17   // PWM speed control
+#define MOTOR_RL_DIR1 22   // Direction pin 1 (Note: I2C conflict if used)
+#define MOTOR_RL_DIR2 21   // Direction pin 2 (Note: I2C conflict if used)
+```
+
+<Warning>
+  **I2C Conflict:** GPIO 21, 22 are default I2C pins. If using IMU on I2C, reassign motor direction pins or use software I2C on different pins.
+</Warning>
+
+**Alternative (avoiding I2C pins):**
+```cpp
+#define MOTOR_RL_DIR1 26   // Use GPIO 26, 27 instead
+#define MOTOR_RL_DIR2 27
+```
+
+**Motor 4 (Rear-Right):**
+```cpp
+#define MOTOR_RR_PWM  25   // PWM speed control
+#define MOTOR_RR_DIR1 33   // Direction pin 1
+#define MOTOR_RR_DIR2 32   // Direction pin 2
+```
+
+### Encoders (4 motors)
+
+**Use interrupt-capable pins for encoder inputs:**
+
+```cpp
+// Front-Left Encoder
+#define ENCODER_FL_A 34    // Channel A (input-only)
+#define ENCODER_FL_B 35    // Channel B (input-only)
+
+// Front-Right Encoder
+#define ENCODER_FR_A 36    // Channel A (input-only)
+#define ENCODER_FR_B 39    // Channel B (input-only)
+
+// Rear-Left Encoder
+#define ENCODER_RL_A 13    // Channel A
+#define ENCODER_RL_B 14    // Channel B
+
+// Rear-Right Encoder
+#define ENCODER_RR_A 15    // Channel A
+#define ENCODER_RR_B 12    // Channel B (strapping pin - be careful)
+```
+
+<Tip>
+  **Interrupt Handling:** All GPIOs support interrupts. Use `attachInterrupt()` for encoder counting.
+</Tip>
+
+### IMU (I2C)
+
+```cpp
+#define IMU_SDA 21   // I2C Data
+#define IMU_SCL 22   // I2C Clock
+```
+
+**Alternative I2C pins (if GPIO 21, 22 needed for motors):**
+```cpp
+#define IMU_SDA 26   // Alternative SDA
+#define IMU_SCL 27   // Alternative SCL
+
+// In setup():
+Wire.begin(IMU_SDA, IMU_SCL);
+```
+
+### Serial Communication (USB)
+
+**UART0 (USB CDC):**
+```cpp
+// Automatically configured by Serial
+Serial.begin(115200);  // TX = GPIO 1, RX = GPIO 3
+```
+
+**No additional pins needed** - uses built-in USB-to-serial converter.
+
+### Status LED
+
+```cpp
+#define LED_BUILTIN 2   // Built-in LED on GPIO 2
+
+// Blink pattern indicates status:
+// - Fast blink: Waiting for serial connection
+// - Slow blink: Normal operation
+// - Solid on: Error state
+```
+
+## PWM Configuration
+
+### LEDC (LED Controller) for Motor PWM
+
+ESP32 has 16 PWM channels (LEDC) with independent configuration:
+
+```cpp
+// PWM Configuration
+#define PWM_FREQ 20000      // 20 kHz (ultrasonic, silent)
+#define PWM_RESOLUTION 10   // 10-bit (0-1023)
+
+// Setup PWM for motor
+void setupPWM(uint8_t pin, uint8_t channel) {
+  ledcSetup(channel, PWM_FREQ, PWM_RESOLUTION);
+  ledcAttachPin(pin, channel);
+}
+
+// Set motor speed
+void setMotorSpeed(uint8_t channel, int speed) {
+  // speed: -1023 to +1023
+  int pwm_value = abs(speed);
+  ledcWrite(channel, pwm_value);
+}
+
+// In setup():
+setupPWM(MOTOR_FL_PWM, 0);  // Channel 0
+setupPWM(MOTOR_FR_PWM, 1);  // Channel 1
+setupPWM(MOTOR_RL_PWM, 2);  // Channel 2
+setupPWM(MOTOR_RR_PWM, 3);  // Channel 3
+```
+
+**PWM frequency recommendations:**
+- 1-10 kHz: Audible whine, good motor control
+- 20-25 kHz: Ultrasonic (silent), excellent for brushed DC motors
+- >25 kHz: Potential EMI issues
+
+## Interrupt Configuration
+
+### Encoder Interrupts
+
+**ISR (Interrupt Service Routine) for encoders:**
+
+```cpp
+volatile long encoder_count_FL = 0;
+
+void IRAM_ATTR encoder_FL_ISR() {
+  // IRAM_ATTR: Store in fast RAM for low latency
+  int A = digitalRead(ENCODER_FL_A);
+  int B = digitalRead(ENCODER_FL_B);
+
+  if (A == B) {
+    encoder_count_FL++;  // Forward
+  } else {
+    encoder_count_FL--;  // Backward
+  }
+}
+
+void setup() {
+  pinMode(ENCODER_FL_A, INPUT_PULLUP);
+  pinMode(ENCODER_FL_B, INPUT_PULLUP);
+
+  // Attach interrupt on channel A rising edge
+  attachInterrupt(digitalPinToInterrupt(ENCODER_FL_A), encoder_FL_ISR, RISING);
+}
+```
+
+**Interrupt modes:**
+- `RISING`: Trigger on LOW → HIGH
+- `FALLING`: Trigger on HIGH → LOW
+- `CHANGE`: Trigger on any change (2× resolution)
+
+<Tip>
+  **Performance:** ESP32 can handle 100+ kHz interrupt rate per pin. Encoder interrupts at ~10 kHz are no problem.
+</Tip>
+
+## I2C Configuration
+
+### Communicating with IMU
+
+```cpp
+#include <Wire.h>
+
+// I2C Configuration
+#define IMU_I2C_ADDRESS 0x68  // ICM-20948 default address
+
+void setup() {
+  // Initialize I2C with custom pins (if needed)
+  Wire.begin(IMU_SDA, IMU_SCL);
+  Wire.setClock(400000);  // 400 kHz fast mode
+
+  // Check IMU connection
+  Wire.beginTransmission(IMU_I2C_ADDRESS);
+  if (Wire.endTransmission() == 0) {
+    Serial.println("IMU found!");
+  } else {
+    Serial.println("IMU not found!");
+  }
+}
+
+void loop() {
+  // Read IMU data
+  // (use library like SparkFun_ICM20948)
+}
+```
+
+**I2C speed:**
+- Standard: 100 kHz
+- Fast: 400 kHz (recommended)
+- Fast Plus: 1 MHz (if IMU supports)
+
+## Serial Communication
+
+### USB Serial (UART0)
+
+**Communication with Raspberry Pi:**
+
+```cpp
+void setup() {
+  Serial.begin(115200);  // Match baud rate on Pi side
+  while (!Serial) {
+    delay(10);  // Wait for serial connection (optional)
+  }
+}
+
+void loop() {
+  // Send feedback to Pi (50 Hz)
+  if (millis() - last_feedback_time >= 20) {
+    sendFeedback();
+    last_feedback_time = millis();
+  }
+
+  // Receive commands from Pi
+  if (Serial.available()) {
+    String command = Serial.readStringUntil('\n');
+    parseCommand(command);
+  }
+}
+
+void sendFeedback() {
+  // CSV format: pos1,pos2,pos3,pos4,vel1,vel2,vel3,vel4
+  Serial.print(encoder_pos_FL); Serial.print(",");
+  Serial.print(encoder_pos_FR); Serial.print(",");
+  Serial.print(encoder_pos_RL); Serial.print(",");
+  Serial.print(encoder_pos_RR); Serial.print(",");
+  Serial.print(encoder_vel_FL); Serial.print(",");
+  Serial.print(encoder_vel_FR); Serial.print(",");
+  Serial.print(encoder_vel_RL); Serial.print(",");
+  Serial.println(encoder_vel_RR);
+}
+```
+
+**Baud rate recommendations:**
+- 115200: Standard, reliable
+- 230400: Faster, may have errors on long cables
+- 921600: Very fast, requires good USB cable
+
+## Power Considerations
+
+### Powering ESP32
+
+**Options:**
+
+1. **USB Power (5V):**
+   - Via USB-C or Micro-USB port
+   - Provides 5V → onboard regulator → 3.3V
+   - Current limit: 500 mA (USB 2.0)
+
+2. **VIN Pin (5V):**
+   - Connect 5V from buck converter
+   - Onboard regulator provides 3.3V
+   - Current limit: ~800 mA
+
+3. **3.3V Pin (direct):**
+   - Bypass onboard regulator
+   - Requires clean, stable 3.3V supply
+   - **Risk:** No protection from overvoltage
+
+**Recommendation:** Use USB power from Raspberry Pi USB port (convenient) or VIN from 5V buck converter.
+
+### Current Draw
+
+| Mode | Current | Power (3.3V) |
+|------|---------|--------------|
+| **Deep Sleep** | 10 µA | 0.03 mW |
+| **Light Sleep** | 0.8 mA | 2.6 mW |
+| **CPU Idle** | 20-30 mA | 66-99 mW |
+| **CPU Active** | 80-160 mA | 264-528 mW |
+| **WiFi Active** | 120-200 mA | 400-660 mW |
+| **WiFi TX** | 160-240 mA | 530-790 mW |
+
+**For this project (WiFi disabled):** ~80-120 mA typical (0.26-0.40W)
+
+## Programming
+
+### Development Environment
+
+**Recommended: PlatformIO + VSCode**
+
+```ini
+; platformio.ini
+[env:esp32dev]
+platform = espressif32
+board = esp32dev
+framework = arduino
+monitor_speed = 115200
+upload_speed = 921600
+
+lib_deps =
+    Wire
+    SPI
+    # Add IMU library if needed
+```
+
+**Alternative: Arduino IDE**
+- Install ESP32 board support:
+  - File → Preferences → Additional Board Manager URLs:
+    ```
+    https://dl.espressif.com/dl/package_esp32_index.json
+    ```
+  - Tools → Board → Boards Manager → Search "ESP32" → Install
+
+### Upload Methods
+
+**Via USB (Serial):**
+1. Connect ESP32 to PC via USB
+2. Select correct COM port
+3. Click Upload
+4. Hold BOOT button if upload fails
+
+**Via OTA (WiFi):**
+- Update firmware over WiFi (advanced)
+- Useful for deployed robots
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="ESP32 not detected by PC" icon="usb">
+    **Solutions:**
+    1. Install CH340 or CP2102 USB-to-serial driver
+    2. Try different USB cable (some are power-only)
+    3. Press BOOT button during upload
+    4. Check USB port works (try different port)
+  </Accordion>
+
+  <Accordion title="Upload fails / timeout" icon="circle-exclamation">
+    **Solutions:**
+    1. Hold BOOT button, click Upload, release after "Connecting..."
+    2. Lower upload speed: 460800 or 115200
+    3. Disconnect devices from GPIO pins during upload
+    4. Power cycle ESP32
+  </Accordion>
+
+  <Accordion title="GPIO not working" icon="plug">
+    **Check:**
+    1. Pin is output-capable (36-39 are input-only)
+    2. Pin not used by flash (GPIO 6-11)
+    3. Strapping pin has correct pull-up/down
+    4. `pinMode(pin, OUTPUT)` called in setup()
+  </Accordion>
+
+  <Accordion title="I2C device not found" icon="microchip">
+    **Debug:**
+    ```cpp
+    // I2C scanner
+    for (byte addr = 1; addr < 127; addr++) {
+      Wire.beginTransmission(addr);
+      if (Wire.endTransmission() == 0) {
+        Serial.printf("Device found at 0x%02X\n", addr);
+      }
+    }
+    ```
+
+    **Common issues:**
+    - Wrong I2C address (check datasheet)
+    - SDA/SCL swapped
+    - Missing pull-up resistors (use INPUT_PULLUP)
+    - Device not powered
+  </Accordion>
+
+  <Accordion title="Encoder counts incorrect" icon="gear">
+    **Debug:**
+    1. Check both channels connected (A and B)
+    2. Verify interrupt attached: `attachInterrupt(...)`
+    3. Print raw encoder values: `Serial.println(encoder_count)`
+    4. Manually rotate wheel, check count direction
+
+    **Common issues:**
+    - Interrupt routine not in IRAM (`IRAM_ATTR` missing)
+    - Channels swapped (A ↔ B)
+    - Bounce/noise (add capacitor 100nF on encoder lines)
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Raspberry Pi Details"
+    icon="raspberry-pi"
+    href="/reference/hardware/raspberry-pi"
+  >
+    Raspberry Pi specifications
+  </Card>
+
+  <Card
+    title="Motor Specifications"
+    icon="gear"
+    href="/reference/hardware/motors"
+  >
+    DC motor details and wiring
+  </Card>
+
+  <Card
+    title="ESP32 Programming"
+    icon="code"
+    href="/wp3-embedded/esp32-basics"
+  >
+    ESP32 programming guide
+  </Card>
+
+  <Card
+    title="Motor Control Code"
+    icon="microchip"
+    href="/wp3-embedded/dc-motor-control"
+  >
+    Complete motor control implementation
+  </Card>
+</CardGroup>
+
+## References
+
+[1] ESP32 Datasheet: https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf
+[2] ESP32 Technical Reference: https://www.espressif.com/sites/default/files/documentation/esp32_technical_reference_manual_en.pdf
+[3] ESP32 Arduino Core: https://github.com/espressif/arduino-esp32
+[4] ESP32 Pinout Reference: https://randomnerdtutorials.com/esp32-pinout-reference-gpios/

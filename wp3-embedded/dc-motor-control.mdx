@@ -1,0 +1,807 @@
+---
+title: "DC Motor Control with PID"
+description: "Complete guide to implementing closed-loop motor control with PID controller on ESP32"
+---
+
+## Overview
+
+This is the **main deliverable (D3.1)** for WP3. You'll implement a complete motor control system that can precisely control motor speed or position using encoder feedback and a PID controller.
+
+<Note>
+  **Based on:** GitHub repository https://github.com/ROS2-AutoBot/04-DCMotorControl
+  **Hardware:** ESP32, DC motor with encoder, IBT-2 driver, 12V power supply
+</Note>
+
+## System Components
+
+### Essential Hardware
+
+| Component | Specification | Purpose |
+|-----------|--------------|---------|
+| **ESP32** | 38-pin DevKit | Microcontroller for control |
+| **DC Motor** | 12V, 333RPM, 1:30 gearbox | Provides motion |
+| **Encoder** | 11 PPR (330 after gearbox) | Position/speed feedback |
+| **Motor Driver** | IBT-2 (BTS7960) | High-current H-bridge |
+| **Power Supply** | 12V, ≥3A | Motor power |
+
+### Required Components
+
+```
+Robot System:
+- 4× DC motors with encoders (DC12V 333RPM)
+- 4× IBT-2 motor drivers
+- 1× ESP32 microcontroller
+- 1× 12V battery (LiPo 3S 5000mAh or similar)
+- Wires, connectors, breadboard/terminal blocks
+```
+
+## Encoder Fundamentals
+
+### Quadrature Encoder Operation
+
+Your motor has an **11-pulse-per-revolution (PPR)** encoder on the motor shaft. With a 1:30 gearbox:
+
+```
+Output shaft encoder resolution = 11 × 30 = 330 pulses/revolution
+```
+
+**Quadrature encoding:** Two channels (A and B) offset by 90°:
+
+```
+Channel A: ┐   ┌───┐   ┌───┐   ┌
+           └───┘   └───┘   └───┘
+
+Channel B:   ┌───┐   ┌───┐   ┌──
+           ──┘   └───┘   └───┘
+
+Direction →
+```
+
+**Benefits:**
+- Direction detection (A leads B = forward, B leads A = reverse)
+- 4× resolution (count rising and falling edges of both channels)
+- Error detection (both edges change simultaneously = error)
+
+### Velocity Calculation from Encoder
+
+**Method 1: Count pulses in fixed time:**
+
+```cpp
+float getVelocity() {
+  static long lastCount = 0;
+  static unsigned long lastTime = 0;
+
+  unsigned long now = millis();
+  long count = encoderCount;
+
+  float dt = (now - lastTime) / 1000.0;  // Convert to seconds
+  float deltaCount = count - lastCount;
+
+  // Velocity in rad/s
+  float velocity = (deltaCount / CPR) * 2 * PI / dt;
+
+  lastCount = count;
+  lastTime = now;
+
+  return velocity;
+}
+```
+
+**Method 2: Measure time between pulses (better at low speed)**
+
+Used in advanced implementations for better low-speed resolution.
+
+## PID Controller Theory
+
+### What is PID?
+
+**PID = Proportional-Integral-Derivative** controller:
+
+```
+output = Kp × error + Ki × ∫error×dt + Kd × (d_error/dt)
+```
+
+**Terms explained:**
+
+| Term | Formula | Purpose | Effect |
+|------|---------|---------|--------|
+| **P** (Proportional) | Kp × error | React to current error | Fast response, but overshoot |
+| **I** (Integral) | Ki × ∫error×dt | Eliminate steady-state error | Removes offset, but can cause overshoot |
+| **D** (Derivative) | Kd × (d_error/dt) | Predict future error | Damping, reduces overshoot |
+
+**Error:**
+```cpp
+error = setpoint - measured_value
+```
+
+### PID Tuning Guide
+
+<Steps>
+  <Step title="Start with P only (Kp)">
+    Set Ki = 0, Kd = 0
+
+    - Increase Kp until oscillation starts
+    - Reduce Kp by 30-50%
+    - Result: Fast response but steady-state error
+  </Step>
+
+  <Step title="Add I (Ki)">
+    - Start with small Ki (Kp / 100)
+    - Increase until steady-state error eliminated
+    - Too high Ki → oscillation and overshoot
+  </Step>
+
+  <Step title="Add D (Kd) if needed">
+    - Start with Kd = Kp / 10
+    - Increase to reduce overshoot
+    - Too high Kd → noise amplification
+  </Step>
+
+  <Step title="Fine-tune">
+    - Adjust all three gains iteratively
+    - Test with different setpoints
+    - Document final values
+  </Step>
+</Steps>
+
+**Example tuning values for our motor:**
+```cpp
+float Kp = 0.8;   // Start here
+float Ki = 0.05;  // Fine-tune
+float Kd = 0.01;  // May not need
+```
+
+<Tip>
+  **Tuning Tools:** Use Serial Plotter or Teleplot to visualize setpoint vs actual speed in real-time!
+</Tip>
+
+## Complete Implementation
+
+### Project Structure
+
+Based on GitHub repo structure:
+
+```
+04-DCMotorControl/
+├── platformio.ini          # Project configuration
+├── include/
+│   ├── MySetup.h          # Pin definitions and parameters
+│   ├── MyMotor.h          # Motor class header
+│   ├── MyEncoder.h        # Encoder class header
+│   ├── MyPID.h            # PID controller header
+│   └── MySerial.h         # Serial communication header
+└── src/
+    ├── main.cpp           # Main program
+    ├── MyMotor.cpp        # Motor control implementation
+    ├── MyEncoder.cpp      # Encoder reading implementation
+    ├── MyPID.cpp          # PID controller implementation
+    └── MySerial.cpp       # Serial protocol implementation
+```
+
+### MySetup.h - Pin Definitions
+
+```cpp
+#ifndef MYSETUP_H
+#define MYSETUP_H
+
+// Motor Driver Pins (IBT-2)
+#define MOTOR_RPWM_PIN  4
+#define MOTOR_LPWM_PIN  16
+
+// Encoder Pins
+#define ENCODER_A_PIN   22
+#define ENCODER_B_PIN   23
+
+// PWM Configuration
+#define PWM_FREQ        5000    // 5kHz
+#define PWM_RESOLUTION  8       // 8-bit (0-255)
+#define RPWM_CHANNEL    0
+#define LPWM_CHANNEL    1
+
+// Robot Parameters
+#define ENCODER_CPR     330     // Counts per revolution (11 PPR × 30 gearbox)
+#define WHEEL_RADIUS    0.05    // meters (50mm)
+
+// Control Parameters
+#define CONTROL_FREQ    100     // Hz (control loop frequency)
+#define CONTROL_PERIOD  (1000 / CONTROL_FREQ)  // ms
+
+// Serial Communication
+#define SERIAL_BAUD     115200
+
+#endif
+```
+
+### MyEncoder.h - Encoder Class
+
+```cpp
+#ifndef MYENCODER_H
+#define MYENCODER_H
+
+#include <Arduino.h>
+
+class Encoder {
+private:
+  int pinA, pinB;
+  volatile long count;
+  int CPR;
+
+  long lastCount;
+  unsigned long lastTime;
+  float velocity;  // rad/s
+
+public:
+  Encoder(int pA, int pB, int cpr);
+  void begin();
+  long getCount();
+  void resetCount();
+  float getVelocity();  // Returns velocity in rad/s
+  void update();        // Call at fixed interval
+
+  // ISR functions (must be public for attachInterrupt)
+  void IRAM_ATTR handleA();
+  void IRAM_ATTR handleB();
+};
+
+#endif
+```
+
+### MyEncoder.cpp - Implementation
+
+```cpp
+#include "MyEncoder.h"
+
+Encoder::Encoder(int pA, int pB, int cpr) {
+  pinA = pA;
+  pinB = pB;
+  CPR = cpr;
+  count = 0;
+  lastCount = 0;
+  lastTime = millis();
+  velocity = 0;
+}
+
+void Encoder::begin() {
+  pinMode(pinA, INPUT_PULLUP);
+  pinMode(pinB, INPUT_PULLUP);
+  // Interrupt attachment done in main.cpp
+}
+
+void IRAM_ATTR Encoder::handleA() {
+  // Read both channels
+  bool A = digitalRead(pinA);
+  bool B = digitalRead(pinB);
+
+  // Determine direction
+  if (A == B) {
+    count++;  // Forward
+  } else {
+    count--;  // Reverse
+  }
+}
+
+void IRAM_ATTR Encoder::handleB() {
+  // Read both channels
+  bool A = digitalRead(pinA);
+  bool B = digitalRead(pinB);
+
+  // Determine direction (opposite of A)
+  if (A == B) {
+    count--;
+  } else {
+    count++;
+  }
+}
+
+long Encoder::getCount() {
+  return count;
+}
+
+void Encoder::resetCount() {
+  count = 0;
+}
+
+void Encoder::update() {
+  // Calculate velocity
+  unsigned long now = millis();
+  long currentCount = count;
+
+  float dt = (now - lastTime) / 1000.0;  // seconds
+  float deltaCount = currentCount - lastCount;
+
+  // Convert to rad/s
+  velocity = (deltaCount / (float)CPR) * 2.0 * PI / dt;
+
+  lastCount = currentCount;
+  lastTime = now;
+}
+
+float Encoder::getVelocity() {
+  return velocity;
+}
+```
+
+### MyPID.h - PID Controller
+
+```cpp
+#ifndef MYPID_H
+#define MYPID_H
+
+class PID {
+private:
+  float Kp, Ki, Kd;
+  float setpoint;
+  float integral;
+  float lastError;
+  float outputMin, outputMax;
+  unsigned long lastTime;
+
+public:
+  PID(float p, float i, float d);
+  void setGains(float p, float i, float d);
+  void setSetpoint(float sp);
+  void setLimits(float min, float max);
+  float compute(float measured);
+  void reset();
+  float getSetpoint() { return setpoint; }
+};
+
+#endif
+```
+
+### MyPID.cpp - Implementation
+
+```cpp
+#include "MyPID.h"
+#include <Arduino.h>
+
+PID::PID(float p, float i, float d) {
+  Kp = p;
+  Ki = i;
+  Kd = d;
+  setpoint = 0;
+  integral = 0;
+  lastError = 0;
+  outputMin = -255;
+  outputMax = 255;
+  lastTime = millis();
+}
+
+void PID::setGains(float p, float i, float d) {
+  Kp = p;
+  Ki = i;
+  Kd = d;
+}
+
+void PID::setSetpoint(float sp) {
+  setpoint = sp;
+}
+
+void PID::setLimits(float min, float max) {
+  outputMin = min;
+  outputMax = max;
+}
+
+float PID::compute(float measured) {
+  unsigned long now = millis();
+  float dt = (now - lastTime) / 1000.0;  // seconds
+
+  // Calculate error
+  float error = setpoint - measured;
+
+  // Proportional term
+  float P = Kp * error;
+
+  // Integral term
+  integral += error * dt;
+  float I = Ki * integral;
+
+  // Derivative term
+  float derivative = (error - lastError) / dt;
+  float D = Kd * derivative;
+
+  // Calculate output
+  float output = P + I + D;
+
+  // Constrain output
+  if (output > outputMax) output = outputMax;
+  if (output < outputMin) output = outputMin;
+
+  // Anti-windup: prevent integral windup
+  if (output == outputMax || output == outputMin) {
+    integral -= error * dt;  // Don't accumulate if saturated
+  }
+
+  // Update for next iteration
+  lastError = error;
+  lastTime = now;
+
+  return output;
+}
+
+void PID::reset() {
+  integral = 0;
+  lastError = 0;
+  lastTime = millis();
+}
+```
+
+### MyMotor.cpp - Motor Control
+
+```cpp
+#include "MyMotor.h"
+#include <Arduino.h>
+
+void Motor::setupPWM() {
+  ledcSetup(RPWM_CHANNEL, PWM_FREQ, PWM_RESOLUTION);
+  ledcSetup(LPWM_CHANNEL, PWM_FREQ, PWM_RESOLUTION);
+  ledcAttachPin(MOTOR_RPWM_PIN, RPWM_CHANNEL);
+  ledcAttachPin(MOTOR_LPWM_PIN, LPWM_CHANNEL);
+}
+
+void Motor::drive(int speed) {
+  // speed: -255 to +255
+  speed = constrain(speed, -255, 255);
+
+  if (speed > 0) {
+    // Forward
+    ledcWrite(RPWM_CHANNEL, speed);
+    ledcWrite(LPWM_CHANNEL, 0);
+  }
+  else if (speed < 0) {
+    // Reverse
+    ledcWrite(RPWM_CHANNEL, 0);
+    ledcWrite(LPWM_CHANNEL, -speed);
+  }
+  else {
+    // Stop
+    ledcWrite(RPWM_CHANNEL, 0);
+    ledcWrite(LPWM_CHANNEL, 0);
+  }
+}
+
+void Motor::stop() {
+  drive(0);
+}
+```
+
+### main.cpp - Main Program
+
+```cpp
+#include <Arduino.h>
+#include "MySetup.h"
+#include "MyEncoder.h"
+#include "MyPID.h"
+#include "MyMotor.h"
+#include "MySerial.h"
+
+// Create objects
+Encoder encoder(ENCODER_A_PIN, ENCODER_B_PIN, ENCODER_CPR);
+PID pid(0.8, 0.05, 0.01);  // Initial gains
+Motor motor;
+
+// Global variables
+float targetVelocity = 0;  // rad/s
+unsigned long lastControlTime = 0;
+
+// Interrupt Service Routines
+void IRAM_ATTR encoderISR_A() {
+  encoder.handleA();
+}
+
+void IRAM_ATTR encoderISR_B() {
+  encoder.handleB();
+}
+
+void setup() {
+  Serial.begin(SERIAL_BAUD);
+  Serial.println("DC Motor PID Control Starting...");
+
+  // Setup encoder
+  encoder.begin();
+  attachInterrupt(digitalPinToInterrupt(ENCODER_A_PIN), encoderISR_A, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_B_PIN), encoderISR_B, CHANGE);
+
+  // Setup motor
+  motor.setupPWM();
+
+  // Setup PID
+  pid.setLimits(-255, 255);
+  pid.setSetpoint(0);
+
+  Serial.println("System ready!");
+  Serial.println("Send 'qXX' to set velocity (e.g., 'q10' for 10 rad/s)");
+}
+
+void loop() {
+  // Handle serial commands
+  handleSerialCommands();
+
+  // Control loop at fixed frequency
+  unsigned long now = millis();
+  if (now - lastControlTime >= CONTROL_PERIOD) {
+    lastControlTime = now;
+
+    // Update encoder velocity
+    encoder.update();
+    float currentVelocity = encoder.getVelocity();
+
+    // Compute PID
+    pid.setSetpoint(targetVelocity);
+    float motorCommand = pid.compute(currentVelocity);
+
+    // Drive motor
+    motor.drive((int)motorCommand);
+
+    // Send data to serial for monitoring
+    Serial.print("Setpoint:");
+    Serial.print(targetVelocity);
+    Serial.print(",");
+    Serial.print("Velocity:");
+    Serial.print(currentVelocity);
+    Serial.print(",");
+    Serial.print("Command:");
+    Serial.println(motorCommand);
+  }
+}
+
+void handleSerialCommands() {
+  if (Serial.available() > 0) {
+    String command = Serial.readStringUntil('\n');
+    command.trim();
+
+    // Command format: "qXX" where XX is velocity
+    if (command.startsWith("q")) {
+      targetVelocity = command.substring(1).toFloat();
+      Serial.print("Target velocity set to: ");
+      Serial.println(targetVelocity);
+    }
+  }
+}
+```
+
+## Testing Procedure
+
+<Steps>
+  <Step title="Hardware Setup">
+    1. Connect ESP32 to computer via USB
+    2. Connect motor driver to ESP32 (PWM, GND)
+    3. Connect motor to driver (M+, M-)
+    4. Connect encoder to ESP32 (A, B, GND, +5V)
+    5. Connect 12V power to motor driver (B+, B-)
+    6. **Verify all connections!**
+  </Step>
+
+  <Step title="Upload Code">
+    1. Open project in PlatformIO
+    2. Build (checkmark icon)
+    3. Upload (arrow icon)
+    4. Watch for "Success"
+  </Step>
+
+  <Step title="Open Serial Monitor">
+    1. Click plug icon
+    2. Set baud rate: 115200
+    3. Should see startup messages
+  </Step>
+
+  <Step title="Test Open-Loop (No PID)">
+    First verify motor spins:
+
+    ```cpp
+    // In loop(), temporarily replace PID with:
+    motor.drive(50);  // Low speed test
+    ```
+
+    - Motor should spin slowly
+    - Encoder count should change
+    - If wrong direction: swap motor wires
+  </Step>
+
+  <Step title="Test Encoder">
+    ```cpp
+    Serial.println(encoder.getCount());
+    ```
+
+    - Manually rotate wheel
+    - Count should increase/decrease
+    - ~330 counts per revolution
+  </Step>
+
+  <Step title="Test Velocity Calculation">
+    - Spin motor at constant speed
+    - Check velocity estimate is stable
+    - Compare to manual calculation
+  </Step>
+
+  <Step title="Enable PID Control">
+    - Set target: `q10` (10 rad/s)
+    - Motor should accelerate smoothly
+    - Monitor setpoint vs actual
+    - Tune Kp, Ki, Kd if needed
+  </Step>
+
+  <Step title="Tune PID">
+    - Start Kp=1, Ki=0, Kd=0
+    - Increase Kp until oscillation
+    - Reduce Kp by 30%
+    - Add Ki=0.05
+    - Fine-tune all gains
+  </Step>
+</Steps>
+
+## Serial Commands
+
+The code supports commands via Serial Monitor:
+
+| Command | Action | Example |
+|---------|--------|---------|
+| `qXX` | Set velocity to XX rad/s | `q10` → 10 rad/s |
+| `q0` | Stop motor | `q0` → 0 rad/s |
+| `q-5` | Reverse at 5 rad/s | `q-5` → -5 rad/s |
+
+## Data Visualization
+
+### Using Serial Plotter
+
+Arduino/PlatformIO Serial Plotter can visualize data in real-time:
+
+```cpp
+// Format for plotter: Label:Value
+Serial.print("Setpoint:");
+Serial.print(targetVelocity);
+Serial.print(",Actual:");
+Serial.println(currentVelocity);
+```
+
+### Using Teleplot (VSCode Extension)
+
+Install Teleplot extension for better visualization:
+
+```cpp
+// Teleplot format
+Serial.print(">setpoint:");
+Serial.println(targetVelocity);
+Serial.print(">actual:");
+Serial.println(currentVelocity);
+```
+
+## Performance Metrics
+
+### Expected Performance
+
+**Good PID tuning:**
+- Rise time: < 0.5 seconds
+- Overshoot: < 10%
+- Settling time: < 1 second
+- Steady-state error: < 2%
+
+**Velocity control accuracy:**
+- ±0.5 rad/s at speeds > 5 rad/s
+- ±0.1 rad/s at speeds < 2 rad/s
+
+## Common Issues & Solutions
+
+<AccordionGroup>
+  <Accordion title="Encoder counts don't change" icon="rotate">
+    **Check:**
+    - Encoder power (+5V, GND)
+    - Wiring (A, B pins)
+    - Encoder not damaged
+    - Motor actually spinning
+
+    **Debug:**
+    ```cpp
+    Serial.println(digitalRead(ENCODER_A_PIN));
+    // Should toggle when wheel rotates
+    ```
+  </Accordion>
+
+  <Accordion title="Velocity jumps around / unstable" icon="chart-line">
+    **Solutions:**
+    - Increase control loop frequency
+    - Add low-pass filter to velocity
+    - Check encoder wiring (noise)
+    - Use longer time interval for velocity calc
+  </Accordion>
+
+  <Accordion title="Motor oscillates with PID" icon="wave-pulse">
+    **Solutions:**
+    - Reduce Kp (too high!)
+    - Reduce Ki (causing windup)
+    - Check control loop timing
+    - Add derivative term (Kd)
+  </Accordion>
+
+  <Accordion title="Doesn't reach setpoint (steady-state error)" icon="bullseye">
+    **Solutions:**
+    - Increase Ki (integral term)
+    - Check motor power (voltage too low?)
+    - Verify motor not stalled/blocked
+  </Accordion>
+
+  <Accordion title="Motor spins but velocity reads zero" icon="gauge">
+    **Causes:**
+    - Encoder not connected
+    - Wrong pins in code
+    - Interrupt not attached
+
+    **Debug:**
+    ```cpp
+    Serial.println(encoder.getCount());
+    // Should change while motor spins
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Extensions & Improvements
+
+<CardGroup cols={2}>
+  <Card title="Position Control" icon="location-dot">
+    Modify PID to control position instead of velocity:
+    ```cpp
+    error = targetPosition - encoder.getCount();
+    ```
+  </Card>
+
+  <Card title="Acceleration Limiting" icon="gauge">
+    Limit rate of change for smooth motion:
+    ```cpp
+    float maxAccel = 5.0;  // rad/s²
+    targetVelocity += constrain(newTarget - targetVelocity, -maxAccel*dt, maxAccel*dt);
+    ```
+  </Card>
+
+  <Card title="Feed-Forward Control" icon="forward">
+    Add model-based prediction for better tracking:
+    ```cpp
+    output = PID_output + Kff * setpoint;
+    ```
+  </Card>
+
+  <Card title="Multi-Motor Coordination" icon="gears">
+    Expand to control 4 motors simultaneously for robot motion.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="IMU Integration"
+    icon="compass"
+    href="/wp3-embedded/imu-integration"
+  >
+    Add IMU sensor to your system
+  </Card>
+
+  <Card
+    title="Unit Testing"
+    icon="flask"
+    href="/wp3-embedded/unit-testing"
+  >
+    Systematic testing of all components
+  </Card>
+
+  <Card
+    title="WP4: ROS2 Integration"
+    icon="robot"
+    href="/wp4-ros2/setup/computer-preparation"
+  >
+    Connect ESP32 to ROS2 system
+  </Card>
+
+  <Card
+    title="Code Examples"
+    icon="code"
+    href="/reference/code-examples/pid-controller"
+  >
+    Additional PID implementations
+  </Card>
+</CardGroup>
+
+## References
+
+[1] GitHub Repository: https://github.com/ROS2-AutoBot/04-DCMotorControl
+[2] PID Control Tutorial: http://brettbeauregard.com/blog/2011/04/improving-the-beginners-pid-introduction/
+[3] Motor Control Handbook: https://www.ti.com/lit/an/spra588/spra588.pdf

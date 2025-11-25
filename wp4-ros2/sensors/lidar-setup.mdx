@@ -1,0 +1,553 @@
+---
+title: "LiDAR Setup (RPLIDAR A1M8)"
+description: "Configure RPLIDAR A1M8 for SLAM and navigation"
+---
+
+## Overview
+
+The **RPLIDAR A1M8** is a 360° 2D laser scanner providing distance measurements for obstacle detection, SLAM, and navigation.
+
+<Note>
+  **RPLIDAR A1M8** is affordable ($99), reliable, and well-supported in ROS2. Perfect for student robotics projects.
+</Note>
+
+## Specifications
+
+| Parameter | Value |
+|-----------|-------|
+| **Range** | 0.15m - 12m |
+| **Angular Resolution** | 1° (360 points per scan) |
+| **Scan Rate** | 5.5 Hz (5.5 scans/second) |
+| **Sample Rate** | 8000 samples/second |
+| **Interface** | USB (UART internally) |
+| **Power** | 5V, ~500mA |
+| **Dimensions** | Ø98mm × 38mm |
+| **Weight** | 160g |
+
+## Hardware Setup
+
+### Wiring
+
+**RPLIDAR A1M8 to Raspberry Pi:**
+
+```
+RPLIDAR USB Adapter
+├── USB Type-A  ──→  Raspberry Pi USB Port
+└── 5V Power (from motor)
+```
+
+<Warning>
+  **Power consideration:** RPLIDAR draws ~500mA. Ensure your 5V rail can supply RPi (3A) + LiDAR (0.5A) = 3.5A total.
+</Warning>
+
+### Mounting
+
+**Position guidelines:**
+- **Height:** 20-30cm above ground (to see obstacles)
+- **Location:** Center top of robot (for 360° view)
+- **Orientation:** Motor side facing robot front
+- **Stability:** Rigidly mounted (no vibration)
+
+**Mounting bracket:**
+- 4x M3 screws through mounting holes
+- Standoffs to elevate above base
+- Ensure cables don't interfere with rotation
+
+<img
+  src="/images/rplidar-mounting.png"
+  alt="RPLIDAR mounted on robot"
+  caption="RPLIDAR A1M8 mounted on top center of Mecanum robot base"
+/>
+
+## Software Setup
+
+### Installation
+
+```bash
+# Install RPLIDAR ROS2 driver
+sudo apt install ros-jazzy-rplidar-ros
+```
+
+### USB Permissions
+
+**Grant permission to USB port:**
+
+```bash
+# Find LiDAR device
+ls -l /dev/ttyUSB*
+# Example output: /dev/ttyUSB0
+
+# Add udev rule (one-time setup)
+echo 'KERNEL=="ttyUSB*", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", MODE="0666"' | \
+  sudo tee /etc/udev/rules.d/99-rplidar.rules
+
+# Reload udev rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+
+# Add user to dialout group
+sudo usermod -a -G dialout $USER
+
+# Logout and login for changes to take effect
+```
+
+### Launch File
+
+**File:** `launch/lidar.launch.py`
+
+```python
+from launch import LaunchDescription
+from launch_ros.actions import Node
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
+
+def generate_launch_description():
+    # Arguments
+    serial_port = LaunchConfiguration('serial_port')
+    frame_id = LaunchConfiguration('frame_id')
+
+    declare_serial_port_cmd = DeclareLaunchArgument(
+        'serial_port',
+        default_value='/dev/ttyUSB0',
+        description='Serial port for RPLIDAR')
+
+    declare_frame_id_cmd = DeclareLaunchArgument(
+        'frame_id',
+        default_value='lidar_link',
+        description='Frame ID for laser scan')
+
+    # RPLIDAR node
+    rplidar_node = Node(
+        package='rplidar_ros',
+        executable='rplidar_node',
+        name='rplidar_node',
+        parameters=[{
+            'serial_port': serial_port,
+            'serial_baudrate': 115200,
+            'frame_id': frame_id,
+            'inverted': False,
+            'angle_compensate': True,
+            'scan_mode': 'Standard'
+        }],
+        output='screen'
+    )
+
+    return LaunchDescription([
+        declare_serial_port_cmd,
+        declare_frame_id_cmd,
+        rplidar_node,
+    ])
+```
+
+**Usage:**
+```bash
+ros2 launch mecanum_description lidar.launch.py
+```
+
+## Configuration Parameters
+
+```yaml
+rplidar_node:
+  ros__parameters:
+    # Serial port
+    serial_port: /dev/ttyUSB0
+    serial_baudrate: 115200
+
+    # Frame ID (must match URDF)
+    frame_id: lidar_link
+
+    # Scan settings
+    inverted: false              # Flip scan direction
+    angle_compensate: true       # Compensate for motor speed variation
+
+    # Scan mode
+    scan_mode: Standard          # Standard, Express, Boost
+
+    # Quality filtering
+    scan_frequency: 10.0         # Target scan rate (Hz)
+```
+
+### Scan Modes
+
+| Mode | Sample Rate | Scan Rate | Range | Use Case |
+|------|-------------|-----------|-------|----------|
+| **Standard** | 8K/s | 5.5 Hz | 12m | Default, good balance |
+| **Express** | 16K/s | 10 Hz | 12m | Faster scanning (A2+ only) |
+| **Boost** | 32K/s | 15 Hz | 12m | Maximum speed (A3 only) |
+
+**A1M8 supports Standard mode only.**
+
+## Testing LiDAR
+
+### Check USB Connection
+
+```bash
+# List USB devices
+lsusb
+# Look for: "Silicon Labs CP210x UART Bridge"
+
+# Check device appears
+ls /dev/ttyUSB*
+# Should show: /dev/ttyUSB0 (or ttyUSB1, etc.)
+```
+
+### Test with RViz
+
+**Terminal 1: Launch LiDAR**
+```bash
+ros2 launch mecanum_description lidar.launch.py
+```
+
+**Terminal 2: Launch RViz**
+```bash
+rviz2
+```
+
+**Configure RViz:**
+1. **Fixed Frame:** `lidar_link`
+2. **Add → LaserScan**
+   - Topic: `/scan`
+   - Size: 0.05
+   - Color: Red
+
+**Expected:** 360° scan points showing obstacles around LiDAR.
+
+<img
+  src="/images/rplidar-rviz.png"
+  alt="RPLIDAR scan in RViz"
+  caption="LiDAR scan visualization in RViz showing room walls and obstacles"
+/>
+
+### Echo Scan Data
+
+```bash
+ros2 topic echo /scan
+```
+
+**Example output:**
+```yaml
+header:
+  stamp:
+    sec: 1234567890
+    nanosec: 123456789
+  frame_id: lidar_link
+angle_min: -3.14159
+angle_max: 3.14159
+angle_increment: 0.0174533  # ~1 degree
+time_increment: 0.0
+scan_time: 0.18  # ~5.5 Hz
+range_min: 0.15
+range_max: 12.0
+ranges: [1.234, 1.567, 2.345, ... ]  # 360 distance measurements
+intensities: []  # A1M8 doesn't provide intensity
+```
+
+### Check Scan Quality
+
+```bash
+# Monitor scan rate
+ros2 topic hz /scan
+# Expected: ~5.5 Hz
+
+# Check data size
+ros2 topic bw /scan
+# Expected: ~30-50 KB/s
+```
+
+## Calibration
+
+### Alignment with Robot
+
+**Ensure LiDAR X-axis (0°) points forward:**
+
+```bash
+# In RViz, observe scan
+# Point object directly in front of robot
+# Check if object appears at 0° (straight ahead)
+```
+
+**If misaligned:**
+
+**Method 1: Physical rotation**
+- Rotate LiDAR housing to align
+
+**Method 2: TF transform**
+```xml
+<!-- In URDF lidar joint -->
+<origin xyz="0 0 0.20" rpy="0 0 1.57"/>
+<!--                       Yaw offset (90° if needed) -->
+```
+
+### Range Calibration
+
+**Test known distances:**
+
+1. Place object at 1.0m from LiDAR
+2. Read range value:
+   ```bash
+   ros2 topic echo /scan --field ranges[0]
+   ```
+3. Should read ~1.0m (±2cm)
+
+**If inaccurate:**
+- Clean LiDAR lens
+- Check for reflective surfaces (absorb laser)
+- Verify firmware up-to-date
+
+## Integration with Navigation
+
+### Costmap Configuration
+
+**In `nav2_params.yaml`:**
+
+```yaml
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      # ... other params ...
+
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: True
+        observation_sources: scan
+
+        scan:
+          topic: /scan
+          data_type: "LaserScan"
+          marking: True        # Mark obstacles
+          clearing: True       # Clear when no obstacle
+
+          # Range limits
+          obstacle_max_range: 11.5  # Slightly less than max (12m)
+          obstacle_min_range: 0.2   # Ignore very close readings
+          raytrace_max_range: 12.0  # Clear up to max range
+          raytrace_min_range: 0.0
+
+          # Obstacle size
+          max_obstacle_height: 2.0  # meters
+          min_obstacle_height: 0.0
+```
+
+### SLAM Configuration
+
+**For SLAM Toolbox:**
+
+```yaml
+slam_toolbox:
+  ros__parameters:
+    scan_topic: /scan
+    max_laser_range: 12.0    # RPLIDAR A1M8 max
+    minimum_travel_distance: 0.2
+    minimum_travel_heading: 0.2
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="No /scan topic" icon="signal">
+    **Debug:**
+    1. Check node running:
+       ```bash
+       ros2 node list
+       # Should see /rplidar_node
+       ```
+
+    2. Check device permissions:
+       ```bash
+       ls -l /dev/ttyUSB0
+       # Should show: crw-rw-rw-
+       ```
+
+    3. Check node logs:
+       ```bash
+       ros2 node logs /rplidar_node
+       ```
+
+    **Common errors:**
+    - "Cannot open serial port" → Permission issue
+    - "Device not found" → Wrong port or unplugged
+  </Accordion>
+
+  <Accordion title="Scan rate too low (<5 Hz)" icon="gauge">
+    **Causes:**
+    - USB bandwidth issue
+    - CPU overload
+    - Motor speed unstable
+
+    **Solutions:**
+    - Use USB 2.0 port (not USB 3.0 hub)
+    - Reduce other USB traffic
+    - Check LiDAR motor spins freely
+    - Power supply adequate (5V stable)
+  </Accordion>
+
+  <Accordion title="Noisy scans (erratic points)" icon="wave-square">
+    **Causes:**
+    - Dirty lens
+    - Sunlight interference
+    - Reflective surfaces
+    - Vibration
+
+    **Solutions:**
+    - Clean LiDAR lens with soft cloth
+    - Avoid direct sunlight
+    - Mount rigidly (no wobble)
+    - Filter outliers:
+      ```yaml
+      scan_filter:
+        filter_type: "laser_filters/ScanShadowsFilter"
+        params:
+          min_angle: -3.14
+          max_angle: 3.14
+          neighbors: 10
+          window: 1
+      ```
+  </Accordion>
+
+  <Accordion title="Limited range (<6m)" icon="ruler">
+    **Causes:**
+    - Dark/absorbing surfaces
+    - Angled surfaces
+    - Dusty environment
+
+    **Solutions:**
+    - Accept limitation (dark surfaces absorb IR laser)
+    - Adjust costmap max range:
+      ```yaml
+      obstacle_max_range: 6.0  # Reduce from 11.5
+      ```
+  </Accordion>
+
+  <Accordion title="Motor not spinning" icon="rotate">
+    **Symptom:** Node starts but no scan data
+
+    **Debug:**
+    - Check motor power LED (should be on)
+    - Listen for motor sound (quiet whirring)
+    - Check USB cable connection
+
+    **Solution:**
+    - Replug USB cable
+    - Restart node
+    - Check power supply voltage (should be 5V ±0.25V)
+  </Accordion>
+</AccordionGroup>
+
+## Advanced: Scan Filtering
+
+**Filter noisy scans:**
+
+```bash
+# Install laser filters
+sudo apt install ros-jazzy-laser-filters
+```
+
+**Launch with filters:**
+
+```python
+# In launch file
+from launch_ros.actions import Node
+
+scan_filter_node = Node(
+    package='laser_filters',
+    executable='scan_to_scan_filter_chain',
+    parameters=[{
+        'cloud_threshold': 0.05,
+        'filter_chain': [
+            {
+                'name': 'range',
+                'type': 'laser_filters/LaserScanRangeFilter',
+                'params': {
+                    'use_message_range_limits': False,
+                    'lower_threshold': 0.15,
+                    'upper_threshold': 11.5
+                }
+            },
+            {
+                'name': 'shadows',
+                'type': 'laser_filters/ScanShadowsFilter',
+                'params': {
+                    'min_angle': -3.14,
+                    'max_angle': 3.14,
+                    'neighbors': 10,
+                    'window': 1
+                }
+            }
+        ]
+    }],
+    remappings=[
+        ('scan', 'scan_raw'),
+        ('scan_filtered', 'scan')
+    ]
+)
+```
+
+## Maintenance
+
+### Cleaning
+
+**Frequency:** Every 2-3 months (or when performance degrades)
+
+**Procedure:**
+1. Power off robot
+2. Remove LiDAR (if easily accessible)
+3. Clean lens with microfiber cloth
+4. Blow dust from motor vents (compressed air)
+5. Reinstall and test
+
+### Firmware Update
+
+**Check firmware version:**
+```bash
+# Launch node, check logs
+ros2 launch mecanum_description lidar.launch.py
+
+# Look for: "Firmware version: X.XX"
+```
+
+**Update if available:**
+- Download from Slamtec website
+- Use RoboMaster app or Windows tool
+- Follow official instructions
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Camera Setup"
+    icon="camera"
+    href="/wp4-ros2/sensors/camera-setup"
+  >
+    Add camera for visual feedback (optional)
+  </Card>
+
+  <Card
+    title="Sensor Integration"
+    icon="diagram-project"
+    href="/wp4-ros2/sensors/sensor-integration"
+  >
+    Combine LiDAR, IMU, and odometry
+  </Card>
+
+  <Card
+    title="SLAM Mapping"
+    icon="map"
+    href="/wp4-ros2/mapping/slam-toolbox"
+  >
+    Use LiDAR for SLAM mapping
+  </Card>
+
+  <Card
+    title="Navigation"
+    icon="route"
+    href="/wp4-ros2/navigation/nav2-intro"
+  >
+    Use LiDAR for autonomous navigation
+  </Card>
+</CardGroup>
+
+## References
+
+[1] RPLIDAR A1M8 Datasheet: https://www.slamtec.com/en/Lidar/A1Spec
+[2] RPLIDAR ROS2 Driver: https://github.com/Slamtec/rplidar_ros
+[3] Laser Filters: http://wiki.ros.org/laser_filters

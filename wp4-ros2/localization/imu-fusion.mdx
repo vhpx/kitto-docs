@@ -1,0 +1,611 @@
+---
+title: "IMU Fusion"
+description: "Fuse IMU data with wheel odometry using robot_localization for improved pose estimation"
+---
+
+## Overview
+
+Wheel odometry alone drifts due to slippage. IMU (Inertial Measurement Unit) provides complementary data:
+- **Odometry:** Good at estimating position, poor at orientation (slips during rotation)
+- **IMU:** Good at orientation (gyroscope), drifts in position (accelerometer double integration)
+
+**Sensor fusion** combines both using Extended Kalman Filter (EKF) for optimal pose estimate.
+
+<Note>
+  **robot_localization** package provides EKF node that fuses odometry, IMU, and other sensors.
+</Note>
+
+## Architecture
+
+```
+Wheel Encoders ──> Odometry ────┐
+                                 ├──> EKF ──> /odometry/filtered
+IMU (ICM-20948) ──> IMU Data ────┘
+
+Output: Fused pose estimate (better than either alone)
+```
+
+### TF Frames
+
+**Before fusion:**
+```
+odom → base_link  (from odometry only)
+```
+
+**After fusion:**
+```
+odom → base_link  (from EKF, fusing odom + IMU)
+```
+
+EKF takes over publishing `odom → base_link` transform.
+
+## Installation
+
+```bash
+# Install robot_localization
+sudo apt install ros-jazzy-robot-localization
+```
+
+## IMU Data Publishing
+
+### From ESP32 to ROS2
+
+**ESP32 reads ICM-20948, publishes via serial:**
+
+**Protocol:** Same as encoder data, extended with IMU:
+```
+pos_FL,pos_FR,pos_RL,pos_RR,vel_FL,vel_FR,vel_RL,vel_RR,gx,gy,gz,ax,ay,az\n
+```
+
+Where:
+- `gx, gy, gz`: Gyroscope (rad/s)
+- `ax, ay, az`: Accelerometer (m/s²)
+
+### Hardware Interface Update
+
+**Extend hardware interface to read IMU:**
+
+```cpp
+// In MecanumSystemHardware::read()
+
+std::string line;
+if (!read_serial_line(line)) {
+  return hardware_interface::return_type::OK;
+}
+
+std::istringstream iss(line);
+std::vector<double> values;
+std::string token;
+
+while (std::getline(iss, token, ',')) {
+  values.push_back(std::stod(token));
+}
+
+if (values.size() == 14) {  // 8 (wheels) + 6 (IMU)
+  // Wheels
+  hw_positions_[0] = values[0];  // FL
+  hw_velocities_[0] = values[4]; // FL vel
+  // ... (same as before)
+
+  // IMU (store for separate publisher)
+  imu_gyro_x_ = values[8];
+  imu_gyro_y_ = values[9];
+  imu_gyro_z_ = values[10];
+  imu_accel_x_ = values[11];
+  imu_accel_y_ = values[12];
+  imu_accel_z_ = values[13];
+}
+```
+
+### IMU Publisher Node
+
+Create separate node to publish `sensor_msgs/Imu`:
+
+**File:** `src/imu_publisher.cpp` (in mecanum_hardware package)
+
+```cpp
+#include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/imu.hpp>
+
+class ImuPublisher : public rclcpp::Node
+{
+public:
+  ImuPublisher() : Node("imu_publisher")
+  {
+    publisher_ = this->create_publisher<sensor_msgs::msg::Imu>("/imu/data", 10);
+    timer_ = this->create_timer(
+      std::chrono::milliseconds(20),  // 50Hz
+      std::bind(&ImuPublisher::publish_imu, this));
+
+    // Subscribe to hardware interface IMU data (or read directly from serial)
+    // For simplicity, assume global variables or shared memory
+  }
+
+private:
+  void publish_imu()
+  {
+    auto msg = sensor_msgs::msg::Imu();
+
+    msg.header.stamp = this->now();
+    msg.header.frame_id = "imu_link";
+
+    // Angular velocity (from gyroscope)
+    msg.angular_velocity.x = imu_gyro_x_;
+    msg.angular_velocity.y = imu_gyro_y_;
+    msg.angular_velocity.z = imu_gyro_z_;
+    msg.angular_velocity_covariance[0] = 0.01;  // xx
+    msg.angular_velocity_covariance[4] = 0.01;  // yy
+    msg.angular_velocity_covariance[8] = 0.01;  // zz
+
+    // Linear acceleration (from accelerometer)
+    msg.linear_acceleration.x = imu_accel_x_;
+    msg.linear_acceleration.y = imu_accel_y_;
+    msg.linear_acceleration.z = imu_accel_z_;
+    msg.linear_acceleration_covariance[0] = 0.01;
+    msg.linear_acceleration_covariance[4] = 0.01;
+    msg.linear_acceleration_covariance[8] = 0.01;
+
+    // Orientation (optional, leave empty if using EKF to compute)
+    msg.orientation_covariance[0] = -1;  // -1 = orientation not provided
+
+    publisher_->publish(msg);
+  }
+
+  rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr publisher_;
+  rclcpp::TimerBase::SharedPtr timer_;
+
+  // IMU data (read from hardware interface or serial)
+  double imu_gyro_x_ = 0.0, imu_gyro_y_ = 0.0, imu_gyro_z_ = 0.0;
+  double imu_accel_x_ = 0.0, imu_accel_y_ = 0.0, imu_accel_z_ = 0.0;
+};
+
+int main(int argc, char **argv)
+{
+  rclcpp::init(argc, argv);
+  rclcpp::spin(std::make_shared<ImuPublisher>());
+  rclcpp::shutdown();
+  return 0;
+}
+```
+
+<Tip>
+  **Alternative:** Use microROS on ESP32 to publish `/imu/data` directly (avoids separate publisher node).
+</Tip>
+
+## EKF Configuration
+
+### Configuration File
+
+**File:** `config/ekf.yaml`
+
+```yaml
+### ekf_filter_node config
+
+ekf_filter_node:
+  ros__parameters:
+    # Frequency (Hz)
+    frequency: 50.0
+
+    # Sensor timeout (s) - if no data for this long, sensor ignored
+    sensor_timeout: 0.1
+
+    # Enable 2D mode (ignores Z, roll, pitch)
+    two_d_mode: true
+
+    # TF frames
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_link
+    world_frame: odom
+
+    # Odometry input
+    odom0: /mecanum_drive_controller/odom
+    odom0_config: [
+      true,  # X position
+      true,  # Y position
+      false, # Z position (ignored in 2D mode)
+      false, # Roll (ignored in 2D mode)
+      false, # Pitch (ignored in 2D mode)
+      false, # Yaw (don't use odom yaw - IMU better)
+      true,  # X velocity
+      true,  # Y velocity
+      false, # Z velocity
+      false, # Roll velocity
+      false, # Pitch velocity
+      false, # Yaw velocity
+      false, # X acceleration
+      false, # Y acceleration
+      false  # Z acceleration
+    ]
+
+    # IMU input
+    imu0: /imu/data
+    imu0_config: [
+      false, # X position
+      false, # Y position
+      false, # Z position
+      false, # Roll
+      false, # Pitch
+      true,  # Yaw (use IMU for orientation!)
+      false, # X velocity
+      false, # Y velocity
+      false, # Z velocity
+      false, # Roll velocity
+      false, # Pitch velocity
+      true,  # Yaw velocity (angular velocity from gyro)
+      false, # X acceleration (can enable if accelerometer calibrated)
+      false, # Y acceleration
+      false  # Z acceleration
+    ]
+
+    # Remove gravitational acceleration from IMU
+    imu0_remove_gravitational_acceleration: true
+
+    # Process noise covariance (tuning parameter)
+    process_noise_covariance: [
+      0.05, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.05, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.06, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.03, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.03, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.06, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.025,0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.025,0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.04, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.03, 0.0,  0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.03, 0.0,  0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.06, 0.0,  0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.025,0.0,  0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.025,0.0,
+      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.04
+    ]
+
+    # Publish TF transform
+    publish_tf: true
+    publish_acceleration: false
+```
+
+### Configuration Explained
+
+**Key sections:**
+
+1. **Odometry configuration (`odom0_config`):**
+   - Use X, Y position ✓
+   - Use X, Y velocity ✓
+   - **Don't use yaw** ✗ (IMU better for orientation)
+
+2. **IMU configuration (`imu0_config`):**
+   - Use yaw (heading) ✓
+   - Use yaw velocity (angular velocity) ✓
+   - Optionally use acceleration (if calibrated)
+
+3. **Two_d_mode:**
+   - `true`: Ignores Z, roll, pitch (for ground robots)
+
+4. **Process noise:**
+   - Higher values = trust sensors less, smooth more
+   - Lower values = trust sensors more, follow closely
+
+## Launch File
+
+**File:** `launch/localization.launch.py`
+
+```python
+from launch import LaunchDescription
+from launch_ros.actions import Node
+from launch.substitutions import PathJoinSubstitution
+from launch_ros.substitutions import FindPackageShare
+
+def generate_launch_description():
+    # Config file path
+    ekf_config = PathJoinSubstitution([
+        FindPackageShare('mecanum_description'),
+        'config',
+        'ekf.yaml'
+    ])
+
+    return LaunchDescription([
+        # EKF node
+        Node(
+            package='robot_localization',
+            executable='ekf_node',
+            name='ekf_filter_node',
+            output='screen',
+            parameters=[ekf_config]
+        ),
+
+        # IMU publisher (reads from ESP32)
+        Node(
+            package='mecanum_hardware',
+            executable='imu_publisher',
+            name='imu_publisher',
+            output='screen'
+        ),
+    ])
+```
+
+## Complete Launch (Robot + Localization)
+
+**File:** `launch/robot_full.launch.py`
+
+```python
+from launch import LaunchDescription
+from launch.actions import IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import PathJoinSubstitution
+from launch_ros.substitutions import FindPackageShare
+
+def generate_launch_description():
+    # Include robot control
+    robot_control = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('mecanum_description'),
+                'launch',
+                'robot_control.launch.py'
+            ])
+        ])
+    )
+
+    # Include localization (EKF + IMU)
+    localization = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('mecanum_description'),
+                'launch',
+                'localization.launch.py'
+            ])
+        ])
+    )
+
+    return LaunchDescription([
+        robot_control,
+        localization,
+    ])
+```
+
+**Usage:**
+```bash
+ros2 launch mecanum_description robot_full.launch.py
+```
+
+## Testing Fusion
+
+### Check Topics
+
+```bash
+# List topics
+ros2 topic list
+
+# Expected:
+# /imu/data                             (sensor_msgs/Imu)
+# /mecanum_drive_controller/odom        (nav_msgs/Odometry - raw)
+# /odometry/filtered                    (nav_msgs/Odometry - fused)
+```
+
+### Echo Filtered Odometry
+
+```bash
+ros2 topic echo /odometry/filtered
+```
+
+**Compare with raw odometry:**
+```bash
+# Terminal 1: Filtered
+ros2 topic echo /odometry/filtered --field pose.pose.orientation
+
+# Terminal 2: Raw
+ros2 topic echo /mecanum_drive_controller/odom --field pose.pose.orientation
+```
+
+**Test:** Rotate robot, observe filtered yaw is smoother and more accurate.
+
+### Visualize in RViz
+
+**RViz config:**
+1. **Fixed Frame:** `odom`
+2. **Add Odometry displays:**
+   - Raw odometry: Topic `/mecanum_drive_controller/odom`, Color: Red
+   - Filtered odometry: Topic `/odometry/filtered`, Color: Green
+3. **Add IMU display:** Topic `/imu/data`
+
+**Test:**
+- Drive robot
+- Green path (filtered) should be smoother
+- Rotation should match IMU orientation
+
+## Tuning EKF
+
+### Sensor Covariance
+
+**Increase covariance = trust sensor less:**
+
+**Odometry (if drifts quickly):**
+```yaml
+mecanum_drive_controller:
+  ros__parameters:
+    pose_covariance_diagonal: [0.01, 0.01, 0.0, 0.0, 0.0, 0.1]
+    #                          Increased X, Y, yaw covariance
+```
+
+**IMU (if noisy):**
+```cpp
+// In imu_publisher.cpp
+msg.angular_velocity_covariance[0] = 0.05;  // Increase if gyro noisy
+msg.angular_velocity_covariance[4] = 0.05;
+msg.angular_velocity_covariance[8] = 0.05;
+```
+
+### Process Noise
+
+**In `ekf.yaml`:**
+```yaml
+process_noise_covariance: [
+  0.05,  # X position process noise (increase if robot moves unpredictably)
+  0.05,  # Y position
+  ...
+  0.06,  # Yaw process noise (increase if rotation jerky)
+  ...
+]
+```
+
+**Rule of thumb:**
+- Start with defaults
+- If filtered odometry too jerky → Increase process noise
+- If filtered odometry lags behind → Decrease process noise
+
+## Diagnostic Tools
+
+### Check EKF Status
+
+```bash
+# List EKF diagnostics
+ros2 topic echo /diagnostics
+```
+
+**Look for:**
+- Sensor update rates
+- Covariance values
+- Errors/warnings
+
+### Plot Odometry Comparison
+
+```bash
+# Install PlotJuggler
+sudo apt install ros-jazzy-plotjuggler-ros
+
+# Launch
+ros2 run plotjuggler plotjuggler
+```
+
+**In PlotJuggler:**
+1. Streaming → ROS2 Topics
+2. Start
+3. Plot:
+   - `/mecanum_drive_controller/odom/pose/pose/position/x` (raw)
+   - `/odometry/filtered/pose/pose/position/x` (filtered)
+4. Observe difference
+
+<img
+  src="/images/plotjuggler-odometry.png"
+  alt="PlotJuggler comparing raw vs filtered odometry"
+  caption="PlotJuggler shows filtered odometry (green) is smoother than raw (red)"
+/>
+
+## Benefits of Fusion
+
+<CardGroup cols={2}>
+  <Card title="Better Orientation" icon="compass">
+    IMU provides accurate heading, eliminating wheel slip errors during rotation.
+  </Card>
+
+  <Card title="Smoother Estimates" icon="wave-sine">
+    EKF filters noise from both sensors, producing smooth pose estimate.
+  </Card>
+
+  <Card title="Redundancy" icon="shield-halved">
+    If one sensor fails (encoder wire loose), other compensates temporarily.
+  </Card>
+
+  <Card title="Optimal Fusion" icon="filter">
+    EKF weighs sensors by uncertainty (covariance), trusting more reliable source.
+  </Card>
+</CardGroup>
+
+## Limitations
+
+<Warning>
+  **Fusion doesn't eliminate drift!** It reduces drift rate but doesn't correct absolute position. For that, you need:
+  - **SLAM** (map-based correction)
+  - **Beacons** (external positioning)
+  - **Visual odometry** (camera-based)
+</Warning>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="EKF not publishing /odometry/filtered" icon="signal">
+    **Debug:**
+    1. Check EKF node running:
+       ```bash
+       ros2 node list
+       # Should see /ekf_filter_node
+       ```
+
+    2. Check input topics:
+       ```bash
+       ros2 topic info /mecanum_drive_controller/odom
+       ros2 topic info /imu/data
+       # Both should have publishers
+       ```
+
+    3. Check EKF logs:
+       ```bash
+       ros2 node logs /ekf_filter_node
+       ```
+
+    **Common errors:**
+    - "Sensor timeout" → No data from sensor
+    - "Frame mismatch" → Frame IDs inconsistent
+  </Accordion>
+
+  <Accordion title="Filtered odometry same as raw" icon="equals">
+    **Cause:** IMU not contributing (check `imu0_config`)
+
+    **Solution:**
+    - Verify IMU data publishing: `ros2 topic echo /imu/data`
+    - Check `imu0_config` enables yaw and yaw velocity
+    - Verify `imu_remove_gravitational_acceleration: true`
+  </Accordion>
+
+  <Accordion title="Filtered odometry diverges" icon="explosion">
+    **Cause:** Sensor covariances misconfigured
+
+    **Solutions:**
+    - Increase odometry covariance if it drifts
+    - Increase IMU covariance if it's noisy
+    - Check IMU calibration (gyro bias)
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="EKF Deep Dive"
+    icon="filter"
+    href="/wp4-ros2/localization/ekf"
+  >
+    Understand Extended Kalman Filter theory and advanced tuning
+  </Card>
+
+  <Card
+    title="Localization Testing"
+    icon="flask"
+    href="/wp4-ros2/localization/testing"
+  >
+    Comprehensive testing procedures for localization
+  </Card>
+
+  <Card
+    title="SLAM Mapping"
+    icon="map"
+    href="/wp4-ros2/mapping/slam-toolbox"
+  >
+    Use SLAM to correct long-term drift
+  </Card>
+
+  <Card
+    title="IMU Calibration"
+    icon="wrench"
+    href="/reference/hardware/imu"
+  >
+    Calibrate IMU for better accuracy
+  </Card>
+</CardGroup>
+
+## References
+
+[1] robot_localization: http://docs.ros.org/en/melodic/api/robot_localization/html/index.html
+[2] sensor_msgs/Imu: https://docs.ros.org/en/api/sensor_msgs/html/msg/Imu.html
+[3] EKF Tuning Guide: http://docs.ros.org/en/noetic/api/robot_localization/html/configuring_robot_localization.html
